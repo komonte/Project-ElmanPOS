@@ -1,0 +1,35 @@
+# ---- Binarios y salida de build ----
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/dist/
+/build/
+
+# Cobertura de tests
+coverage.out
+*.coverprofile
+
+# ---- Entorno y secretos ----
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ---- Datos locales ----
+data/
+*.dump
+*.sql.gz
+
+# ---- Editor y sistema operativo ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

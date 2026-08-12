@@ -782,13 +782,14 @@ ORDER BY p.name;
 ### R-05: Inventory Valuation
 
 ```sql
-SELECT c.category_id, cat.name, SUM(b.quantity * c.unit_cost) AS value
+SELECT cat.id AS category_id, cat.name, SUM(b.quantity * c.unit_cost) AS value
 FROM stock_balances b
 JOIN (SELECT DISTINCT ON (product_id) product_id, unit_cost
       FROM product_costs ORDER BY product_id, valid_from DESC) c ON c.product_id = b.product_id
-JOIN categories cat ON cat.id = c.category_id
+JOIN products p ON p.id = b.product_id
+JOIN categories cat ON cat.id = p.category_id
 WHERE b.store_id = 1
-GROUP BY c.category_id, cat.name;
+GROUP BY cat.id, cat.name;
 -- EXPECTED: Almacen = 28800.00 (P1 5*900 + P2 18*1350) ; Fiambreria = 27000.00 (P3 6*4500)
 -- total on hand = 55800.00
 ```
@@ -798,12 +799,11 @@ GROUP BY c.category_id, cat.name;
 ```sql
 SELECT s.created_at::date AS day, pm.method, COUNT(DISTINCT s.id) AS sales,
        SUM(pm.amount) AS revenue,
-       SUM(si.quantity) AS items
+       (SELECT SUM(si2.quantity) FROM sale_items si2 WHERE si2.sale_id = s.id) AS items
 FROM sales s
 JOIN payments pm ON pm.sale_id = s.id
-JOIN sale_items si ON si.sale_id = s.id
 WHERE s.status = 'COMPLETED' AND s.created_at >= CURRENT_DATE
-GROUP BY day, pm.method;
+GROUP BY day, pm.method, s.id;
 -- EXPECTED: today / CASH / 1 sale / 8000.00 / 2 items
 -- (the payment-method split of the voided sale is absent)
 ```

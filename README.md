@@ -10,7 +10,20 @@ Rather than building a synthetic demo app, **Elman POS** was engineered to handl
 - This system is designed to solve high-rotation inventory control, expiration date tracking, and cash flow traceability for small-format retail.
 
 ## 2. Key Architecture Decisions
-...
+
+### Backend Architecture (Idiomatic Go)
+
+Backend is organized within the `backend/` module using an idiomatic, layered Go layout:
+
+- **`cmd/api/`**: Application entry point (`main.go`).
+- **`internal/model/`**: Struct definitions (domain models and DTOs JSON).
+- **`internal/store/`**: Persistence layer (native SQL with PostgreSQL / `pgx`).
+- **`internal/service/`**: Core business rules and domain logic.
+- **`internal/transport/`**: HTTP transport layer (handlers, routing, and JWT middleware)
+
+## Technical Decisions
+- **`Encapsulation`**: The `internal/` directory is strictly leveraged to prevent unauthorized external imports.
+- **`Dependency Injection (DI)`**: Dependency flow is strictly unidirectional: `transport` → `service` → `store` → `DB`.
 ## 3. Tech Stack
 ...
 ## 4. Quick Start 

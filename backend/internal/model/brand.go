@@ -1,3 +1,4 @@
+// Package model defines domain entities, data structures, and types for ElmanPOS.
 package model
 
 type Brand struct {

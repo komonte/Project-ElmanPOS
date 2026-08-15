@@ -1,3 +1,4 @@
+// Package store handles database persistence and CRUD operations for ElmanPOS entities.
 package store
 
 import (
@@ -41,14 +42,14 @@ func (s *store) GetAll() ([]*model.Brand, error) {
 	}
 	defer rows.Close()
 
-	var brands []*model.Brand
+	brands := make([]*model.Brand, 0)
 	for rows.Next() {
-		var b model.Brand
+		b := new(model.Brand)
 		if err := rows.Scan(&b.ID, &b.Name); err != nil {
 			return nil, err
 		}
 
-		brands = append(brands, &b)
+		brands = append(brands, b)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -95,9 +96,18 @@ func (s *store) SearchByName(query string) ([]*model.Brand, error) {
 func (s *store) Update(id int64, brand *model.Brand) (*model.Brand, error) {
 	q := `UPDATE brands SET name = $1 WHERE id = $2;`
 
-	_, err := s.db.Exec(q, brand.Name, id)
+	res, err := s.db.Exec(q, brand.Name, id)
 	if err != nil {
 		return nil, err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+
+	if rows == 0 {
+		return nil, sql.ErrNoRows
 	}
 
 	brand.ID = id
@@ -108,9 +118,18 @@ func (s *store) Update(id int64, brand *model.Brand) (*model.Brand, error) {
 func (s *store) Delete(id int64) error {
 	q := `DELETE from brands WHERE id = $1;`
 
-	_, err := s.db.Exec(q, id)
+	res, err := s.db.Exec(q, id)
 	if err != nil {
 		return err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return sql.ErrNoRows
 	}
 
 	return nil

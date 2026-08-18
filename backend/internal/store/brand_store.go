@@ -7,7 +7,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 )
 
-type Store interface {
+type BrandStore interface {
 	Create(brand *model.Brand) (*model.Brand, error)
 	GetAll() ([]*model.Brand, error)
 	GetByID(id int64) (*model.Brand, error)
@@ -16,15 +16,15 @@ type Store interface {
 	Delete(id int64) error
 }
 
-type store struct {
+type brandStore struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) Store {
-	return &store{db: db}
+func NewBrandStore(db *sql.DB) BrandStore {
+	return &brandStore{db: db}
 }
 
-func (s *store) Create(brand *model.Brand) (*model.Brand, error) {
+func (s *brandStore) Create(brand *model.Brand) (*model.Brand, error) {
 	q := `INSERT INTO brands (name) VALUES ($1) RETURNING id;`
 	err := s.db.QueryRow(q, brand.Name).Scan(&brand.ID)
 	if err != nil {
@@ -34,7 +34,7 @@ func (s *store) Create(brand *model.Brand) (*model.Brand, error) {
 	return brand, nil
 }
 
-func (s *store) GetAll() ([]*model.Brand, error) {
+func (s *brandStore) GetAll() ([]*model.Brand, error) {
 	q := `SELECT id, name FROM brands;`
 	rows, err := s.db.Query(q)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *store) GetAll() ([]*model.Brand, error) {
 	return brands, nil
 }
 
-func (s *store) GetByID(id int64) (*model.Brand, error) {
+func (s *brandStore) GetByID(id int64) (*model.Brand, error) {
 	q := `SELECT id, name FROM brands WHERE id = $1;`
 
 	var b model.Brand
@@ -72,7 +72,7 @@ func (s *store) GetByID(id int64) (*model.Brand, error) {
 	return &b, nil
 }
 
-func (s *store) SearchByName(query string) ([]*model.Brand, error) {
+func (s *brandStore) SearchByName(query string) ([]*model.Brand, error) {
 	q := `SELECT id, name FROM brands WHERE name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
 	rows, err := s.db.Query(q, query)
 	if err != nil {
@@ -93,7 +93,7 @@ func (s *store) SearchByName(query string) ([]*model.Brand, error) {
 	return brands, nil
 }
 
-func (s *store) Update(id int64, brand *model.Brand) (*model.Brand, error) {
+func (s *brandStore) Update(id int64, brand *model.Brand) (*model.Brand, error) {
 	q := `UPDATE brands SET name = $1 WHERE id = $2;`
 
 	res, err := s.db.Exec(q, brand.Name, id)
@@ -115,7 +115,7 @@ func (s *store) Update(id int64, brand *model.Brand) (*model.Brand, error) {
 	return brand, nil
 }
 
-func (s *store) Delete(id int64) error {
+func (s *brandStore) Delete(id int64) error {
 	q := `DELETE from brands WHERE id = $1;`
 
 	res, err := s.db.Exec(q, id)

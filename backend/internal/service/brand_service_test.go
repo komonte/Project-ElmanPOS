@@ -84,7 +84,7 @@ func TestService_CreateBrand(t *testing.T)  {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.New(tt.mockStore)
+			svc := service.NewBrandService(tt.mockStore)
 			result, err := svc.CreateBrand(tt.input)
 
 			if tt.expectErr {
@@ -135,7 +135,7 @@ func TestService_GetBrandByID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.New(tt.mockStore)
+			svc := service.NewBrandService(tt.mockStore)
 			_, err := svc.GetBrandByID(tt.id)
 
 			if (err != nil) != tt.expectErr {
@@ -155,7 +155,7 @@ func TestService_SearchByName(t *testing.T) {
 			},
 		}
 
-		svc := service.New(mock)
+		svc := service.NewBrandService(mock)
 		res, err := svc.SearchByName("   ")
 
 		if err != nil {

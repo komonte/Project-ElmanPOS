@@ -9,35 +9,35 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
 
-type Service struct {
-	store store.Store
+type BrandService struct {
+	store store.BrandStore
 }
 
-func New(s store.Store) *Service {
-	return &Service{
+func NewBrandService(s store.BrandStore) *BrandService {
+	return &BrandService{
 		store: s,
 	}
 }
 
-func (s *Service) GetAllBrands() ([]*model.Brand, error) {
+func (s *BrandService) GetAllBrands() ([]*model.Brand, error) {
 	return s.store.GetAll()
 }
 
-func (s *Service) GetBrandByID(id int64) (*model.Brand, error) {
+func (s *BrandService) GetBrandByID(id int64) (*model.Brand, error) {
 	if id <= 0 {
 		return nil, errors.New("invalid brand id")
 	}
 	return s.store.GetByID(id)
 }
 
-func (s *Service) CreateBrand(brand *model.Brand) (*model.Brand, error) {
+func (s *BrandService) CreateBrand(brand *model.Brand) (*model.Brand, error) {
 	if err := s.validate(brand); err != nil {
 		return nil, err
 	}
 	return s.store.Create(brand)
 }
 
-func (s *Service) UpdateBrand(id int64, brand *model.Brand) (*model.Brand, error) {
+func (s *BrandService) UpdateBrand(id int64, brand *model.Brand) (*model.Brand, error) {
 	if id <= 0 {
 		return nil, errors.New("invalid brand id")
 	}
@@ -49,14 +49,14 @@ func (s *Service) UpdateBrand(id int64, brand *model.Brand) (*model.Brand, error
 	return s.store.Update(id, brand)
 }
 
-func (s *Service) DeleteBrand(id int64) error {
+func (s *BrandService) DeleteBrand(id int64) error {
 	if id <= 0 {
 		return errors.New("invalid brand id")
 	}
 	return s.store.Delete(id)
 }
 
-func (s *Service) SearchByName(query string) ([]*model.Brand, error) {
+func (s *BrandService) SearchByName(query string) ([]*model.Brand, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
 		return []*model.Brand{}, nil
@@ -64,7 +64,7 @@ func (s *Service) SearchByName(query string) ([]*model.Brand, error) {
 	return s.store.SearchByName(q)
 }
 
-func (s *Service) validate(brand *model.Brand) error {
+func (s *BrandService) validate(brand *model.Brand) error {
 	if brand == nil {
 		return errors.New("brand data is required")
 	}

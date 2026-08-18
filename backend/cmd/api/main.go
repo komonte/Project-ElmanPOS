@@ -62,8 +62,8 @@ func main() {
 
 	// Inyectar nuestras dependencias
 
-	brandStore := store.New(db)
-	brandService := service.New(brandStore)
+	brandStore := store.NewBrandStore(db)
+	brandService := service.NewBrandService(brandStore)
 	brandHandler := transport.NewBrandHandler(brandService)
 
 	// Configurar rutas

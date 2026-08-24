@@ -74,6 +74,7 @@ Run each check and confirm the expected result. If a constraint/index below is a
 | 3.10 | `\d app_settings` | PK `key`; `value` is `JSONB` |
 | 3.11 | `\dy` | the append-only ledger trigger on `stock_movements` |
 | 3.12 | `\d product_codes` | UNIQUE `code` (**NFR-02** / O(1) scan target) |
+| 3.13 | `\d taxes` | UNIQUE INDEX `idx_taxes_name_unique_lower` on `LOWER(name)` |
 
 ---
 
@@ -711,6 +712,13 @@ BEGIN;
 INSERT INTO prices (product_id, unit_price, valid_from)
 VALUES (1, 1600.00, '2026-01-01T00:00:00Z');   -- same valid_from as the seed price
 -- EXPECTED: ERROR — UNIQUE(product_id, valid_from), no overlapping vigencias (F-03)
+ROLLBACK;
+```
+
+```sql
+BEGIN;
+INSERT INTO taxes (name, rate) VALUES ('iva 21%', 21.00);
+-- EXPECTED: ERROR — unique index "idx_taxes_name_unique_lower" violado (case-insensitive)
 ROLLBACK;
 ```
 

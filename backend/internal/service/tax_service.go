@@ -1,11 +1,7 @@
 package service
 
-// TODO
-// Create tax service and its unit test
-
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"unicode/utf8"
@@ -16,16 +12,6 @@ import (
 )
 
 var (
-	// sentinel errors
-	ErrTaxNotFound       = errors.New("tax not found")
-	ErrTaxRequired       = errors.New("tax data is required")
-	ErrInvalidID         = errors.New("invalid tax id")
-	ErrInvalidName       = errors.New("tax name is required")
-	ErrInvalidNameMinLen = errors.New("tax name must have at least 2 characters")
-	ErrInvalidNameMaxLen = errors.New("tax name must have less than 80 characters")
-	ErrInvalidMinRate    = errors.New("tax rate cannot be negative")
-	ErrInvalidMaxRate    = errors.New("tax rate cannot exceed 100%")
-
 	// validations
 	minTaxRate = decimal.Zero
 	maxTaxRate = decimal.NewFromInt(100)
@@ -36,11 +22,20 @@ const (
 	maxTaxNameLength = 80
 )
 
-type TaxService struct {
-	store store.TaxStore
+type TaxStore interface {
+	Create(ctx context.Context, tax *model.Tax) (*model.Tax, error)
+	GetAll(ctx context.Context) ([]*model.Tax, error)
+	GetByID(ctx context.Context, id int64) (*model.Tax, error)
+	SearchByName(ctx context.Context, query string) ([]*model.Tax, error)
+	Update(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error)
+	Delete(ctx context.Context, id int64) error
 }
 
-func NewTaxService(s store.TaxStore) *TaxService {
+type TaxService struct {
+	store TaxStore
+}
+
+func NewTaxService(s TaxStore) *TaxService {
 	return &TaxService{
 		store: s,
 	}
@@ -55,18 +50,29 @@ func (s *TaxService) GetTaxByID(ctx context.Context, id int64) (*model.Tax, erro
 		return nil, ErrInvalidID
 	}
 	tax, err := s.store.GetByID(ctx, id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrTaxNotFound
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, ErrTaxNotFound
+		}
+		return nil, err
 	}
 
-	return tax, err
+	return tax, nil
 }
 
 func (s *TaxService) CreateTax(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
 	if err := s.validate(tax); err != nil {
 		return nil, err
 	}
-	return s.store.Create(ctx, tax)
+
+	created, err := s.store.Create(ctx, tax)
+	if err != nil {
+		if errors.Is(err, store.ErrDuplicateTaxName) {
+			return nil, ErrTaxAlreadyExists
+		}
+		return nil, err
+	}
+	return created, nil
 }
 
 func (s *TaxService) UpdateTax(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
@@ -81,10 +87,16 @@ func (s *TaxService) UpdateTax(ctx context.Context, id int64, tax *model.Tax) (*
 	tax.ID = id
 
 	updated, err := s.store.Update(ctx, id, tax)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrTaxNotFound
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, ErrTaxNotFound
+		}
+		if errors.Is(err, store.ErrDuplicateTaxName) {
+			return nil, ErrTaxAlreadyExists
+		}
+		return nil, err
 	}
-	return updated, err
+	return updated, nil
 }
 
 func (s *TaxService) DeleteTax(ctx context.Context, id int64) error {
@@ -92,14 +104,15 @@ func (s *TaxService) DeleteTax(ctx context.Context, id int64) error {
 		return ErrInvalidID
 	}
 
-	err := s.store.Delete(ctx, id)
-
-	// With these kind of verifications we make sure no sql type errors 
-	// are found in the http layer, instead we traduce them here.
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrTaxNotFound
+	if err := s.store.Delete(ctx, id); err != nil {
+		// With these kind of verifications we make sure no sql type errors
+		// are found in the http layer, instead we traduce them here.
+		if errors.Is(err, store.ErrNotFound) {
+			return ErrTaxNotFound
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func (s *TaxService) SearchByName(ctx context.Context, query string) ([]*model.Tax, error) {

@@ -3,7 +3,6 @@ package service_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
@@ -17,7 +16,7 @@ type mockTaxStore struct {
 	getAllFn       func(ctx context.Context) ([]*model.Tax, error)
 	getByIDFn      func(ctx context.Context, id int64) (*model.Tax, error)
 	searchByNameFn func(ctx context.Context, query string) ([]*model.Tax, error)
-	updateFn       func(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error)
+	updateFn       func(ctx context.Context, tax *model.Tax) (*model.Tax, error)
 	deleteFn       func(ctx context.Context, id int64) error
 }
 
@@ -37,68 +36,19 @@ func (m *mockTaxStore) SearchByName(ctx context.Context, q string) ([]*model.Tax
 	return m.searchByNameFn(ctx, q)
 }
 
-func (m *mockTaxStore) Update(ctx context.Context, id int64, b *model.Tax) (*model.Tax, error) {
-	return m.updateFn(ctx, id, b)
+func (m *mockTaxStore) Update(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
+	return m.updateFn(ctx, tax)
 }
 
 func (m *mockTaxStore) Delete(ctx context.Context, id int64) error {
 	return m.deleteFn(ctx, id)
 }
 
-// verifyError asserts that gotErr matches wantErr using errors.Is.
-// Returns true on success path (wantErr == nil), false on error path.
-func verifyError(t *testing.T, wantErr, gotErr error) bool {
-	t.Helper()
-	if wantErr != nil {
-		if gotErr == nil {
-			t.Fatalf("expected error %v, got nil", wantErr)
-		}
-		if !errors.Is(gotErr, wantErr) {
-			t.Errorf("expected error %v, got %v", wantErr, gotErr)
-		}
-		return false
-	}
-	if gotErr != nil {
-		t.Fatalf("unexpected error: %v", gotErr)
-	}
-	return true
-}
-
-// TestTaxService_Validate exhaustively tests all validation rules once.
-func TestTaxService_Validate(t *testing.T) {
-	ctx := context.Background()
-
-	successStore := &mockTaxStore{
-		createFn: func(_ context.Context, tax *model.Tax) (*model.Tax, error) {
-			return &model.Tax{ID: 1, Name: tax.Name, Rate: tax.Rate}, nil
-		},
-	}
-
-	tests := []struct {
-		name    string
-		input   *model.Tax
-		store   *mockTaxStore
-		wantErr error
-	}{
-		{"nil tax", nil, &mockTaxStore{}, service.ErrTaxRequired},
-		{"empty name", &model.Tax{Name: "  "}, &mockTaxStore{}, service.ErrInvalidName},
-		{"short name", &model.Tax{Name: "A"}, &mockTaxStore{}, service.ErrInvalidNameMinLen},
-		{"long name", &model.Tax{Name: strings.Repeat("a", 81)}, &mockTaxStore{}, service.ErrInvalidNameMaxLen},
-		{"negative rate", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(-1)}, &mockTaxStore{}, service.ErrInvalidMinRate},
-		{"rate > 100", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(101)}, &mockTaxStore{}, service.ErrInvalidMaxRate},
-		{"valid tax", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)}, successStore, nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := service.NewTaxService(tt.store)
-			_, err := svc.CreateTax(ctx, tt.input)
-			verifyError(t, tt.wantErr, err)
-		})
-	}
-}
+var errStore = errors.New("store failure")
 
 func TestTaxService_CreateTax(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
@@ -106,45 +56,36 @@ func TestTaxService_CreateTax(t *testing.T) {
 		input   *model.Tax
 		mock    *mockTaxStore
 		wantErr error
-		check   func(t *testing.T, tax *model.Tax)
 	}{
-		{
-			name:  "error when tax name already exists",
-			input: &model.Tax{Name: "IVA", Rate: decimal.RequireFromString("21.00")},
-			mock: &mockTaxStore{
-				createFn: func(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
-					return nil, store.ErrDuplicateTaxName
-				},
+		{"nil tax", nil, &mockTaxStore{}, model.ErrNilTax},
+		{"empty name", &model.Tax{Name: "  "}, &mockTaxStore{}, model.ErrEmptyTaxName},
+		{"short name", &model.Tax{Name: "A"}, &mockTaxStore{}, model.ErrTaxNameTooShort},
+		{"long name", &model.Tax{Name: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, &mockTaxStore{}, model.ErrTaxNameTooLong},
+		{"negative rate", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(-1)}, &mockTaxStore{}, model.ErrInvalidRate},
+		{"rate over 100", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(101)}, &mockTaxStore{}, model.ErrInvalidRate},
+		{"duplicate name", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			createFn: func(_ context.Context, _ *model.Tax) (*model.Tax, error) {
+				return nil, store.ErrDuplicateTaxName
 			},
-			wantErr: service.ErrTaxAlreadyExists,
-		},
-		{
-			name:  "success creates tax and trims whitespace",
-			input: &model.Tax{Name: " IVA ", Rate: decimal.RequireFromString("21.00")},
-			mock: &mockTaxStore{
-				createFn: func(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
-					if tax.Name != "IVA" {
-						t.Errorf("expected trimmed name 'IVA', got '%s'", tax.Name)
-					}
-					return &model.Tax{ID: 1, Name: tax.Name, Rate: tax.Rate}, nil
-				},
+		}, service.ErrTaxAlreadyExists},
+		{"store failure", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			createFn: func(_ context.Context, _ *model.Tax) (*model.Tax, error) {
+				return nil, errStore
 			},
-			check: func(t *testing.T, tax *model.Tax) {
-				if tax.ID == 0 {
-					t.Error("expected valid tax ID, got 0")
+		}, errStore},
+		{"success", &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			createFn: func(_ context.Context, tax *model.Tax) (*model.Tax, error) {
+				return &model.Tax{ID: 1, Name: tax.Name, Rate: tax.Rate}, nil
+			},
+		}, nil},
+		{"trims whitespace", &model.Tax{Name: " IVA ", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			createFn: func(_ context.Context, tax *model.Tax) (*model.Tax, error) {
+				if tax.Name != "IVA" {
+					t.Errorf("expected 'IVA', got %q", tax.Name)
 				}
+				return &model.Tax{ID: 1, Name: tax.Name, Rate: tax.Rate}, nil
 			},
-		},
-		{
-			name:  "error propagated from store failure",
-			input: &model.Tax{Name: "IVA", Rate: decimal.RequireFromString("21.00")},
-			mock: &mockTaxStore{
-				createFn: func(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
-					return nil, errStoreFailure
-				},
-			},
-			wantErr: errStoreFailure,
-		},
+		}, nil},
 	}
 
 	for _, tt := range tests {
@@ -152,20 +93,22 @@ func TestTaxService_CreateTax(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
 			created, err := svc.CreateTax(ctx, tt.input)
 
-			if !verifyError(t, tt.wantErr, err) {
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
 				return
 			}
-			if created == nil {
-				t.Fatal("expected created tax, got nil")
-			}
-			if tt.check != nil {
-				tt.check(t, created)
+			if created == nil || created.ID == 0 {
+				t.Fatal("expected valid tax with ID")
 			}
 		})
 	}
 }
 
 func TestTaxService_GetAllTaxes(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
@@ -174,27 +117,19 @@ func TestTaxService_GetAllTaxes(t *testing.T) {
 		wantErr error
 		wantLen int
 	}{
-		{
-			name: "success returns list of taxes",
-			mock: &mockTaxStore{
-				getAllFn: func(ctx context.Context) ([]*model.Tax, error) {
-					return []*model.Tax{
-						{ID: 1, Name: "IVA 21%", Rate: decimal.NewFromInt(21)},
-						{ID: 2, Name: "IVA 10.5%", Rate: decimal.RequireFromString("10.5")},
-					}, nil
-				},
+		{"success", &mockTaxStore{
+			getAllFn: func(_ context.Context) ([]*model.Tax, error) {
+				return []*model.Tax{
+					{ID: 1, Name: "IVA 21%", Rate: decimal.NewFromInt(21)},
+					{ID: 2, Name: "IVA 10.5%", Rate: decimal.RequireFromString("10.5")},
+				}, nil
 			},
-			wantLen: 2,
-		},
-		{
-			name: "error propagated from store",
-			mock: &mockTaxStore{
-				getAllFn: func(ctx context.Context) ([]*model.Tax, error) {
-					return nil, errStoreFailure
-				},
+		}, nil, 2},
+		{"store failure", &mockTaxStore{
+			getAllFn: func(_ context.Context) ([]*model.Tax, error) {
+				return nil, errStore
 			},
-			wantErr: errStoreFailure,
-		},
+		}, errStore, 0},
 	}
 
 	for _, tt := range tests {
@@ -202,228 +137,161 @@ func TestTaxService_GetAllTaxes(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
 			taxes, err := svc.GetAllTaxes(ctx)
 
-			if !verifyError(t, tt.wantErr, err) {
-				return
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
 			}
 			if len(taxes) != tt.wantLen {
-				t.Errorf("expected %d taxes, got %d", tt.wantLen, len(taxes))
+				t.Errorf("len: got %d, want %d", len(taxes), tt.wantLen)
 			}
 		})
 	}
 }
 
 func TestTaxService_GetTaxByID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		input   int64
+		id      int64
 		mock    *mockTaxStore
 		wantErr error
 	}{
-		{
-			name:    "error when id is lower than 1",
-			input:   0,
-			mock:    &mockTaxStore{},
-			wantErr: service.ErrInvalidID,
-		},
-		{
-			name:  "error when tax is not found",
-			input: 1,
-			mock: &mockTaxStore{
-				getByIDFn: func(ctx context.Context, id int64) (*model.Tax, error) {
-					return nil, store.ErrNotFound
-				},
+		{"invalid id", 0, &mockTaxStore{}, service.ErrInvalidID},
+		{"not found", 1, &mockTaxStore{
+			getByIDFn: func(_ context.Context, _ int64) (*model.Tax, error) {
+				return nil, store.ErrNotFound
 			},
-			wantErr: service.ErrTaxNotFound,
-		},
-		{
-			name:  "success getting tax by id",
-			input: 1,
-			mock: &mockTaxStore{
-				getByIDFn: func(ctx context.Context, id int64) (*model.Tax, error) {
-					return &model.Tax{ID: 1, Name: "IVA 21%", Rate: decimal.NewFromInt(21)}, nil
-				},
+		}, service.ErrTaxNotFound},
+		{"store failure", 1, &mockTaxStore{
+			getByIDFn: func(_ context.Context, _ int64) (*model.Tax, error) {
+				return nil, errStore
 			},
-		},
-		{
-			name:  "error propagated from store",
-			input: 1,
-			mock: &mockTaxStore{
-				getByIDFn: func(ctx context.Context, id int64) (*model.Tax, error) {
-					return nil, errStoreFailure
-				},
+		}, errStore},
+		{"success", 1, &mockTaxStore{
+			getByIDFn: func(_ context.Context, id int64) (*model.Tax, error) {
+				return &model.Tax{ID: id, Name: "IVA 21%", Rate: decimal.NewFromInt(21)}, nil
 			},
-			wantErr: errStoreFailure,
-		},
+		}, nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
-			tax, err := svc.GetTaxByID(ctx, tt.input)
+			tax, err := svc.GetTaxByID(ctx, tt.id)
 
-			if !verifyError(t, tt.wantErr, err) {
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
 				return
 			}
-			if tax == nil {
-				t.Fatal("expected tax, got nil")
-			}
-			if tax.ID != tt.input {
-				t.Errorf("expected tax ID %d, got %d", tt.input, tax.ID)
+			if tax.ID != tt.id {
+				t.Errorf("id: got %d, want %d", tax.ID, tt.id)
 			}
 		})
 	}
 }
 
 func TestTaxService_UpdateTax(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		id      int64
 		tax     *model.Tax
 		mock    *mockTaxStore
 		wantErr error
-		check   func(t *testing.T, tax *model.Tax)
 	}{
-		{
-			name:    "error when id is lower than 1",
-			id:      0,
-			tax:     &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)},
-			mock:    &mockTaxStore{},
-			wantErr: service.ErrInvalidID,
-		},
-		{
-			name: "error when tax is not found",
-			id:   1,
-			tax:  &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)},
-			mock: &mockTaxStore{
-				updateFn: func(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
-					return nil, store.ErrNotFound
-				},
+		{"invalid id", &model.Tax{ID: 0}, &mockTaxStore{}, service.ErrInvalidID},
+		{"empty name", &model.Tax{ID: 1, Name: "  "}, &mockTaxStore{}, model.ErrEmptyTaxName},
+		{"not found", &model.Tax{ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			updateFn: func(_ context.Context, _ *model.Tax) (*model.Tax, error) {
+				return nil, store.ErrNotFound
 			},
-			wantErr: service.ErrTaxNotFound,
-		},
-		{
-			name: "error when tax name already exists",
-			id:   1,
-			tax:  &model.Tax{Name: "IVA", Rate: decimal.NewFromInt(21)},
-			mock: &mockTaxStore{
-				updateFn: func(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
-					return nil, store.ErrDuplicateTaxName
-				},
+		}, service.ErrTaxNotFound},
+		{"duplicate name", &model.Tax{ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			updateFn: func(_ context.Context, _ *model.Tax) (*model.Tax, error) {
+				return nil, store.ErrDuplicateTaxName
 			},
-			wantErr: service.ErrTaxAlreadyExists,
-		},
-		{
-			name: "success updates tax and trims whitespace",
-			id:   1,
-			tax:  &model.Tax{Name: " IVA ", Rate: decimal.RequireFromString("21.00")},
-			mock: &mockTaxStore{
-				updateFn: func(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
-					if tax.Name != "IVA" {
-						t.Errorf("expected trimmed name 'IVA', got '%s'", tax.Name)
-					}
-					return &model.Tax{ID: 1, Name: tax.Name, Rate: tax.Rate}, nil
-				},
+		}, service.ErrTaxAlreadyExists},
+		{"store failure", &model.Tax{ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			updateFn: func(_ context.Context, _ *model.Tax) (*model.Tax, error) {
+				return nil, errStore
 			},
-			check: func(t *testing.T, tax *model.Tax) {
-				if tax.ID == 0 {
-					t.Error("expected valid tax ID, got 0")
+		}, errStore},
+		{"success", &model.Tax{ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			updateFn: func(_ context.Context, tax *model.Tax) (*model.Tax, error) {
+				return &model.Tax{ID: tax.ID, Name: tax.Name, Rate: tax.Rate}, nil
+			},
+		}, nil},
+		{"trims whitespace", &model.Tax{ID: 1, Name: " IVA ", Rate: decimal.NewFromInt(21)}, &mockTaxStore{
+			updateFn: func(_ context.Context, tax *model.Tax) (*model.Tax, error) {
+				if tax.Name != "IVA" {
+					t.Errorf("expected 'IVA', got %q", tax.Name)
 				}
+				return &model.Tax{ID: tax.ID, Name: tax.Name, Rate: tax.Rate}, nil
 			},
-		},
-		{
-			name: "error propagated from store failure",
-			id:   1,
-			tax:  &model.Tax{Name: "IVA", Rate: decimal.RequireFromString("21.00")},
-			mock: &mockTaxStore{
-				updateFn: func(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
-					return nil, errStoreFailure
-				},
-			},
-			wantErr: errStoreFailure,
-		},
+		}, nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
-			updated, err := svc.UpdateTax(ctx, tt.id, tt.tax)
+			updated, err := svc.UpdateTax(ctx, tt.tax)
 
-			if !verifyError(t, tt.wantErr, err) {
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
 				return
 			}
-			if updated == nil {
-				t.Fatal("expected updated tax, got nil")
-			}
-			if updated.ID != tt.id {
-				t.Errorf("expected tax ID %d, got %d", tt.id, updated.ID)
-			}
-			if tt.check != nil {
-				tt.check(t, updated)
+			if updated == nil || updated.ID == 0 {
+				t.Fatal("expected valid tax with ID")
 			}
 		})
 	}
 }
 
 func TestTaxService_DeleteTax(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
 		name    string
-		input   int64
+		id      int64
 		mock    *mockTaxStore
 		wantErr error
 	}{
-		{
-			name:    "error when id is lower than 1",
-			input:   0,
-			mock:    &mockTaxStore{},
-			wantErr: service.ErrInvalidID,
-		},
-		{
-			name:  "error when tax not found",
-			input: 1,
-			mock: &mockTaxStore{
-				deleteFn: func(ctx context.Context, id int64) error {
-					return store.ErrNotFound
-				},
-			},
-			wantErr: service.ErrTaxNotFound,
-		},
-		{
-			name:  "error propagated from store",
-			input: 1,
-			mock: &mockTaxStore{
-				deleteFn: func(ctx context.Context, id int64) error {
-					return errStoreFailure
-				},
-			},
-			wantErr: errStoreFailure,
-		},
-		{
-			name:  "success",
-			input: 1,
-			mock: &mockTaxStore{
-				deleteFn: func(ctx context.Context, id int64) error {
-					return nil
-				},
-			},
-		},
+		{"invalid id", 0, &mockTaxStore{}, service.ErrInvalidID},
+		{"not found", 1, &mockTaxStore{
+			deleteFn: func(_ context.Context, _ int64) error { return store.ErrNotFound },
+		}, service.ErrTaxNotFound},
+		{"store failure", 1, &mockTaxStore{
+			deleteFn: func(_ context.Context, _ int64) error { return errStore },
+		}, errStore},
+		{"success", 1, &mockTaxStore{
+			deleteFn: func(_ context.Context, _ int64) error { return nil },
+		}, nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
-			err := svc.DeleteTax(ctx, tt.input)
-			verifyError(t, tt.wantErr, err)
+			err := svc.DeleteTax(ctx, tt.id)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
 		})
 	}
 }
 
 func TestTaxService_SearchByName(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := []struct {
@@ -433,40 +301,18 @@ func TestTaxService_SearchByName(t *testing.T) {
 		wantErr error
 		wantLen int
 	}{
-		{
-			name:    "empty query returns empty list",
-			query:   "",
-			mock:    &mockTaxStore{},
-			wantLen: 0,
-		},
-		{
-			name:    "whitespace query returns empty list",
-			query:   "  ",
-			mock:    &mockTaxStore{},
-			wantLen: 0,
-		},
-		{
-			name:  "success returns matching taxes",
-			query: "IVA",
-			mock: &mockTaxStore{
-				searchByNameFn: func(ctx context.Context, q string) ([]*model.Tax, error) {
-					return []*model.Tax{
-						{ID: 1, Name: "IVA 21%", Rate: decimal.NewFromInt(21)},
-					}, nil
-				},
+		{"empty query", "", &mockTaxStore{}, nil, 0},
+		{"whitespace query", "  ", &mockTaxStore{}, nil, 0},
+		{"success", "IVA", &mockTaxStore{
+			searchByNameFn: func(_ context.Context, _ string) ([]*model.Tax, error) {
+				return []*model.Tax{{ID: 1, Name: "IVA 21%", Rate: decimal.NewFromInt(21)}}, nil
 			},
-			wantLen: 1,
-		},
-		{
-			name:  "error propagated from store",
-			query: "IVA",
-			mock: &mockTaxStore{
-				searchByNameFn: func(ctx context.Context, q string) ([]*model.Tax, error) {
-					return nil, errStoreFailure
-				},
+		}, nil, 1},
+		{"store failure", "IVA", &mockTaxStore{
+			searchByNameFn: func(_ context.Context, _ string) ([]*model.Tax, error) {
+				return nil, errStore
 			},
-			wantErr: errStoreFailure,
-		},
+		}, errStore, 0},
 	}
 
 	for _, tt := range tests {
@@ -474,15 +320,12 @@ func TestTaxService_SearchByName(t *testing.T) {
 			svc := service.NewTaxService(tt.mock)
 			taxes, err := svc.SearchByName(ctx, tt.query)
 
-			if !verifyError(t, tt.wantErr, err) {
-				return
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
 			}
 			if len(taxes) != tt.wantLen {
-				t.Errorf("expected %d taxes, got %d", tt.wantLen, len(taxes))
+				t.Errorf("len: got %d, want %d", len(taxes), tt.wantLen)
 			}
 		})
 	}
 }
-
-// test-local sentinel for store failure propagation tests.
-var errStoreFailure = errors.New("store failure")

@@ -4,22 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
-	"github.com/shopspring/decimal"
-)
-
-var (
-	// validations
-	minTaxRate = decimal.Zero
-	maxTaxRate = decimal.NewFromInt(100)
-)
-
-const (
-	minTaxNameLength = 2
-	maxTaxNameLength = 80
 )
 
 type TaxStore interface {
@@ -27,7 +14,7 @@ type TaxStore interface {
 	GetAll(ctx context.Context) ([]*model.Tax, error)
 	GetByID(ctx context.Context, id int64) (*model.Tax, error)
 	SearchByName(ctx context.Context, query string) ([]*model.Tax, error)
-	Update(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error)
+	Update(ctx context.Context, tax *model.Tax) (*model.Tax, error)
 	Delete(ctx context.Context, id int64) error
 }
 
@@ -61,7 +48,7 @@ func (s *TaxService) GetTaxByID(ctx context.Context, id int64) (*model.Tax, erro
 }
 
 func (s *TaxService) CreateTax(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
-	if err := s.validate(tax); err != nil {
+	if err := tax.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -75,18 +62,15 @@ func (s *TaxService) CreateTax(ctx context.Context, tax *model.Tax) (*model.Tax,
 	return created, nil
 }
 
-func (s *TaxService) UpdateTax(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
-	if id <= 0 {
+func (s *TaxService) UpdateTax(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
+	if tax.ID <= 0 {
 		return nil, ErrInvalidID
 	}
-
-	if err := s.validate(tax); err != nil {
+	if err := tax.Validate(); err != nil {
 		return nil, err
 	}
 
-	tax.ID = id
-
-	updated, err := s.store.Update(ctx, id, tax)
+	updated, err := s.store.Update(ctx, tax)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, ErrTaxNotFound
@@ -121,32 +105,4 @@ func (s *TaxService) SearchByName(ctx context.Context, query string) ([]*model.T
 		return []*model.Tax{}, nil
 	}
 	return s.store.SearchByName(ctx, q)
-}
-
-func (s *TaxService) validate(tax *model.Tax) error {
-	if tax == nil {
-		return ErrTaxRequired
-	}
-
-	tax.Name = strings.TrimSpace(tax.Name)
-	if tax.Name == "" {
-		return ErrInvalidName
-	}
-
-	if utf8.RuneCountInString(tax.Name) < minTaxNameLength {
-		return ErrInvalidNameMinLen
-	}
-
-	if utf8.RuneCountInString(tax.Name) > maxTaxNameLength {
-		return ErrInvalidNameMaxLen
-	}
-
-	if tax.Rate.LessThan(minTaxRate) {
-		return ErrInvalidMinRate
-	}
-
-	if tax.Rate.GreaterThan(maxTaxRate) {
-		return ErrInvalidMaxRate
-	}
-	return nil
 }

@@ -17,9 +17,12 @@ func NewTaxStore(db *sql.DB) *TaxStore {
 	return &TaxStore{db: db}
 }
 
-
 // Create all functions to fulfill the interface
 func (s *TaxStore) Create(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
+	if tax == nil {
+		return nil, errors.New("tax cannot be nil")
+	}
+
 	q := `INSERT INTO taxes(name, rate) VALUES ($1, $2) RETURNING id;`
 	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate).Scan(&tax.ID)
 	if err != nil {
@@ -96,10 +99,14 @@ func (s *TaxStore) SearchByName(ctx context.Context, query string) ([]*model.Tax
 	return taxes, nil
 }
 
-func (s *TaxStore) Update(ctx context.Context, id int64, tax *model.Tax) (*model.Tax, error) {
+func (s *TaxStore) Update(ctx context.Context, tax *model.Tax) (*model.Tax, error) {
+	if tax == nil {
+		return nil, errors.New("tax cannot be nil")
+	}
+
 	q := `UPDATE taxes SET name = $1, rate = $2 WHERE id = $3;`
 
-	res, err := s.db.ExecContext(ctx, q, tax.Name, tax.Rate, id)
+	res, err := s.db.ExecContext(ctx, q, tax.Name, tax.Rate, tax.ID)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, store.ErrDuplicateTaxName
@@ -115,8 +122,6 @@ func (s *TaxStore) Update(ctx context.Context, id int64, tax *model.Tax) (*model
 	if rows == 0 {
 		return nil, store.ErrNotFound
 	}
-
-	tax.ID = id
 
 	return tax, nil
 }

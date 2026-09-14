@@ -14,6 +14,7 @@ CREATE TABLE taxes (
     name VARCHAR(80) NOT NULL,
     rate NUMERIC(5,2) NOT NULL CHECK (rate >= 0 AND rate <= 100)
 );
+CREATE UNIQUE INDEX idx_taxes_name_unique_lower ON taxes (LOWER(name));
 
 -- ---- categories (02 4.2) ----
 CREATE TABLE categories (

@@ -10,6 +10,7 @@ DROP TABLE suppliers;
 DROP TABLE brands;
 DROP TABLE categories;
 DROP TABLE taxes;
+DROP INDEX IF EXISTS idx_taxes_name_unique_lower;
 DROP TYPE user_role;
 DROP TYPE measure_unit;
 DROP TYPE product_code_type;

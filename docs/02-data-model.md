@@ -94,6 +94,7 @@ Semantics:
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(80) | NOT NULL | e.g. `IVA 21%` |
 | rate | NUMERIC(5,2) | NOT NULL, CHECK (rate >= 0 AND rate <= 100) | Percentage (0, 10.5, 21, 27). |
+| (index) | | UNIQUE INDEX `idx_taxes_name_unique_lower` on `LOWER(name)` | Case-insensitive unique name |
 
 ### 4.2 `categories`
 
@@ -472,6 +473,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | prices / product_costs | (product_id, valid_from DESC) | Current + historical price. |
 | products | (preferred_supplier_id) | Replenishment grouped by preferred supplier. |
 | app_settings | UNIQUE(key) | Config lookup. |
+| taxes | idx_taxes_name_unique_lower | Case-insensitive unique name |
 
 ---
 

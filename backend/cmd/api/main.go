@@ -14,6 +14,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 )
 
@@ -66,10 +67,16 @@ func main() {
 	brandService := service.NewBrandService(brandStore)
 	brandHandler := transport.NewBrandHandler(brandService)
 
+	taxStore := postgres.NewTaxStore(db)
+	taxService := service.NewTaxService(taxStore)
+	taxHandler := transport.NewTaxHandler(taxService)
+
 	// Configurar rutas
 	mux := http.NewServeMux()
 	mux.HandleFunc("/brands", brandHandler.HandleBrands)
 	mux.HandleFunc("/brand/", brandHandler.HandleBrandByID)
+	mux.HandleFunc("/taxes", taxHandler.HandleTaxes)
+	mux.HandleFunc("/tax/", taxHandler.HandleTaxByID)
 
 	handler := transport.CORSMiddleware(mux)
 

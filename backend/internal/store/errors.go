@@ -8,4 +8,5 @@ var (
 
 	// specific business errors
 	ErrDuplicateTaxName = errors.New("tax name already exists")
+	ErrDuplicateBrandName = errors.New("brand name already exists")
 )

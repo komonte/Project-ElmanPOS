@@ -5,7 +5,10 @@ import (
 )
 
 var (
-	ErrInvalidID        = errors.New("invalid tax id")
+	// generics
+	ErrInvalidID        = errors.New("invalid id")
+
+	// taxes
 	ErrTaxAlreadyExists = errors.New("tax with this name already exists")
 	ErrTaxNotFound      = errors.New("tax not found")
 

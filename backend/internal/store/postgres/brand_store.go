@@ -120,6 +120,7 @@ func (s *BrandStore) Update(ctx context.Context, id int64, brand *model.Brand) (
 		return nil, store.ErrNotFound
 	}
 
+	brand.ID = id
 	return brand, nil
 }
 

@@ -5,7 +5,11 @@ import (
 )
 
 var (
-	ErrInvalidID = errors.New("invalid tax id")
-	ErrTaxAlreadyExists  = errors.New("tax with this name already exists")
-	ErrTaxNotFound       = errors.New("tax not found")
+	ErrInvalidID        = errors.New("invalid tax id")
+	ErrTaxAlreadyExists = errors.New("tax with this name already exists")
+	ErrTaxNotFound      = errors.New("tax not found")
+
+	// brands
+	ErrBrandAlreadyExists = errors.New("brand with this name already exists")
+	ErrBrandNotFound      = errors.New("brand not found")
 )

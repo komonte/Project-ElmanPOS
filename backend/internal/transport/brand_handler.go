@@ -2,22 +2,23 @@
 package transport
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 )
 
 type BrandService interface {
-	CreateBrand(brand *model.Brand) (*model.Brand, error)
-	GetAllBrands() ([]*model.Brand, error)
-	GetBrandByID(id int64) (*model.Brand, error)
-	SearchByName(query string) ([]*model.Brand, error)
-	UpdateBrand(id int64, brand *model.Brand) (*model.Brand, error)
-	DeleteBrand(id int64) error
+	CreateBrand(ctx context.Context , brand *model.Brand) (*model.Brand, error)
+	GetAllBrands(ctx context.Context) ([]*model.Brand, error)
+	GetBrandByID(ctx context.Context, id int64) (*model.Brand, error)
+	SearchByName(ctx context.Context, query string) ([]*model.Brand, error)
+	UpdateBrand(ctx context.Context, id int64, brand *model.Brand) (*model.Brand, error)
+	DeleteBrand(ctx context.Context, id int64) error
 }
 
 type BrandHandler struct {
@@ -31,6 +32,8 @@ func NewBrandHandler(s BrandService) *BrandHandler {
 }
 
 func (h *BrandHandler) HandleBrands(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	switch r.Method {
 	case http.MethodGet:
         var (
@@ -41,20 +44,19 @@ func (h *BrandHandler) HandleBrands(w http.ResponseWriter, r *http.Request) {
         query := strings.TrimSpace(r.URL.Query().Get("name"))
 
         if query != "" {
-            brands, err = h.service.SearchByName(query)
+            brands, err = h.service.SearchByName(ctx, query)
             if err != nil {
                 errorJSON(w, http.StatusInternalServerError, "failed to search brands")
                 return
             }
         } else {
-            brands, err = h.service.GetAllBrands()
+            brands, err = h.service.GetAllBrands(ctx)
             if err != nil {
                 errorJSON(w, http.StatusInternalServerError, "failed to retrieve brands")
                 return
             }
         }
 
-        // 3. Respondemos con 200 OK y el listado resultante
         if err := writeJSON(w, http.StatusOK, brands); err != nil {
             errorJSON(w, http.StatusInternalServerError, "failed to encode response")
             return
@@ -67,7 +69,11 @@ func (h *BrandHandler) HandleBrands(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		created, err := h.service.CreateBrand(&brand)
+		created, err := h.service.CreateBrand(ctx, &brand)
+		if errors.Is(err, service.ErrBrandAlreadyExists) {
+			errorJSON(w, http.StatusConflict, "brand already exists")
+			return
+		}
 		if err != nil {
 			errorJSON(w, http.StatusBadRequest, "failed to create brand")
 			return
@@ -84,6 +90,8 @@ func (h *BrandHandler) HandleBrands(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *BrandHandler) HandleBrandByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	idStr := strings.TrimPrefix(r.URL.Path, "/brand/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
@@ -93,7 +101,7 @@ func (h *BrandHandler) HandleBrandByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		brand, err := h.service.GetBrandByID(id)
+		brand, err := h.service.GetBrandByID(ctx, id)
 		if err != nil {
 			errorJSON(w, http.StatusNotFound, "brand not found")
 			return
@@ -111,10 +119,14 @@ func (h *BrandHandler) HandleBrandByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		updated, err := h.service.UpdateBrand(id, &brand)
+		updated, err := h.service.UpdateBrand(ctx, id, &brand)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if errors.Is(err, service.ErrBrandNotFound) {
 				errorJSON(w, http.StatusNotFound, "brand not found")
+				return
+			}
+			if errors.Is(err, service.ErrBrandAlreadyExists) {
+				errorJSON(w, http.StatusConflict, "brand name already exists")
 				return
 			}
 			errorJSON(w, http.StatusInternalServerError, "failed to update brand")
@@ -127,8 +139,8 @@ func (h *BrandHandler) HandleBrandByID(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case http.MethodDelete:
-		if err := h.service.DeleteBrand(id); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+		if err := h.service.DeleteBrand(ctx, id); err != nil {
+			if errors.Is(err, service.ErrBrandNotFound) {
 				errorJSON(w, http.StatusNotFound, "brand not found")
 				return
 			}

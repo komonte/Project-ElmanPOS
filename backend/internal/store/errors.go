@@ -9,4 +9,5 @@ var (
 	// specific business errors
 	ErrDuplicateTaxName = errors.New("tax name already exists")
 	ErrDuplicateBrandName = errors.New("brand name already exists")
+	ErrBrandInUse         = errors.New("brand is in use by products")
 )

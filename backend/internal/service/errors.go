@@ -15,4 +15,5 @@ var (
 	// brands
 	ErrBrandAlreadyExists = errors.New("brand with this name already exists")
 	ErrBrandNotFound      = errors.New("brand not found")
+	ErrBrandInUse         = errors.New("brand is in use by products")
 )

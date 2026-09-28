@@ -93,6 +93,9 @@ func (s *BrandService) DeleteBrand(ctx context.Context, id int64) error {
 		if errors.Is(err, store.ErrNotFound) {
 			return ErrBrandNotFound
 		}
+		if errors.Is(err, store.ErrBrandInUse) {
+			return ErrBrandInUse
+		}
 		return err
 	}
 	return nil

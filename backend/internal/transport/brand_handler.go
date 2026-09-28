@@ -144,6 +144,10 @@ func (h *BrandHandler) HandleBrandByID(w http.ResponseWriter, r *http.Request) {
 				errorJSON(w, http.StatusNotFound, "brand not found")
 				return
 			}
+			if errors.Is(err, service.ErrBrandInUse) {
+				errorJSON(w, http.StatusConflict, "brand is in use by products")
+				return
+			}
 			errorJSON(w, http.StatusInternalServerError, "failed to delete brand")
 			return
 		}

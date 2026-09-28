@@ -13,7 +13,6 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
-	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 )
@@ -63,7 +62,7 @@ func main() {
 
 	// Inyectar nuestras dependencias
 
-	brandStore := store.NewBrandStore(db)
+	brandStore := postgres.NewBrandStore(db)
 	brandService := service.NewBrandService(brandStore)
 	brandHandler := transport.NewBrandHandler(brandService)
 

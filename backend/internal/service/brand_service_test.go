@@ -1,174 +1,491 @@
 package service_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"strings"
 )
 
-type mockStore struct {
-	getAllFn	func() ([]*model.Brand, error)
-	getByIDFn	func(id int64) (*model.Brand, error)
-	createFn	func(brand *model.Brand) (*model.Brand, error)
-	updateFn	func(id int64, brand *model.Brand) (*model.Brand, error)
-	deleteFn	func(id int64) error
-	searchByNameFn	func(query string) ([]*model.Brand, error)
+type mockBrandStore struct {
+	createFn       func(ctx context.Context, brand *model.Brand) (*model.Brand, error)
+	getAllFn       func(ctx context.Context) ([]*model.Brand, error)
+	getByIDFn      func(ctx context.Context, id int64) (*model.Brand, error)
+	searchByNameFn func(ctx context.Context, query string) ([]*model.Brand, error)
+	updateFn       func(ctx context.Context, id int64, brand *model.Brand) (*model.Brand, error)
+	deleteFn       func(ctx context.Context, id int64) error
 }
 
-func (m *mockStore) GetAll() ([]*model.Brand, error)                  { return m.getAllFn() }
-func (m *mockStore) GetByID(id int64) (*model.Brand, error)          { return m.getByIDFn(id) }
-func (m *mockStore) Create(brand *model.Brand) (*model.Brand, error) { return m.createFn(brand) }
-func (m *mockStore) Update(id int64, b *model.Brand) (*model.Brand, error) {
-	return m.updateFn(id, b)
+func (m *mockBrandStore) Create(ctx context.Context, brand *model.Brand) (*model.Brand, error) {
+	return m.createFn(ctx, brand)
 }
-func (m *mockStore) Delete(id int64) error                         { return m.deleteFn(id) }
-func (m *mockStore) SearchByName(q string) ([]*model.Brand, error) { return m.searchByNameFn(q) }
 
-func TestService_CreateBrand(t *testing.T)  {
+func (m *mockBrandStore) GetAll(ctx context.Context) ([]*model.Brand, error) {
+	return m.getAllFn(ctx)
+}
+
+func (m *mockBrandStore) GetByID(ctx context.Context, id int64) (*model.Brand, error) {
+	return m.getByIDFn(ctx, id)
+}
+
+func (m *mockBrandStore) SearchByName(ctx context.Context, q string) ([]*model.Brand, error) {
+	return m.searchByNameFn(ctx, q)
+}
+
+func (m *mockBrandStore) Update(ctx context.Context, id int64, brand *model.Brand) (*model.Brand, error) {
+	return m.updateFn(ctx, id, brand)
+}
+
+func (m *mockBrandStore) Delete(ctx context.Context, id int64) error {
+	return m.deleteFn(ctx, id)
+}
+
+func TestBrandService_GetAllBrands(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
 	tests := []struct {
-		name	string
-		input	*model.Brand
-		mockStore	*mockStore
-		expectErr	bool
-		expectedErr	string
+		name    string
+		mock    *mockBrandStore
+		wantErr error
+		wantLen int
 	}{
 		{
-			name:	"error when brand is nil",
-			input:	nil,
-			mockStore: &mockStore{},
-			expectErr: true,
-			expectedErr: "brand data is required",
-		},
-		{
-			name:	"error when name is empty",
-			input:	&model.Brand{Name: "   "},
-			mockStore:	&mockStore{},
-			expectErr: true,
-			expectedErr: "brand name is required",
-		},
-		{
-			name:	"error when name is shorter than 2 chars",
-			input:	&model.Brand{Name: "A"},
-			mockStore: &mockStore{},
-			expectErr: true,
-			expectedErr: "brand name must have at least 2 characters",
-		},
-		{
-			name: "success creates brand and trims whitespace",
-			input: &model.Brand{Name: " Logitech "},
-			mockStore: &mockStore{
-				createFn: func(b *model.Brand) (*model.Brand, error) {
-					if b.Name != "Logitech" {
-						t.Errorf("expected trimmed name 'logitech', got '%s'", b.Name)
-					}
-					return &model.Brand{ID: 1, Name: b.Name}, nil
+			name: "success",
+			mock: &mockBrandStore{
+				getAllFn: func(_ context.Context) ([]*model.Brand, error) {
+					return []*model.Brand{
+						{ID: 1, Name: "LOGITECH"},
+						{ID: 2, Name: "RAZER"},
+					}, nil
 				},
 			},
-			expectErr: false,
+			wantErr: nil,
+			wantLen: 2,
 		},
 		{
-			name: "error propagated from store failure",
-			input: &model.Brand{Name: "Samsung"},
-			mockStore: &mockStore{
-				createFn: func(b *model.Brand) (*model.Brand, error){
-					return nil, errors.New("db connection failure")
+			name: "store failure",
+			mock: &mockBrandStore{
+				getAllFn: func(_ context.Context) ([]*model.Brand, error) {
+					return nil, errStore
 				},
 			},
-			expectErr: true,
-			expectedErr: "db connection failure",
+			wantErr: errStore,
+			wantLen: 0,
 		},
-
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.NewBrandService(tt.mockStore)
-			result, err := svc.CreateBrand(tt.input)
+			svc := service.NewBrandService(tt.mock)
+			brands, err := svc.GetAllBrands(ctx)
 
-			if tt.expectErr {
-				if err == nil {
-					t.Fatalf("expected error, got nil")
-				}
-				if err.Error() != tt.expectedErr {
-					t.Errorf("expected error '%s', got '%s'", tt.expectedErr, err.Error())
-				}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if len(brands) != tt.wantLen {
+				t.Errorf("len: got %d, want %d", len(brands), tt.wantLen)
+			}
+		})
+	}
+}
+
+func TestBrandService_GetBrandByID(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		id      int64
+		mock    *mockBrandStore
+		wantErr error
+	}{
+		{
+			name:    "invalid id",
+			id:      0,
+			mock:    &mockBrandStore{},
+			wantErr: service.ErrInvalidID,
+		},
+		{
+			name: "not found",
+			id:   1,
+			mock: &mockBrandStore{
+				getByIDFn: func(_ context.Context, _ int64) (*model.Brand, error) {
+					return nil, store.ErrNotFound
+				},
+			},
+			wantErr: service.ErrBrandNotFound,
+		},
+		{
+			name: "store failure",
+			id:   1,
+			mock: &mockBrandStore{
+				getByIDFn: func(_ context.Context, _ int64) (*model.Brand, error) {
+					return nil, errStore
+				},
+			},
+			wantErr: errStore,
+		},
+		{
+			name: "success",
+			id:   1,
+			mock: &mockBrandStore{
+				getByIDFn: func(_ context.Context, id int64) (*model.Brand, error) {
+					return &model.Brand{ID: id, Name: "LOGITECH"}, nil
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := service.NewBrandService(tt.mock)
+			brand, err := svc.GetBrandByID(ctx, tt.id)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
 				return
 			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-
-			if result == nil || result.ID == 0 {
-				t.Errorf("expected valid brand result, got %v", result)
+			if brand.ID != tt.id {
+				t.Errorf("id: got %d, want %d", brand.ID, tt.id)
 			}
 		})
 	}
 }
 
-func TestService_GetBrandByID(t *testing.T) {
-	tests:= []struct {
-		name      string
-		id        int64
-		mockStore *mockStore
-		expectErr bool
+func TestBrandService_CreateBrand(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		input   *model.Brand
+		mock    *mockBrandStore
+		wantErr error
 	}{
 		{
-			name:      "error when id is zero or negative",
-			id:        0,
-			mockStore: &mockStore{},
-			expectErr: true,
+			name:    "nil brand",
+			input:   nil,
+			mock:    &mockBrandStore{},
+			wantErr: model.ErrNilBrand,
 		},
 		{
-			name: "success when id is valid",
-			id:   5,
-			mockStore: &mockStore{
-				getByIDFn: func(id int64) (*model.Brand, error) {
-					return &model.Brand{ID: 5, Name: "Razer"}, nil
+			name:    "empty name",
+			input:   &model.Brand{Name: "  "},
+			mock:    &mockBrandStore{},
+			wantErr: model.ErrEmptyBrandName,
+		},
+		{
+			name:    "short name",
+			input:   &model.Brand{Name: "A"},
+			mock:    &mockBrandStore{},
+			wantErr: model.ErrBrandNameTooShort,
+		},
+		{
+			name:    "long name",
+			input:   &model.Brand{Name: strings.Repeat("A", 121)},
+			mock:    &mockBrandStore{},
+			wantErr: model.ErrBrandNameTooLong,
+		},
+		{
+			name:  "duplicate name",
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				createFn: func(_ context.Context, _ *model.Brand) (*model.Brand, error) {
+					return nil, store.ErrDuplicateBrandName
 				},
 			},
-			expectErr: false,
+			wantErr: service.ErrBrandAlreadyExists,
+		},
+		{
+			name:  "store failure",
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				createFn: func(_ context.Context, _ *model.Brand) (*model.Brand, error) {
+					return nil, errStore
+				},
+			},
+			wantErr: errStore,
+		},
+		{
+			name:  "success",
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				createFn: func(_ context.Context, brand *model.Brand) (*model.Brand, error) {
+					return &model.Brand{ID: 1, Name: brand.Name}, nil
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:  "trims whitespace and uppercases",
+			input: &model.Brand{Name: "  logitech  "},
+			mock: &mockBrandStore{
+				createFn: func(_ context.Context, brand *model.Brand) (*model.Brand, error) {
+					if brand.Name != "LOGITECH" {
+						t.Errorf("expected 'LOGITECH', got %q", brand.Name)
+					}
+					return &model.Brand{ID: 1, Name: brand.Name}, nil
+				},
+			},
+			wantErr: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := service.NewBrandService(tt.mockStore)
-			_, err := svc.GetBrandByID(tt.id)
+			svc := service.NewBrandService(tt.mock)
+			created, err := svc.CreateBrand(ctx, tt.input)
 
-			if (err != nil) != tt.expectErr {
-				t.Fatalf("expected error: %v, got: %v", tt.expectErr, err)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if created == nil || created.ID == 0 {
+				t.Fatal("expected valid brand with ID")
 			}
 		})
 	}
 }
 
-func TestService_SearchByName(t *testing.T) {
-	t.Run("returns empty slice without querying store if empty query", func(t *testing.T) {
-		mockCalled := false
-		mock := &mockStore{
-			searchByNameFn: func(q string) ([]*model.Brand, error) {
-				mockCalled = true
-				return nil, nil
+func TestBrandService_UpdateBrand(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		id      int64
+		input   *model.Brand
+		mock    *mockBrandStore
+		wantErr error
+	}{
+		{
+			name:    "invalid id",
+			id:      0,
+			input:   &model.Brand{Name: "LOGITECH"},
+			mock:    &mockBrandStore{},
+			wantErr: service.ErrInvalidID,
+		},
+		{
+			name:    "empty name",
+			id:      1,
+			input:   &model.Brand{Name: "  "},
+			mock:    &mockBrandStore{},
+			wantErr: model.ErrEmptyBrandName,
+		},
+		{
+			name:  "not found",
+			id:    1,
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				updateFn: func(_ context.Context, _ int64, _ *model.Brand) (*model.Brand, error) {
+					return nil, store.ErrNotFound
+				},
 			},
-		}
+			wantErr: service.ErrBrandNotFound,
+		},
+		{
+			name:  "duplicate name",
+			id:    1,
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				updateFn: func(_ context.Context, _ int64, _ *model.Brand) (*model.Brand, error) {
+					return nil, store.ErrDuplicateBrandName
+				},
+			},
+			wantErr: service.ErrBrandAlreadyExists,
+		},
+		{
+			name:  "store failure",
+			id:    1,
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				updateFn: func(_ context.Context, _ int64, _ *model.Brand) (*model.Brand, error) {
+					return nil, errStore
+				},
+			},
+			wantErr: errStore,
+		},
+		{
+			name:  "success",
+			id:    1,
+			input: &model.Brand{Name: "LOGITECH"},
+			mock: &mockBrandStore{
+				updateFn: func(_ context.Context, id int64, brand *model.Brand) (*model.Brand, error) {
+					return &model.Brand{ID: id, Name: brand.Name}, nil
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:  "trims whitespace and uppercases",
+			id:    1,
+			input: &model.Brand{Name: "  logitech  "},
+			mock: &mockBrandStore{
+				updateFn: func(_ context.Context, id int64, brand *model.Brand) (*model.Brand, error) {
+					if brand.Name != "LOGITECH" {
+						t.Errorf("expected 'LOGITECH', got %q", brand.Name)
+					}
+					return &model.Brand{ID: id, Name: brand.Name}, nil
+				},
+			},
+			wantErr: nil,
+		},
+	}
 
-		svc := service.NewBrandService(mock)
-		res, err := svc.SearchByName("   ")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := service.NewBrandService(tt.mock)
+			updated, err := svc.UpdateBrand(ctx, tt.id, tt.input)
 
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if mockCalled {
-			t.Error("expected store NOT to be called for empty search")
-		}
-		if len(res) != 0 {
-			t.Errorf("expected empty slice, got length %d", len(res))
-		}
-	})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
+			}
+			if updated == nil || updated.ID == 0 {
+				t.Fatal("expected valid brand with ID")
+			}
+		})
+	}
 }
 
+func TestBrandService_DeleteBrand(t *testing.T) {
+	t.Parallel()
 
+	ctx := context.Background()
 
+	tests := []struct {
+		name    string
+		id      int64
+		mock    *mockBrandStore
+		wantErr error
+	}{
+		{
+			name:    "invalid id",
+			id:      0,
+			mock:    &mockBrandStore{},
+			wantErr: service.ErrInvalidID,
+		},
+		{
+			name: "not found",
+			id:   1,
+			mock: &mockBrandStore{
+				deleteFn: func(_ context.Context, _ int64) error {
+					return store.ErrNotFound
+				},
+			},
+			wantErr: service.ErrBrandNotFound,
+		},
+		{
+			name: "store failure",
+			id:   1,
+			mock: &mockBrandStore{
+				deleteFn: func(_ context.Context, _ int64) error {
+					return errStore
+				},
+			},
+			wantErr: errStore,
+		},
+		{
+			name: "success",
+			id:   1,
+			mock: &mockBrandStore{
+				deleteFn: func(_ context.Context, _ int64) error {
+					return nil
+				},
+			},
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := service.NewBrandService(tt.mock)
+			err := svc.DeleteBrand(ctx, tt.id)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestBrandService_SearchByName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		query   string
+		mock    *mockBrandStore
+		wantErr error
+		wantLen int
+	}{
+		{
+			name:    "empty query",
+			query:   "",
+			mock:    &mockBrandStore{},
+			wantErr: nil,
+			wantLen: 0,
+		},
+		{
+			name:    "whitespace query",
+			query:   "  ",
+			mock:    &mockBrandStore{},
+			wantErr: nil,
+			wantLen: 0,
+		},
+		{
+			name:  "success",
+			query: "LOGI",
+			mock: &mockBrandStore{
+				searchByNameFn: func(_ context.Context, _ string) ([]*model.Brand, error) {
+					return []*model.Brand{{ID: 1, Name: "LOGITECH"}}, nil
+				},
+			},
+			wantErr: nil,
+			wantLen: 1,
+		},
+		{
+			name:  "store failure",
+			query: "LOGI",
+			mock: &mockBrandStore{
+				searchByNameFn: func(_ context.Context, _ string) ([]*model.Brand, error) {
+					return nil, errStore
+				},
+			},
+			wantErr: errStore,
+			wantLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := service.NewBrandService(tt.mock)
+			brands, err := svc.SearchByName(ctx, tt.query)
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("error: got %v, want %v", err, tt.wantErr)
+			}
+			if len(brands) != tt.wantLen {
+				t.Errorf("len: got %d, want %d", len(brands), tt.wantLen)
+			}
+		})
+	}
+}

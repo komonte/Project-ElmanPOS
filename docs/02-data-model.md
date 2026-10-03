@@ -90,29 +90,35 @@ Semantics:
 ### 4.1 `taxes`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(80) | NOT NULL | e.g. `IVA 21%` |
 | rate | NUMERIC(5,2) | NOT NULL, CHECK (rate >= 0 AND rate <= 100) | Percentage (0, 10.5, 21, 27). |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | (index) | | UNIQUE INDEX `idx_taxes_name_unique_lower` on `LOWER(name)` | Case-insensitive unique name |
 
 ### 4.2 `categories`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | parent_id | BIGINT | FK → categories.id, NULL | Tree hierarchy (self-reference). NULL = root. |
 | name | VARCHAR(120) | NOT NULL | e.g. `Almacén` → `Galletitas` |
 | tax_id | BIGINT | FK → taxes.id, NOT NULL | Default IVA rate inherited by products in this category. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Index: `(parent_id)`.
 
 ### 4.3 `brands`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(120) | NOT NULL, UNIQUE | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.4 `products`
 
@@ -134,6 +140,7 @@ Index: `(parent_id)`.
 | is_consignment | BOOLEAN | NOT NULL DEFAULT FALSE | Consigned product (owned by supplier until sold). |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Indexes: `(category_id)`, `(brand_id)`, `(is_active)`.
 
@@ -142,22 +149,24 @@ Indexes: `(category_id)`, `(brand_id)`, `(is_active)`.
 ### 4.5 `product_codes`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | code_type | product_code_type | NOT NULL | `INTERNAL` for store-printed pack/scale codes. |
 | code | VARCHAR(14) | NOT NULL, UNIQUE | EAN-13 (13), EAN-8 (8), or internal. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Supports **multiple barcodes per product** (manufacturer packaging changes, dual EAN-13/8).
 
 ### 4.6 `product_components`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | pack_id | BIGINT | FK → products.id, NOT NULL | The `COMPOSITE` product. |
 | component_id | BIGINT | FK → products.id, NOT NULL | A component whose stock actually moves. |
 | quantity | NUMERIC(12,3) | NOT NULL, CHECK (quantity > 0) | Component units consumed per pack sold. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 CHECK: `pack_id <> component_id`. Index: `(pack_id)`.
 > Selling a pack decrements component stock (BOM semantics); packs have no stock of their own.
@@ -166,11 +175,12 @@ CHECK: `pack_id <> component_id`. Index: `(pack_id)`.
 
 `prices`:
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | unit_price | NUMERIC(12,2) | NOT NULL, CHECK (unit_price > 0) | PVP. For `WEIGHT` products: price per kg. |
 | valid_from | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Constraint: `UNIQUE (product_id, valid_from)` — no overlapping vigencias. Index `(product_id, valid_from DESC)` for "current price".
 
@@ -182,6 +192,7 @@ Constraint: `UNIQUE (product_id, valid_from)` — no overlapping vigencias. Inde
 | unit_cost | NUMERIC(12,2) | NOT NULL | Last purchase cost. |
 | avg_cost | NUMERIC(12,2) | NOT NULL | Weighted average cost. |
 | valid_from | TIMESTAMPTZ | NOT NULL | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DESC)`.
 
@@ -192,25 +203,29 @@ Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DE
 ### 4.8 `stores`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(120) | NOT NULL | |
 | address | VARCHAR(200) | NULL | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.9 `cash_registers`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
 | name | VARCHAR(80) | NOT NULL | Terminal label: `Caja 1`, `Caja 2`. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > A store can host multiple physical terminals; cash session & audit belong to the **register**, not the store.
 
 ### 4.10 `suppliers`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(160) | NOT NULL | |
 | tax_id_number | VARCHAR(20) | NULL | CUIT/RUC. |
@@ -218,6 +233,8 @@ Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DE
 | email | VARCHAR(120) | NULL | |
 | payment_terms | VARCHAR(120) | NULL | e.g. `Contado`, `30 días`. |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.11 `product_batches`
 
@@ -231,6 +248,8 @@ Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DE
 | remaining_quantity | NUMERIC(12,3) | NOT NULL | Decremented on each FIFO allocation. |
 | unit_cost | NUMERIC(12,2) | NOT NULL | Cost per unit/kg at reception (basis for exact CMV). |
 | is_consumed | BOOLEAN | NOT NULL DEFAULT FALSE | Set TRUE when `remaining_quantity = 0`; excluded from FIFO. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 CHECK: `remaining_quantity >= 0 AND remaining_quantity <= original_quantity`.
 
@@ -281,6 +300,7 @@ Indexes: `(product_id, created_at)`, `(batch_id)`, `(store_id, created_at)`, `(m
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
 | quantity | NUMERIC(12,3) | NOT NULL | Current physical stock. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL | |
 
 **Primary key: `(product_id, store_id)`** — one row per product per store, duplicates impossible at engine level.
@@ -296,6 +316,7 @@ Maintained inside the same transaction as every `stock_movements` insert (**P-03
 | status | count_status | NOT NULL DEFAULT 'DRAFT' | |
 | created_by | BIGINT | FK → users.id, NOT NULL | |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | confirmed_at | TIMESTAMPTZ | NULL | |
 
 `stock_count_items`:
@@ -306,6 +327,7 @@ Maintained inside the same transaction as every `stock_movements` insert (**P-03
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | system_quantity | NUMERIC(12,3) | NOT NULL | Snapshot of balance when item was added. |
 | counted_quantity | NUMERIC(12,3) | NOT NULL | Physical count. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 UNIQUE `(count_id, product_id)`.
 
@@ -341,6 +363,7 @@ UNIQUE `(count_id, product_id)`.
 | discount_amount | NUMERIC(12,2) | NOT NULL DEFAULT 0, CHECK (>= 0) | |
 | total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal + tax_amount - discount_amount`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 UNIQUE `(cashier_session_id, sale_number)`.
 
@@ -355,6 +378,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | unit_price | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | **Snapshot** (BR-03). |
 | unit_cost | NUMERIC(12,2) | NOT NULL | **Snapshot** cost for margin. |
 | tax_rate | NUMERIC(5,2) | NOT NULL | Applied IVA rate snapshot. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.18 `sale_item_batches` — FIFO allocation (P-04)
 
@@ -365,6 +389,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | batch_id | BIGINT | FK → product_batches.id, NOT NULL | |
 | quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | Allocated from this batch. |
 | unit_cost | NUMERIC(12,2) | NOT NULL | Batch's cost snapshot → exact COGS. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > A single `sale_items` row may span batches (e.g. 4.450 kg from batch A + 0.050 kg from batch B). This table is the authoritative allocation; every allocation has a matching `stock_movements` row with the same `batch_id` (§6).
 
@@ -377,6 +402,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | method | payment_method | NOT NULL | |
 | amount | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | |
 | reference | VARCHAR(120) | NULL | Transfer/QR voucher number, card suffix. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > Multiple `payments` rows per sale allow split payment (AR$2,000 cash + AR$3,000 transfer) with `SUM(payments.amount) = sales.total` enforced at application level.
 
@@ -388,6 +414,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | cashier_session_id | BIGINT | FK → cashier_sessions.id, NOT NULL | |
 | method | payment_method | NOT NULL | |
 | declared_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Counted at close. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > Expected amount per method is computed from `payments` (+ opening float for CASH). Difference `declared - expected` is the audit variance (per **NFR-03**).
 
@@ -404,6 +431,8 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | total | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | |
 | received_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | received_by | BIGINT | FK → users.id, NOT NULL | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.22 `purchase_items`
 
@@ -415,6 +444,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | |
 | unit_cost | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | Invoice cost. |
 | batch_id | BIGINT | FK → product_batches.id, NULL | Created at reception **only when** the product `controls_batches`. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > **Conditional batches:** reception creates a `product_batches` row (and links `batch_id`) only for lot-controlled products. Non-controlled products (a soda bottle) flow without lot friction — no mandatory batch entry.
 
@@ -428,6 +458,8 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | password_hash | VARCHAR(120) | NOT NULL | bcrypt. |
 | role | user_role | NOT NULL | `ADMIN` / `CASHIER` / `STOCK_CLERK`. |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.24 `audit_log`
 
@@ -451,6 +483,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | key | VARCHAR(80) | PK | Setting key: `expiry_warning_days`, `currency`, `receipt_footer`, ... |
 | value | JSONB | NOT NULL | Typed value. |
 | description | VARCHAR(300) | NULL | Human-readable purpose. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > Avoids hardcoding business thresholds in code. Example: the "expiring soon" report reads `expiry_warning_days` from here instead of a constant.

@@ -49,6 +49,7 @@ CREATE TABLE stock_balances (
     product_id BIGINT NOT NULL REFERENCES products(id),
     store_id   BIGINT NOT NULL REFERENCES stores(id),
     quantity   NUMERIC(12,3) NOT NULL CHECK (quantity >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (product_id, store_id)
 );

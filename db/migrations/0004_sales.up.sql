@@ -31,10 +31,13 @@ CREATE TABLE sales (
     discount_amount    NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     total              NUMERIC(12,2) NOT NULL CHECK (total > 0),
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (cashier_session_id, sale_number)
 );
 CREATE INDEX idx_sales_created_at ON sales (created_at);
 CREATE INDEX idx_sales_session_status ON sales (cashier_session_id, status);
+CREATE TRIGGER trg_sales_updated_at BEFORE UPDATE ON sales
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- sale_items (02 4.17, BR-03 snapshots) ----
 CREATE TABLE sale_items (
@@ -44,7 +47,8 @@ CREATE TABLE sale_items (
     quantity   NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price > 0),
     unit_cost  NUMERIC(12,2) NOT NULL,
-    tax_rate   NUMERIC(5,2) NOT NULL
+    tax_rate   NUMERIC(5,2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_sale_items_sale_id ON sale_items (sale_id);
 CREATE INDEX idx_sale_items_product_id ON sale_items (product_id);
@@ -55,7 +59,8 @@ CREATE TABLE sale_item_batches (
     sale_item_id BIGINT NOT NULL REFERENCES sale_items(id),
     batch_id     BIGINT NOT NULL REFERENCES product_batches(id),
     quantity     NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
-    unit_cost    NUMERIC(12,2) NOT NULL
+    unit_cost    NUMERIC(12,2) NOT NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_sale_item_batches_sale_item_id ON sale_item_batches (sale_item_id);
 CREATE INDEX idx_sale_item_batches_batch_id ON sale_item_batches (batch_id);
@@ -66,7 +71,8 @@ CREATE TABLE payments (
     sale_id   BIGINT NOT NULL REFERENCES sales(id),
     method    payment_method NOT NULL,
     amount    NUMERIC(12,2) NOT NULL CHECK (amount > 0),
-    reference VARCHAR(120)
+    reference VARCHAR(120),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_payments_sale_id ON payments (sale_id);
 
@@ -75,6 +81,7 @@ CREATE TABLE cash_audits (
     id                 BIGSERIAL PRIMARY KEY,
     cashier_session_id BIGINT NOT NULL REFERENCES cashier_sessions(id),
     method             payment_method NOT NULL,
-    declared_amount    NUMERIC(12,2) NOT NULL CHECK (declared_amount >= 0)
+    declared_amount    NUMERIC(12,2) NOT NULL CHECK (declared_amount >= 0),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_cash_audits_session_method ON cash_audits (cashier_session_id, method);

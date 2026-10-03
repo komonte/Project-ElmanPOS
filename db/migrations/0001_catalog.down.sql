@@ -15,3 +15,4 @@ DROP TYPE user_role;
 DROP TYPE measure_unit;
 DROP TYPE product_code_type;
 DROP TYPE product_sale_type;
+DROP FUNCTION set_updated_at();

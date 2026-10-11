@@ -8,28 +8,48 @@ CREATE TYPE product_code_type AS ENUM ('EAN13', 'EAN8', 'INTERNAL');
 CREATE TYPE measure_unit     AS ENUM ('UNIT', 'GRAM', 'KILOGRAM', 'LITER', 'MILLILITER', 'METER');
 CREATE TYPE user_role        AS ENUM ('ADMIN', 'CASHIER', 'STOCK_CLERK');
 
+-- Reusable updated_at trigger function
+CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ---- taxes (02 4.1) ----
 CREATE TABLE taxes (
-    id   BIGSERIAL PRIMARY KEY,
-    name VARCHAR(80) NOT NULL,
-    rate NUMERIC(5,2) NOT NULL CHECK (rate >= 0 AND rate <= 100)
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(80) NOT NULL,
+    rate       NUMERIC(5,2) NOT NULL CHECK (rate >= 0 AND rate <= 100),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX idx_taxes_name_unique_lower ON taxes (LOWER(name));
+CREATE TRIGGER trg_taxes_updated_at BEFORE UPDATE ON taxes
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- categories (02 4.2) ----
 CREATE TABLE categories (
     id        BIGSERIAL PRIMARY KEY,
     parent_id BIGINT REFERENCES categories(id),
     name      VARCHAR(120) NOT NULL,
-    tax_id    BIGINT NOT NULL REFERENCES taxes(id)
+    tax_id    BIGINT NOT NULL REFERENCES taxes(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_categories_parent_id ON categories (parent_id);
+CREATE TRIGGER trg_categories_updated_at BEFORE UPDATE ON categories
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- brands (02 4.3) ----
 CREATE TABLE brands (
-    id   BIGSERIAL PRIMARY KEY,
-    name VARCHAR(120) NOT NULL UNIQUE
+    id         BIGSERIAL PRIMARY KEY,
+    name       VARCHAR(120) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TRIGGER trg_brands_updated_at BEFORE UPDATE ON brands
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- suppliers (02 4.10; referenced by products.preferred_supplier_id) ----
 CREATE TABLE suppliers (
@@ -39,8 +59,12 @@ CREATE TABLE suppliers (
     phone         VARCHAR(40),
     email         VARCHAR(120),
     payment_terms VARCHAR(120),
-    is_active     BOOLEAN NOT NULL DEFAULT TRUE
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TRIGGER trg_suppliers_updated_at BEFORE UPDATE ON suppliers
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- users (02 4.23; referenced by every performed_by FK) ----
 CREATE TABLE users (
@@ -49,8 +73,12 @@ CREATE TABLE users (
     name          VARCHAR(120) NOT NULL,
     password_hash VARCHAR(120) NOT NULL,
     role          user_role NOT NULL,
-    is_active     BOOLEAN NOT NULL DEFAULT TRUE
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TRIGGER trg_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- products (02 4.4) ----
 CREATE TABLE products (
@@ -69,19 +97,23 @@ CREATE TABLE products (
     preferred_supplier_id BIGINT REFERENCES suppliers(id),
     is_consignment        BOOLEAN NOT NULL DEFAULT FALSE,
     is_active             BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_products_category_id ON products (category_id);
 CREATE INDEX idx_products_brand_id ON products (brand_id);
 CREATE INDEX idx_products_is_active ON products (is_active);
 CREATE INDEX idx_products_preferred_supplier_id ON products (preferred_supplier_id);
+CREATE TRIGGER trg_products_updated_at BEFORE UPDATE ON products
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ---- product_codes (02 4.5) ----
 CREATE TABLE product_codes (
     id         BIGSERIAL PRIMARY KEY,
     product_id BIGINT NOT NULL REFERENCES products(id),
     code_type  product_code_type NOT NULL,
-    code       VARCHAR(14) NOT NULL UNIQUE
+    code       VARCHAR(14) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_product_codes_product_id ON product_codes (product_id);
 
@@ -91,6 +123,7 @@ CREATE TABLE product_components (
     pack_id      BIGINT NOT NULL REFERENCES products(id),
     component_id BIGINT NOT NULL REFERENCES products(id),
     quantity     NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (pack_id <> component_id)
 );
 CREATE INDEX idx_product_components_pack_id ON product_components (pack_id);
@@ -101,6 +134,7 @@ CREATE TABLE prices (
     product_id BIGINT NOT NULL REFERENCES products(id),
     unit_price NUMERIC(12,2) NOT NULL CHECK (unit_price > 0),
     valid_from TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_id, valid_from)
 );
 CREATE INDEX idx_prices_product_valid_from_desc ON prices (product_id, valid_from DESC);
@@ -112,6 +146,7 @@ CREATE TABLE product_costs (
     unit_cost  NUMERIC(12,2) NOT NULL,
     avg_cost   NUMERIC(12,2) NOT NULL,
     valid_from TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (product_id, valid_from)
 );
 CREATE INDEX idx_product_costs_product_valid_from_desc ON product_costs (product_id, valid_from DESC);

@@ -18,5 +18,6 @@ CREATE TABLE app_settings (
     key         VARCHAR(80) PRIMARY KEY,
     value       JSONB NOT NULL,
     description VARCHAR(300),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

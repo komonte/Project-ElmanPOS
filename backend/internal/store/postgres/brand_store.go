@@ -26,7 +26,7 @@ func (s *BrandStore) Create(ctx context.Context, brand *model.Brand) (*model.Bra
 	err := s.db.QueryRowContext(ctx, q, brand.Name).Scan(&brand.ID)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return nil, store.ErrDuplicateBrandName
+			return nil, store.ErrDuplicateName
 		}
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (s *BrandStore) Delete(ctx context.Context, id int64) error {
 	res, err := s.db.ExecContext(ctx, q, id)
 	if err != nil {
 		if isForeignKeyViolation(err) {
-			return store.ErrBrandInUse
+			return store.ErrInUse
 		}
 		return err
 	}

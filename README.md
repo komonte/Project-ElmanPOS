@@ -24,6 +24,13 @@ Backend is organized within the `backend/` module using an idiomatic, layered Go
 ## Technical Decisions
 - **`Encapsulation`**: The `internal/` directory is strictly leveraged to prevent unauthorized external imports.
 - **`Dependency Injection (DI)`**: Dependency flow is strictly unidirectional: `transport` → `service` → `store` → `DB`.
+### Architecture & Evolution
+
+- **Master tables** (brands, taxes, categories, suppliers, etc.): generic `Service[T]` + `ResourceHandler[T]` for CRUD. Each entity has its own store with explicit SQL.
+- **Complex business logic** (products, purchases, sales, inventory): use cases in `internal/usecase/` with their own handlers and stores.
+- **Adding a new master entity**: create the model + store (SQL), then wire it in `main.go` in 2 lines. The service and HTTP handler are already generic.
+- See `../ARCH.md` (outside repo) for full decision records and protocols.
+
 ## 3. Tech Stack
 ...
 ## 4. Quick Start 

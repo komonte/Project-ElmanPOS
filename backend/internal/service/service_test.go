@@ -22,12 +22,12 @@ type MockStore[T any] struct {
 	deleteFn       func(ctx context.Context, id int64) error
 }
 
-func (m *MockStore[T]) Create(ctx, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
-func (m *MockStore[T]) GetAll(ctx) ([]*T, error)            { return m.getAllFn(ctx) }
-func (m *MockStore[T]) GetByID(ctx, id int64) (*T, error)    { return m.getByIDFn(ctx, id) }
-func (m *MockStore[T]) SearchByName(ctx, q string) ([]*T, error) { return m.searchByNameFn(ctx, q) }
-func (m *MockStore[T]) Update(ctx, id int64, entity *T) (*T, error) { return m.updateFn(ctx, id, entity) }
-func (m *MockStore[T]) Delete(ctx, id int64) error            { return m.deleteFn(ctx, id) }
+func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
+func (m *MockStore[T]) GetAll(ctx context.Context) ([]*T, error)            { return m.getAllFn(ctx) }
+func (m *MockStore[T]) GetByID(ctx context.Context, id int64) (*T, error)    { return m.getByIDFn(ctx, id) }
+func (m *MockStore[T]) SearchByName(ctx context.Context, q string) ([]*T, error) { return m.searchByNameFn(ctx, q) }
+func (m *MockStore[T]) Update(ctx context.Context, id int64, entity *T) (*T, error) { return m.updateFn(ctx, id, entity) }
+func (m *MockStore[T]) Delete(ctx context.Context, id int64) error            { return m.deleteFn(ctx, id) }
 
 type ServiceTestSuite[T any] struct {
 	label      string

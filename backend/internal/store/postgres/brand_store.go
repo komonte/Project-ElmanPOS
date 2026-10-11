@@ -106,7 +106,7 @@ func (s *BrandStore) Update(ctx context.Context, id int64, brand *model.Brand) (
 	res, err := s.db.ExecContext(ctx, q, brand.Name, id)
 	if err != nil {
 		if isUniqueViolation(err) {
-			return nil, store.ErrDuplicateBrandName
+			return nil, store.ErrDuplicateName
 		}
 		return nil, err
 	}

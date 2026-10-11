@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,14 +11,14 @@ import (
 )
 
 type ResourceHandler[T any] struct {
-	service *Service[T]
-	label   string
+	svc  *service.Service[T]
+	label string
 }
 
-func NewResourceHandler[T any](s *Service[T], label string) *ResourceHandler[T] {
+func NewResourceHandler[T any](s *service.Service[T], label string) *ResourceHandler[T] {
 	return &ResourceHandler[T]{
-		service: s,
-		label:   label,
+		svc:   s,
+		label: label,
 	}
 }
 
@@ -33,14 +32,14 @@ func (h *ResourceHandler[T]) HandleCollection(w http.ResponseWriter, r *http.Req
 
 		query := strings.TrimSpace(r.URL.Query().Get("name"))
 		if query != "" {
-			entities, err = h.service.SearchByName(ctx, query)
+			entities, err = h.svc.SearchByName(ctx, query)
 			if err != nil {
 				errorJSON(w, http.StatusInternalServerError,
 					fmt.Sprintf("failed to search %ss", h.label))
 				return
 			}
 		} else {
-			entities, err = h.service.GetAll(ctx)
+			entities, err = h.svc.GetAll(ctx)
 			if err != nil {
 				errorJSON(w, http.StatusInternalServerError,
 					fmt.Sprintf("failed to retrieve %ss", h.label))
@@ -60,7 +59,7 @@ func (h *ResourceHandler[T]) HandleCollection(w http.ResponseWriter, r *http.Req
 			return
 		}
 
-		created, err := h.service.Create(ctx, &entity)
+		created, err := h.svc.Create(ctx, &entity)
 		if errors.Is(err, service.ErrAlreadyExists) {
 			errorJSON(w, http.StatusConflict,
 				fmt.Sprintf("%s already exists", h.label))
@@ -95,7 +94,7 @@ func (h *ResourceHandler[T]) HandleEntity(w http.ResponseWriter, r *http.Request
 
 	switch r.Method {
 	case http.MethodGet:
-		entity, err := h.service.GetByID(ctx, id)
+		entity, err := h.svc.GetByID(ctx, id)
 		if err != nil {
 			if errors.Is(err, service.ErrNotFound) {
 				errorJSON(w, http.StatusNotFound,
@@ -118,7 +117,7 @@ func (h *ResourceHandler[T]) HandleEntity(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		updated, err := h.service.Update(ctx, id, &entity)
+		updated, err := h.svc.Update(ctx, id, &entity)
 		if err != nil {
 			if errors.Is(err, service.ErrNotFound) {
 				errorJSON(w, http.StatusNotFound,
@@ -140,7 +139,7 @@ func (h *ResourceHandler[T]) HandleEntity(w http.ResponseWriter, r *http.Request
 		}
 
 	case http.MethodDelete:
-		err := h.service.Delete(ctx, id)
+		err := h.svc.Delete(ctx, id)
 		if err != nil {
 			if errors.Is(err, service.ErrNotFound) {
 				errorJSON(w, http.StatusNotFound,

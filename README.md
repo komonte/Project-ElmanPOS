@@ -29,7 +29,7 @@ Backend is organized within the `backend/` module using an idiomatic, layered Go
 - **Master tables** (brands, taxes, categories, suppliers, etc.): generic `Service[T]` + `ResourceHandler[T]` for CRUD. Each entity has its own store with explicit SQL.
 - **Complex business logic** (products, purchases, sales, inventory): use cases in `internal/usecase/` with their own handlers and stores.
 - **Adding a new master entity**: create the model + store (SQL), then wire it in `main.go` in 2 lines. The service and HTTP handler are already generic.
-- See `../ARCH.md` (outside repo) for full decision records and protocols.
+- See `docs/architecture.md` for full decision records and protocols.
 
 ## 3. Tech Stack
 ...

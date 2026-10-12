@@ -23,8 +23,8 @@ func (s *TaxStore) Create(ctx context.Context, tax *model.Tax) (*model.Tax, erro
 		return nil, errors.New("tax cannot be nil")
 	}
 
-	q := `INSERT INTO taxes(name, rate) VALUES ($1, $2) RETURNING id;`
-	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate).Scan(&tax.ID)
+	q := `INSERT INTO taxes(name, rate) VALUES ($1, $2) RETURNING id, created_at, updated_at;`
+	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate).Scan(&tax.ID, &tax.CreatedAt, &tax.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, store.ErrDuplicateName
@@ -35,7 +35,7 @@ func (s *TaxStore) Create(ctx context.Context, tax *model.Tax) (*model.Tax, erro
 }
 
 func (s *TaxStore) GetAll(ctx context.Context) ([]*model.Tax, error) {
-	q := `SELECT id, name, rate FROM taxes;`
+	q := `SELECT id, name, rate, created_at, updated_at FROM taxes;`
 
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
@@ -46,7 +46,7 @@ func (s *TaxStore) GetAll(ctx context.Context) ([]*model.Tax, error) {
 	taxes := make([]*model.Tax, 0)
 	for rows.Next() {
 		t := new(model.Tax)
-		if err := rows.Scan(&t.ID, &t.Name, &t.Rate); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Rate, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -61,11 +61,11 @@ func (s *TaxStore) GetAll(ctx context.Context) ([]*model.Tax, error) {
 }
 
 func (s *TaxStore) GetByID(ctx context.Context, id int64) (*model.Tax, error) {
-	q := `SELECT id, name, rate FROM taxes WHERE id = $1;`
+	q := `SELECT id, name, rate, created_at, updated_at FROM taxes WHERE id = $1;`
 
 	var t model.Tax
 
-	err := s.db.QueryRowContext(ctx, q, id).Scan(&t.ID, &t.Name, &t.Rate)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&t.ID, &t.Name, &t.Rate, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
@@ -77,7 +77,7 @@ func (s *TaxStore) GetByID(ctx context.Context, id int64) (*model.Tax, error) {
 }
 
 func (s *TaxStore) SearchByName(ctx context.Context, query string) ([]*model.Tax, error) {
-	q := `SELECT id, name, rate FROM taxes WHERE name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
+	q := `SELECT id, name, rate, created_at, updated_at FROM taxes WHERE name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
 	rows, err := s.db.QueryContext(ctx, q, query)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (s *TaxStore) SearchByName(ctx context.Context, query string) ([]*model.Tax
 	taxes := make([]*model.Tax, 0)
 	for rows.Next() {
 		t := new(model.Tax)
-		if err := rows.Scan(&t.ID, &t.Name, &t.Rate); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Rate, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -104,26 +104,19 @@ func (s *TaxStore) Update(ctx context.Context, id int64, tax *model.Tax) (*model
 		return nil, errors.New("tax cannot be nil")
 	}
 
-	q := `UPDATE taxes SET name = $1, rate = $2 WHERE id = $3;`
+	q := `UPDATE taxes SET name = $1, rate = $2 WHERE id = $3 RETURNING id, created_at, updated_at;`
 
-	res, err := s.db.ExecContext(ctx, q, tax.Name, tax.Rate, id)
+	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate, id).Scan(&tax.ID, &tax.CreatedAt, &tax.UpdatedAt)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
 		if isUniqueViolation(err) {
 			return nil, store.ErrDuplicateName
 		}
 		return nil, err
 	}
 
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-
-	if rows == 0 {
-		return nil, store.ErrNotFound
-	}
-
-	tax.ID = id
 	return tax, nil
 }
 

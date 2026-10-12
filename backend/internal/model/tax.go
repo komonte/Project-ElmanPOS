@@ -26,9 +26,11 @@ var (
 var maxTaxRate = decimal.NewFromInt(100)
 
 type Tax struct {
-	ID   int64           `json:"id" db:"id"`
-	Name string          `json:"name" db:"name"`
-	Rate decimal.Decimal `json:"rate" db:"rate"`
+	ID        int64           `json:"id" db:"id"`
+	Name      string          `json:"name" db:"name"`
+	Rate      decimal.Decimal `json:"rate" db:"rate"`
+	CreatedAt string          `json:"created_at" db:"created_at"`
+	UpdatedAt string          `json:"updated_at" db:"updated_at"`
 }
 
 func (t *Tax) Validate() error {

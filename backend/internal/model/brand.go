@@ -21,8 +21,10 @@ var (
 )
 
 type Brand struct {
-	ID int64 `json:"id" db:"id"`
-	Name string `json:"name" db:"name"`
+	ID        int64  `json:"id" db:"id"`
+	Name      string `json:"name" db:"name"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }
 
 

@@ -1,19 +1,10 @@
 package service
 
-import (
-	"errors"
-)
+import "errors"
 
 var (
-	// generics
-	ErrInvalidID        = errors.New("invalid id")
-
-	// taxes
-	ErrTaxAlreadyExists = errors.New("tax with this name already exists")
-	ErrTaxNotFound      = errors.New("tax not found")
-
-	// brands
-	ErrBrandAlreadyExists = errors.New("brand with this name already exists")
-	ErrBrandNotFound      = errors.New("brand not found")
-	ErrBrandInUse         = errors.New("brand is in use by products")
+	ErrInvalidID    = errors.New("invalid id")
+	ErrNotFound     = errors.New("not found")
+	ErrAlreadyExists = errors.New("already exists")
+	ErrInUse        = errors.New("in use by other records")
 )

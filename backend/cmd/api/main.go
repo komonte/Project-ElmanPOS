@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 
+	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
@@ -63,19 +64,19 @@ func main() {
 	// Inyectar nuestras dependencias
 
 	brandStore := postgres.NewBrandStore(db)
-	brandService := service.NewBrandService(brandStore)
-	brandHandler := transport.NewBrandHandler(brandService)
+	brandSvc := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
+	brandH := transport.NewResourceHandler[model.Brand](brandSvc, "brand")
 
 	taxStore := postgres.NewTaxStore(db)
-	taxService := service.NewTaxService(taxStore)
-	taxHandler := transport.NewTaxHandler(taxService)
+	taxSvc := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
+	taxH := transport.NewResourceHandler[model.Tax](taxSvc, "tax")
 
 	// Configurar rutas
 	mux := http.NewServeMux()
-	mux.HandleFunc("/brands", brandHandler.HandleBrands)
-	mux.HandleFunc("/brand/", brandHandler.HandleBrandByID)
-	mux.HandleFunc("/taxes", taxHandler.HandleTaxes)
-	mux.HandleFunc("/tax/", taxHandler.HandleTaxByID)
+	mux.HandleFunc("/brands", brandH.HandleCollection)
+	mux.HandleFunc("/brand/", brandH.HandleEntity)
+	mux.HandleFunc("/taxes", taxH.HandleCollection)
+	mux.HandleFunc("/tax/", taxH.HandleEntity)
 
 	handler := transport.CORSMiddleware(mux)
 

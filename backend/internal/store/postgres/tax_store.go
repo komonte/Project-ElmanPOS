@@ -125,6 +125,9 @@ func (s *TaxStore) Delete(ctx context.Context, id int64) error {
 
 	res, err := s.db.ExecContext(ctx, q, id)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return store.ErrInUse
+		}
 		return err
 	}
 

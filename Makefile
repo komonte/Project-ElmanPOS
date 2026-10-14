@@ -35,7 +35,7 @@ psql:
 
 ## Build Tailwind CSS from source
 build-ui:
-	cd backend && npx @tailwindcss/cli -i web/static/css/input.css -o web/static/css/output.css
+	cd backend && npx @tailwindcss/cli -i cmd/api/static/css/input.css -o cmd/api/static/css/output.css
 
 ## Build the Go backend (includes UI build)
 build: build-ui

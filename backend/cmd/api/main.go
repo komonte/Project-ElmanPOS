@@ -95,28 +95,22 @@ func main() {
 		slog.Error("failed to create static file system", "error", err)
 		os.Exit(1)
 	}
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 
-	mux.HandleFunc("/", webH.Index)
-	mux.HandleFunc("/brands", webH.BrandsList)
-	mux.HandleFunc("/brands/new", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			webH.BrandsCreate(w, r)
-		} else {
-			webH.BrandsNewForm(w, r)
-		}
-	})
-	mux.HandleFunc("/brands/", webH.BrandsList)
-	mux.HandleFunc("/taxes", webH.TaxesList)
-	mux.HandleFunc("/taxes/new", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			webH.TaxesCreate(w, r)
-		} else {
-			webH.TaxesNewForm(w, r)
-		}
-	})
-	mux.HandleFunc("/taxes/", webH.TaxesList)
-	mux.HandleFunc("/settings/language", webH.SetLanguage)
+	mux.HandleFunc("GET /{$}", webH.Index)
+	mux.HandleFunc("GET /brands", webH.BrandsList)
+	mux.HandleFunc("GET /brands/new", webH.BrandsNewForm)
+	mux.HandleFunc("POST /brands/new", webH.BrandsCreate)
+	mux.HandleFunc("GET /brands/{id}/edit", webH.BrandsEditForm)
+	mux.HandleFunc("POST /brands/{id}/edit", webH.BrandsUpdate)
+	mux.HandleFunc("DELETE /brands/{id}", webH.BrandsDelete)
+	mux.HandleFunc("GET /taxes", webH.TaxesList)
+	mux.HandleFunc("GET /taxes/new", webH.TaxesNewForm)
+	mux.HandleFunc("POST /taxes/new", webH.TaxesCreate)
+	mux.HandleFunc("GET /taxes/{id}/edit", webH.TaxesEditForm)
+	mux.HandleFunc("POST /taxes/{id}/edit", webH.TaxesUpdate)
+	mux.HandleFunc("DELETE /taxes/{id}", webH.TaxesDelete)
+	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain
 	handler := transport.CORSMiddleware(mux)

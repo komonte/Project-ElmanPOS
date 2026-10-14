@@ -2,7 +2,6 @@ package web
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,7 +14,7 @@ import (
 )
 
 type WebHandler struct {
-	engine *TemplateEngine
+	engine   *TemplateEngine
 	brandSvc *service.Service[model.Brand]
 	taxSvc   *service.Service[model.Tax]
 }
@@ -41,7 +40,6 @@ func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string,
 	if _, ok := data["TitleKey"]; !ok {
 		data["TitleKey"] = ""
 	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.engine.Render(w, lang, page, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -55,7 +53,6 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	}
 	data["Lang"] = lang
 	data["T"] = func(key string) string { return i18n.T(lang, key) }
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.engine.Render(w, lang, partial, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -79,14 +76,14 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "templates/pages/index.gohtml", map[string]any{
-		"Section":   "dashboard",
-		"TitleKey":  "nav.dashboard",
+		"Section":    "dashboard",
+		"TitleKey":   "nav.dashboard",
 		"BrandCount": brandCount,
 		"TaxCount":   taxCount,
 	})
 }
 
-// BrandsList handles GET /brands (full page or partial for htmx search)
+// BrandsList handles GET /brands
 func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := strings.TrimSpace(r.URL.Query().Get("search"))
@@ -103,7 +100,6 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If it's an htmx request, only return the table partial
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
 		h.renderPartial(w, r, "templates/pages/brands.gohtml", map[string]any{
@@ -114,17 +110,15 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.render(w, r, "templates/pages/brands.gohtml", map[string]any{
-		"Brands":  brands,
-		"Section": "brands",
+		"Brands":   brands,
+		"Section":  "brands",
 		"TitleKey": "brand.title",
 	})
 }
 
-// BrandsNewForm handles GET /brands/new (form partial)
+// BrandsNewForm handles GET /brands/new
 func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
-	h.renderPartial(w, r, "templates/partials/brand_form.gohtml", map[string]any{
-		"TitleKey": "brand.create",
-	})
+	h.renderPartial(w, r, "templates/partials/brand_form.gohtml", nil)
 }
 
 // BrandsCreate handles POST /brands/new
@@ -137,17 +131,17 @@ func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 
 	brand := &model.Brand{Name: r.FormValue("name")}
 	if _, err := h.brandSvc.Create(ctx, brand); err != nil {
-		h.brandsTableError(w, r, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	h.brandsTable(w, r)
 }
 
-// BrandsEditForm handles GET /brands/{id}/edit (form partial)
+// BrandsEditForm handles GET /brands/{id}/edit
 func (h *WebHandler) BrandsEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/brands/", "/edit")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
@@ -167,7 +161,7 @@ func (h *WebHandler) BrandsEditForm(w http.ResponseWriter, r *http.Request) {
 // BrandsUpdate handles POST /brands/{id}/edit
 func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/brands/", "/edit")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
@@ -180,7 +174,7 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	brand := &model.Brand{Name: r.FormValue("name")}
 	if _, err := h.brandSvc.Update(ctx, id, brand); err != nil {
-		h.brandsTableError(w, r, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -190,14 +184,18 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 // BrandsDelete handles DELETE /brands/{id}
 func (h *WebHandler) BrandsDelete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/brands/", "")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.brandSvc.Delete(ctx, id); err != nil {
-		h.brandsTableError(w, r, err)
+		if errors.Is(err, service.ErrInUse) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -213,26 +211,6 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 	h.renderPartial(w, r, "templates/pages/brands.gohtml", map[string]any{
 		"Brands": brands,
 	})
-}
-
-func (h *WebHandler) brandsTableError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, service.ErrAlreadyExists) {
-		w.Header().Set("HX-Reswap", "none")
-		lang := transport.GetLocale(r.Context())
-		msg := i18n.T(lang, "brand.name") + " " + i18n.T(lang, "common."+extractErrorSuffix(err))
-		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"show-error":"%s"}`, msg))
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-	if errors.Is(err, service.ErrNotFound) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, service.ErrInUse) {
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-	w.WriteHeader(http.StatusBadRequest)
 }
 
 // ---- Tax handlers ----
@@ -290,10 +268,10 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 
 	tax := &model.Tax{
 		Name: r.FormValue("name"),
-		Rate: shopspringDecimalFromFloat(rate),
+		Rate: decimal.NewFromFloat(rate),
 	}
 	if _, err := h.taxSvc.Create(ctx, tax); err != nil {
-		h.taxesTableError(w, r, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -303,7 +281,7 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 // TaxesEditForm handles GET /taxes/{id}/edit
 func (h *WebHandler) TaxesEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/taxes/", "/edit")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
@@ -323,7 +301,7 @@ func (h *WebHandler) TaxesEditForm(w http.ResponseWriter, r *http.Request) {
 // TaxesUpdate handles POST /taxes/{id}/edit
 func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/taxes/", "/edit")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
@@ -342,10 +320,10 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 
 	tax := &model.Tax{
 		Name: r.FormValue("name"),
-		Rate: shopspringDecimalFromFloat(rate),
+		Rate: decimal.NewFromFloat(rate),
 	}
 	if _, err := h.taxSvc.Update(ctx, id, tax); err != nil {
-		h.taxesTableError(w, r, err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -355,14 +333,18 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 // TaxesDelete handles DELETE /taxes/{id}
 func (h *WebHandler) TaxesDelete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id, err := parseID(r.URL.Path, "/taxes/", "")
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.taxSvc.Delete(ctx, id); err != nil {
-		h.taxesTableError(w, r, err)
+		if errors.Is(err, service.ErrInUse) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -378,22 +360,6 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 	h.renderPartial(w, r, "templates/pages/taxes.gohtml", map[string]any{
 		"Taxes": taxes,
 	})
-}
-
-func (h *WebHandler) taxesTableError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, service.ErrAlreadyExists) {
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-	if errors.Is(err, service.ErrNotFound) {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, service.ErrInUse) {
-		w.WriteHeader(http.StatusConflict)
-		return
-	}
-	w.WriteHeader(http.StatusBadRequest)
 }
 
 // SetLanguage handles POST /settings/language
@@ -419,25 +385,4 @@ func (h *WebHandler) SetLanguage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
-}
-
-// ---- helpers ----
-
-func parseID(path, prefix, suffix string) (int64, error) {
-	s := strings.TrimPrefix(path, prefix)
-	s = strings.TrimSuffix(s, suffix)
-	return strconv.ParseInt(s, 10, 64)
-}
-
-func shopspringDecimalFromFloat(f float64) decimal.Decimal {
-	// We need to import shopspring/decimal properly
-	return decimal.NewFromFloat(f)
-}
-
-func extractErrorSuffix(err error) string {
-	// Map common service errors to translation keys
-	if errors.Is(err, service.ErrAlreadyExists) {
-		return "already_exists"
-	}
-	return "error"
 }

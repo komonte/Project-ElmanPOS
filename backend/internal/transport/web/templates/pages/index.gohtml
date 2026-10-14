@@ -1,43 +1,75 @@
-{{define "content"}}
-<div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">{{t "dashboard.welcome"}}</h1>
-    <p class="text-gray-500 mt-1">{{t "app.tagline"}}</p>
-  </div>
-
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_brands"}}</p>
-          <p class="text-3xl font-bold text-gray-900 mt-1">{{.BrandCount}}</p>
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{t "app.title"}} - {{t .TitleKey}}</title>
+  <link rel="stylesheet" href="/static/css/output.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+  <nav class="bg-white border-b border-gray-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-8">
+          <a href="/" class="text-xl font-bold text-indigo-600 tracking-tight">{{t "app.title"}}</a>
+          <div class="flex items-center gap-1">
+            <a href="/" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "dashboard"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.dashboard"}}</a>
+            <a href="/brands" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "brands"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.brands"}}</a>
+            <a href="/taxes" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "taxes"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.taxes"}}</a>
+          </div>
         </div>
-        <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-          </svg>
-        </div>
-      </div>
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_taxes"}}</p>
-          <p class="text-3xl font-bold text-gray-900 mt-1">{{.TaxCount}}</p>
-        </div>
-        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-          <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v14a2 2 0 01-2 2z"/>
-          </svg>
+        <div class="flex items-center gap-3">
+          <form hx-post="/settings/language" hx-trigger="change" hx-swap="none" class="flex items-center gap-1">
+            <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
+            <select id="lang-select" name="lang" onchange="this.form.requestSubmit()"
+                    class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+              <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+            </select>
+          </form>
         </div>
       </div>
     </div>
-  </div>
+  </nav>
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-    <h2 class="text-lg font-semibold text-gray-900 mb-4">{{t "dashboard.recent_activity"}}</h2>
-    <p class="text-gray-500 text-sm">{{t "common.no_results"}}</p>
-  </div>
-</div>
-{{end}}
+  <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+    <div class="space-y-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">{{t "dashboard.welcome"}}</h1>
+        <p class="text-gray-500 mt-1">{{t "app.tagline"}}</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_brands"}}</p>
+              <p class="text-3xl font-bold text-gray-900 mt-1">{{.BrandCount}}</p>
+            </div>
+            <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center"></div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_taxes"}}</p>
+              <p class="text-3xl font-bold text-gray-900 mt-1">{{.TaxCount}}</p>
+            </div>
+            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">{{t "dashboard.recent_activity"}}</h2>
+        <p class="text-gray-500 text-sm">{{t "common.no_results"}}</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-4 border-t">
+    {{t "app.title"}} v0.1.0
+  </footer>
+</body>
+</html>

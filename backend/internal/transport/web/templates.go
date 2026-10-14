@@ -2,15 +2,16 @@ package web
 
 import (
 	"embed"
+	"errors"
 	"html/template"
 	"io"
 	"log/slog"
-	"time"
+	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 )
 
-//go:embed templates/layouts/*.gohtml templates/partials/*.gohtml templates/pages/*.gohtml
+//go:embed templates/pages/*.gohtml templates/partials/*.gohtml
 var templateFS embed.FS
 
 type TemplateEngine struct {
@@ -21,14 +22,12 @@ func NewTemplateEngine() *TemplateEngine {
 	langs := i18n.SupportedLanguages()
 	templates := make(map[string]*template.Template, len(langs))
 
-	files := []string{
-		"templates/layouts/base.gohtml",
-		"templates/partials/nav.gohtml",
-		"templates/partials/brand_form.gohtml",
-		"templates/partials/tax_form.gohtml",
+	fileNames := []string{
 		"templates/pages/index.gohtml",
 		"templates/pages/brands.gohtml",
 		"templates/pages/taxes.gohtml",
+		"templates/partials/brand_form.gohtml",
+		"templates/partials/tax_form.gohtml",
 	}
 
 	for _, lang := range langs {
@@ -36,19 +35,21 @@ func NewTemplateEngine() *TemplateEngine {
 			"t": func(key string) string {
 				return i18n.T(lang, key)
 			},
-			"formatTime": func(t time.Time) string {
-				if t.IsZero() {
+			"formatTime": func(t string) string {
+				if t == "" {
 					return "-"
 				}
-				return t.Format("2006-01-02 15:04")
+				return strings.Replace(t[:19], "T", " ", 1)
 			},
 		}
 
-		tmpl, err := template.New("").Funcs(funcMap).ParseFS(templateFS, files...)
+		tmpl := template.New("").Funcs(funcMap)
+		result, err := tmpl.ParseFS(templateFS, fileNames...)
 		if err != nil {
-			slog.Error("failed to parse templates", "lang", lang, "error", err)
+			slog.Error("ParseFS failed", "error", err)
 			continue
 		}
+		tmpl = result
 
 		templates[lang] = tmpl
 	}
@@ -59,7 +60,10 @@ func NewTemplateEngine() *TemplateEngine {
 func (e *TemplateEngine) Render(w io.Writer, lang, name string, data map[string]any) error {
 	tmpl, ok := e.templates[lang]
 	if !ok {
-		tmpl = e.templates["en"]
+		tmpl, ok = e.templates["en"]
+	}
+	if !ok {
+		return errors.New("no template engine for lang: " + lang)
 	}
 	return tmpl.ExecuteTemplate(w, name, data)
 }

@@ -1,59 +1,93 @@
-{{define "content"}}
-<div class="space-y-6" x-data="{ showForm: false }">
-  <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-bold text-gray-900">{{t "brand.title"}}</h1>
-    <button hx-get="/brands/new" hx-target="#form-modal" hx-swap="innerHTML"
-            class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-      </svg>
-      {{t "brand.create"}}
-    </button>
-  </div>
-
-  <div id="form-modal"></div>
-
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="p-4 border-b border-gray-200 bg-gray-50">
-      <input type="text" name="search" placeholder="{{t "common.search"}}"
-             hx-get="/brands" hx-trigger="keyup changed delay:300ms" hx-target="#brands-table" hx-swap="innerHTML"
-             class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{t "app.title"}} - {{t "brand.title"}}</title>
+  <link rel="stylesheet" href="/static/css/output.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+  <nav class="bg-white border-b border-gray-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-8">
+          <a href="/" class="text-xl font-bold text-indigo-600 tracking-tight">{{t "app.title"}}</a>
+          <div class="flex items-center gap-1">
+            <a href="/" class="px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100">{{t "nav.dashboard"}}</a>
+            <a href="/brands" class="px-3 py-2 rounded-md text-sm font-medium bg-indigo-50 text-indigo-700">{{t "nav.brands"}}</a>
+            <a href="/taxes" class="px-3 py-2 rounded-md text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100">{{t "nav.taxes"}}</a>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <form hx-post="/settings/language" hx-trigger="change" hx-swap="none" class="flex items-center gap-1">
+            <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
+            <select id="lang-select" name="lang" onchange="this.form.requestSubmit()"
+                    class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+              <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+              <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+            </select>
+          </form>
+        </div>
+      </div>
     </div>
-    <div id="brands-table">
-      {{template "brands_table" .}}
-    </div>
-  </div>
-</div>
-{{end}}
+  </nav>
 
-{{define "brands_table"}}
-<table class="min-w-full divide-y divide-gray-200">
-  <thead class="bg-gray-50">
-    <tr>
-      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.id"}}</th>
-      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "brand.name"}}</th>
-      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.created_at"}}</th>
-      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.actions"}}</th>
-    </tr>
-  </thead>
-  <tbody class="bg-white divide-y divide-gray-200">
-    {{range .Brands}}
-    <tr class="hover:bg-gray-50 transition-colors">
-      <td class="px-6 py-4 text-sm text-gray-500">{{.ID}}</td>
-      <td class="px-6 py-4 text-sm font-medium text-gray-900">{{.Name}}</td>
-      <td class="px-6 py-4 text-sm text-gray-500">{{formatTime .CreatedAt}}</td>
-      <td class="px-6 py-4 text-right text-sm">
-        <button hx-get="/brands/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
-                class="text-indigo-600 hover:text-indigo-800 font-medium mr-3">{{t "common.edit"}}</button>
-        <button hx-delete="/brands/{{.ID}}" hx-confirm="{{t "brand.delete_confirm"}}" hx-target="#brands-table" hx-swap="innerHTML"
-                class="text-red-600 hover:text-red-800 font-medium">{{t "common.delete"}}</button>
-      </td>
-    </tr>
-    {{else}}
-    <tr>
-      <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500">{{t "common.no_results"}}</td>
-    </tr>
-    {{end}}
-  </tbody>
-</table>
-{{end}}
+  <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+    <div class="space-y-6">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-gray-900">{{t "brand.title"}}</h1>
+        <button hx-get="/brands/new" hx-target="#form-modal" hx-swap="innerHTML"
+                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+          {{t "brand.create"}}
+        </button>
+      </div>
+
+      <div id="form-modal"></div>
+
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="p-4 border-b border-gray-200 bg-gray-50">
+          <input type="text" name="search" placeholder="{{t "common.search"}}"
+                 hx-get="/brands" hx-trigger="keyup changed delay:300ms" hx-target="#brands-table" hx-swap="innerHTML"
+                 class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div id="brands-table">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.id"}}</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "brand.name"}}</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.created_at"}}</th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.actions"}}</th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              {{range .Brands}}
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 text-sm text-gray-500">{{.ID}}</td>
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{.Name}}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">{{formatTime .CreatedAt}}</td>
+                <td class="px-6 py-4 text-right text-sm">
+                  <button hx-get="/brands/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
+                          class="text-indigo-600 hover:text-indigo-800 font-medium mr-3">{{t "common.edit"}}</button>
+                  <button hx-delete="/brands/{{.ID}}" hx-confirm="{{t "brand.delete_confirm"}}" hx-target="#brands-table" hx-swap="innerHTML"
+                          class="text-red-600 hover:text-red-800 font-medium">{{t "common.delete"}}</button>
+                </td>
+              </tr>
+              {{else}}
+              <tr>
+                <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-500">{{t "common.no_results"}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center text-xs text-gray-400 py-4 border-t">
+    {{t "app.title"}} v0.1.0
+  </footer>
+</body>
+</html>

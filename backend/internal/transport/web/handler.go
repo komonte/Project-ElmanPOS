@@ -75,7 +75,7 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 		taxCount = len(taxes)
 	}
 
-	h.render(w, r, "templates/pages/index.gohtml", map[string]any{
+	h.render(w, r, "index.gohtml", map[string]any{
 		"Section":    "dashboard",
 		"TitleKey":   "nav.dashboard",
 		"BrandCount": brandCount,
@@ -102,23 +102,23 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
-		h.renderPartial(w, r, "templates/pages/brands.gohtml", map[string]any{
+		h.renderPartial(w, r, "brands.gohtml", map[string]any{
 			"Brands":  brands,
-			"Section": "brands",
+			"Section": "brands.gohtml",
 		})
 		return
 	}
 
-	h.render(w, r, "templates/pages/brands.gohtml", map[string]any{
+	h.render(w, r, "brands.gohtml", map[string]any{
 		"Brands":   brands,
-		"Section":  "brands",
+		"Section":  "brands.gohtml",
 		"TitleKey": "brand.title",
 	})
 }
 
 // BrandsNewForm handles GET /brands/new
 func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
-	h.renderPartial(w, r, "templates/partials/brand_form.gohtml", nil)
+	h.renderPartial(w, r, "brand_form.gohtml", nil)
 }
 
 // BrandsCreate handles POST /brands/new
@@ -153,7 +153,7 @@ func (h *WebHandler) BrandsEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderPartial(w, r, "templates/partials/brand_form.gohtml", map[string]any{
+	h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
 		"Brand": brand,
 	})
 }
@@ -208,7 +208,7 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderPartial(w, r, "templates/pages/brands.gohtml", map[string]any{
+	h.renderPartial(w, r, "brands.gohtml", map[string]any{
 		"Brands": brands,
 	})
 }
@@ -234,22 +234,22 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
-		h.renderPartial(w, r, "templates/pages/taxes.gohtml", map[string]any{
+		h.renderPartial(w, r, "taxes.gohtml", map[string]any{
 			"Taxes": taxes,
 		})
 		return
 	}
 
-	h.render(w, r, "templates/pages/taxes.gohtml", map[string]any{
+	h.render(w, r, "taxes.gohtml", map[string]any{
 		"Taxes":    taxes,
-		"Section":  "taxes",
+		"Section":  "taxes.gohtml",
 		"TitleKey": "tax.title",
 	})
 }
 
 // TaxesNewForm handles GET /taxes/new
 func (h *WebHandler) TaxesNewForm(w http.ResponseWriter, r *http.Request) {
-	h.renderPartial(w, r, "templates/partials/tax_form.gohtml", nil)
+	h.renderPartial(w, r, "tax_form.gohtml", nil)
 }
 
 // TaxesCreate handles POST /taxes/new
@@ -293,7 +293,7 @@ func (h *WebHandler) TaxesEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderPartial(w, r, "templates/partials/tax_form.gohtml", map[string]any{
+	h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
 		"Tax": tax,
 	})
 }
@@ -357,7 +357,7 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderPartial(w, r, "templates/pages/taxes.gohtml", map[string]any{
+	h.renderPartial(w, r, "taxes.gohtml", map[string]any{
 		"Taxes": taxes,
 	})
 }

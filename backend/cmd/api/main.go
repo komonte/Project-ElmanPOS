@@ -69,12 +69,14 @@ func main() {
 	// Inyectar dependencias
 
 	brandStore := postgres.NewBrandStore(db)
-	brandSvc := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
-	brandH := transport.NewResourceHandler[model.Brand](brandSvc, "brand")
+	brandSvcGen := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
+	brandSvc := service.NewBrandService(brandSvcGen, brandStore)
+	brandH := transport.NewResourceHandler[model.Brand](brandSvcGen, "brand")
 
 	taxStore := postgres.NewTaxStore(db)
-	taxSvc := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
-	taxH := transport.NewResourceHandler[model.Tax](taxSvc, "tax")
+	taxSvcGen := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
+	taxSvc := service.NewTaxService(taxSvcGen, taxStore)
+	taxH := transport.NewResourceHandler[model.Tax](taxSvcGen, "tax")
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
@@ -104,12 +106,16 @@ func main() {
 	mux.HandleFunc("GET /brands/{id}/edit", webH.BrandsEditForm)
 	mux.HandleFunc("POST /brands/{id}/edit", webH.BrandsUpdate)
 	mux.HandleFunc("DELETE /brands/{id}", webH.BrandsDelete)
+	mux.HandleFunc("PATCH /brands/{id}/deactivate", webH.BrandsDeactivate)
+	mux.HandleFunc("PATCH /brands/{id}/reactivate", webH.BrandsReactivate)
 	mux.HandleFunc("GET /taxes", webH.TaxesList)
 	mux.HandleFunc("GET /taxes/new", webH.TaxesNewForm)
 	mux.HandleFunc("POST /taxes/new", webH.TaxesCreate)
 	mux.HandleFunc("GET /taxes/{id}/edit", webH.TaxesEditForm)
 	mux.HandleFunc("POST /taxes/{id}/edit", webH.TaxesUpdate)
 	mux.HandleFunc("DELETE /taxes/{id}", webH.TaxesDelete)
+	mux.HandleFunc("PATCH /taxes/{id}/deactivate", webH.TaxesDeactivate)
+	mux.HandleFunc("PATCH /taxes/{id}/reactivate", webH.TaxesReactivate)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

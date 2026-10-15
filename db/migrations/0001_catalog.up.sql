@@ -21,6 +21,7 @@ CREATE TABLE taxes (
     id         BIGSERIAL PRIMARY KEY,
     name       VARCHAR(80) NOT NULL,
     rate       NUMERIC(5,2) NOT NULL CHECK (rate >= 0 AND rate <= 100),
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -45,6 +46,7 @@ CREATE TRIGGER trg_categories_updated_at BEFORE UPDATE ON categories
 CREATE TABLE brands (
     id         BIGSERIAL PRIMARY KEY,
     name       VARCHAR(120) NOT NULL UNIQUE,
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

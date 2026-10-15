@@ -15,11 +15,11 @@ import (
 
 type WebHandler struct {
 	engine   *TemplateEngine
-	brandSvc *service.Service[model.Brand]
-	taxSvc   *service.Service[model.Tax]
+	brandSvc *service.BrandService
+	taxSvc   *service.TaxService
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.BrandService, taxSvc *service.TaxService) *WebHandler {
 	return &WebHandler{
 		engine:   engine,
 		brandSvc: brandSvc,
@@ -112,9 +112,9 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 	var brands []*model.Brand
 	var err error
 	if query != "" {
-		brands, err = h.brandSvc.SearchByName(ctx, query)
+		brands, err = h.brandSvc.SearchAllByName(ctx, query)
 	} else {
-		brands, err = h.brandSvc.GetAll(ctx)
+		brands, err = h.brandSvc.GetAllIncludingInactive(ctx)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -236,6 +236,40 @@ func (h *WebHandler) BrandsDelete(w http.ResponseWriter, r *http.Request) {
 	h.brandsTable(w, r)
 }
 
+// BrandsDeactivate handles PATCH /brands/{id}/deactivate
+func (h *WebHandler) BrandsDeactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.brandSvc.Deactivate(ctx, id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.brandsTable(w, r)
+}
+
+// BrandsReactivate handles PATCH /brands/{id}/reactivate
+func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.brandSvc.Reactivate(ctx, id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.brandsTable(w, r)
+}
+
 func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 	brands, err := h.brandSvc.GetAll(r.Context())
 	if err != nil {
@@ -257,9 +291,9 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 	var taxes []*model.Tax
 	var err error
 	if query != "" {
-		taxes, err = h.taxSvc.SearchByName(ctx, query)
+		taxes, err = h.taxSvc.SearchAllByName(ctx, query)
 	} else {
-		taxes, err = h.taxSvc.GetAll(ctx)
+		taxes, err = h.taxSvc.GetAllIncludingInactive(ctx)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -390,6 +424,40 @@ func (h *WebHandler) TaxesDelete(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.taxesTable(w, r)
+}
+
+// TaxesDeactivate handles PATCH /taxes/{id}/deactivate
+func (h *WebHandler) TaxesDeactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.taxSvc.Deactivate(ctx, id); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	h.taxesTable(w, r)
+}
+
+// TaxesReactivate handles PATCH /taxes/{id}/reactivate
+func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.taxSvc.Reactivate(ctx, id); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

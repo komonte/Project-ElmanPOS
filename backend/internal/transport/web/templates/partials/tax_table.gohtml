@@ -4,6 +4,7 @@
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.id"}}</th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "tax.name"}}</th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "tax.rate"}}</th>
+      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.status"}}</th>
       <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.created_at"}}</th>
       <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.actions"}}</th>
     </tr>
@@ -14,17 +15,31 @@
       <td class="px-6 py-4 text-sm text-gray-500">{{.ID}}</td>
       <td class="px-6 py-4 text-sm font-medium text-gray-900">{{.Name}}</td>
       <td class="px-6 py-4 text-sm text-gray-900">{{.Rate}}%</td>
+      <td class="px-6 py-4 text-sm">
+        {{if .IsActive}}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{t "tax.status_active"}}</span>
+        {{else}}
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{{t "tax.status_inactive"}}</span>
+        {{end}}
+      </td>
       <td class="px-6 py-4 text-sm text-gray-500">{{formatTime .CreatedAt}}</td>
       <td class="px-6 py-4 text-right text-sm">
         <button hx-get="/taxes/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
                 class="text-indigo-600 hover:text-indigo-800 font-medium mr-3">{{t "common.edit"}}</button>
+        {{if .IsActive}}
+        <button hx-patch="/taxes/{{.ID}}/deactivate" hx-confirm="{{t "tax.deactivate_confirm"}}" hx-target="#taxes-table" hx-swap="innerHTML"
+                class="text-yellow-600 hover:text-yellow-800 font-medium mr-3">{{t "tax.deactivate"}}</button>
+        {{else}}
+        <button hx-patch="/taxes/{{.ID}}/reactivate" hx-target="#taxes-table" hx-swap="innerHTML"
+                class="text-green-600 hover:text-green-800 font-medium mr-3">{{t "tax.activate"}}</button>
+        {{end}}
         <button hx-delete="/taxes/{{.ID}}" hx-confirm="{{t "tax.delete_confirm"}}" hx-target="#taxes-table" hx-swap="innerHTML"
                 class="text-red-600 hover:text-red-800 font-medium">{{t "common.delete"}}</button>
       </td>
     </tr>
     {{else}}
     <tr>
-      <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">{{t "common.no_results"}}</td>
+      <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500">{{t "common.no_results"}}</td>
     </tr>
     {{end}}
   </tbody>

@@ -29,6 +29,7 @@ type Tax struct {
 	ID        int64           `json:"id" db:"id"`
 	Name      string          `json:"name" db:"name"`
 	Rate      decimal.Decimal `json:"rate" db:"rate"`
+	IsActive  bool            `json:"is_active" db:"is_active"`
 	CreatedAt string          `json:"created_at" db:"created_at"`
 	UpdatedAt string          `json:"updated_at" db:"updated_at"`
 }

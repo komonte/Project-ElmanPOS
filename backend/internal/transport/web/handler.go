@@ -46,7 +46,7 @@ func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string,
 	}
 }
 
-func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, partial string, data map[string]any) {
+func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, partial string, data map[string]any, statusCode ...int) {
 	lang := transport.GetLocale(r.Context())
 	if data == nil {
 		data = make(map[string]any)
@@ -54,6 +54,9 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	data["Lang"] = lang
 	data["T"] = func(key string) string { return i18n.T(lang, key) }
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if len(statusCode) > 0 {
+		w.WriteHeader(statusCode[0])
+	}
 	if err := h.engine.Render(w, lang, partial, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -124,21 +127,20 @@ func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	brand := &model.Brand{Name: r.FormValue("name")}
 	if _, err := h.brandSvc.Create(ctx, brand); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Brand": brand,
-		})
+		}, http.StatusUnprocessableEntity)
 		return
 	}
 
+	w.Header().Set("HX-Redirect", "/brands")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -167,34 +169,31 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	brand, err := h.brandSvc.GetByID(ctx, id)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 	brand.Name = r.FormValue("name")
 
 	if _, err := h.brandSvc.Update(ctx, id, brand); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Brand": brand,
-		})
+		}, http.StatusUnprocessableEntity)
 		return
 	}
 
+	w.Header().Set("HX-Redirect", "/brands")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -273,15 +272,13 @@ func (h *WebHandler) TaxesNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"}, http.StatusUnprocessableEntity)
 		return
 	}
 
@@ -290,14 +287,14 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 		Rate: decimal.NewFromFloat(rate),
 	}
 	if _, err := h.taxSvc.Create(ctx, tax); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Tax":   tax,
-		})
+		}, http.StatusUnprocessableEntity)
 		return
 	}
 
+	w.Header().Set("HX-Redirect", "/taxes")
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -326,42 +323,38 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"}, http.StatusUnprocessableEntity)
 		return
 	}
 
 	tax, err := h.taxSvc.GetByID(ctx, id)
 	if err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
 		return
 	}
 	tax.Name = r.FormValue("name")
 	tax.Rate = decimal.NewFromFloat(rate)
 
 	if _, err := h.taxSvc.Update(ctx, id, tax); err != nil {
-		w.WriteHeader(http.StatusUnprocessableEntity)
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Tax":   tax,
-		})
+		}, http.StatusUnprocessableEntity)
 		return
 	}
 
+	w.Header().Set("HX-Redirect", "/taxes")
 	w.WriteHeader(http.StatusOK)
 }
 

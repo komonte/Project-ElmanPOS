@@ -10,7 +10,6 @@
     {{end}}
     <form hx-post="{{if .Brand.ID}}/brands/{{.Brand.ID}}/edit{{else}}/brands/new{{end}}"
           hx-target="#form-modal" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful){document.getElementById('form-modal').innerHTML='';htmx.ajax('GET','/brands',{target:'#brands-table',swap:'innerHTML'})}"
           class="space-y-4">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">{{t "brand.name"}}</label>

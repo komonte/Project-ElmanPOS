@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"log/slog"
 	"net/http"
@@ -16,7 +18,11 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
 )
+
+//go:embed static/css/* static/js/*
+var staticFS embed.FS
 
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -26,7 +32,6 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
-
 
 	// conectar Postgres
 
@@ -61,7 +66,7 @@ func main() {
 	}
 	slog.Info("connected to PostgreSQL successfully")
 
-	// Inyectar nuestras dependencias
+	// Inyectar dependencias
 
 	brandStore := postgres.NewBrandStore(db)
 	brandSvc := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
@@ -71,23 +76,54 @@ func main() {
 	taxSvc := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
 	taxH := transport.NewResourceHandler[model.Tax](taxSvc, "tax")
 
+	// Web UI
+	tmplEngine := web.NewTemplateEngine()
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc)
+
 	// Configurar rutas
 	mux := http.NewServeMux()
-	mux.HandleFunc("/brands", brandH.HandleCollection)
-	mux.HandleFunc("/brand/", brandH.HandleEntity)
-	mux.HandleFunc("/taxes", taxH.HandleCollection)
-	mux.HandleFunc("/tax/", taxH.HandleEntity)
 
+	// API routes (sin cambios)
+	mux.HandleFunc("/api/brands", brandH.HandleCollection)
+	mux.HandleFunc("/api/brand/", brandH.HandleEntity)
+	mux.HandleFunc("/api/taxes", taxH.HandleCollection)
+	mux.HandleFunc("/api/tax/", taxH.HandleEntity)
+
+	// Web UI routes
+	staticSub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		slog.Error("failed to create static file system", "error", err)
+		os.Exit(1)
+	}
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+
+	mux.HandleFunc("GET /{$}", webH.Index)
+	mux.HandleFunc("GET /brands", webH.BrandsList)
+	mux.HandleFunc("GET /brands/new", webH.BrandsNewForm)
+	mux.HandleFunc("POST /brands/new", webH.BrandsCreate)
+	mux.HandleFunc("GET /brands/{id}/edit", webH.BrandsEditForm)
+	mux.HandleFunc("POST /brands/{id}/edit", webH.BrandsUpdate)
+	mux.HandleFunc("DELETE /brands/{id}", webH.BrandsDelete)
+	mux.HandleFunc("GET /taxes", webH.TaxesList)
+	mux.HandleFunc("GET /taxes/new", webH.TaxesNewForm)
+	mux.HandleFunc("POST /taxes/new", webH.TaxesCreate)
+	mux.HandleFunc("GET /taxes/{id}/edit", webH.TaxesEditForm)
+	mux.HandleFunc("POST /taxes/{id}/edit", webH.TaxesUpdate)
+	mux.HandleFunc("DELETE /taxes/{id}", webH.TaxesDelete)
+	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
+
+	// Middleware chain
 	handler := transport.CORSMiddleware(mux)
+	handler = transport.LocaleMiddleware(handler)
 
 	// empezar y escuchar al servidor
-	
+
 	serverPort := getEnv("PORT", "8080")
 	server := &http.Server{
-		Addr:	":" + serverPort,
-		Handler:	handler,
-		IdleTimeout:	time.Minute,
-		ReadTimeout: 10 * time.Second,
+		Addr:         ":" + serverPort,
+		Handler:      handler,
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
 

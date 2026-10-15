@@ -127,7 +127,7 @@ func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
@@ -136,7 +136,7 @@ func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Brand": brand,
-		}, http.StatusUnprocessableEntity)
+		})
 		return
 	}
 
@@ -169,18 +169,18 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	brand, err := h.brandSvc.GetByID(ctx, id)
 	if err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 	brand.Name = r.FormValue("name")
@@ -189,7 +189,7 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Brand": brand,
-		}, http.StatusUnprocessableEntity)
+		})
 		return
 	}
 
@@ -272,13 +272,13 @@ func (h *WebHandler) TaxesNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
 		return
 	}
 
@@ -290,7 +290,7 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Tax":   tax,
-		}, http.StatusUnprocessableEntity)
+		})
 		return
 	}
 
@@ -323,24 +323,24 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
 		return
 	}
 
 	tax, err := h.taxSvc.GetByID(ctx, id)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()}, http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 	tax.Name = r.FormValue("name")
@@ -350,7 +350,7 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
 			"Error": err.Error(),
 			"Tax":   tax,
-		}, http.StatusUnprocessableEntity)
+		})
 		return
 	}
 

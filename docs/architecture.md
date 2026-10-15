@@ -49,6 +49,21 @@ transport → service/usecase → store (postgres) → DB
 
 Manual dependency injection in `cmd/api/main.go` — no DI framework.
 
+### D-04: Soft delete via `is_active`
+
+**Context:** Master/catalog tables (brands, taxes, categories, suppliers, stores, cash registers, users) can be referenced by transactional rows. Hard `DELETE` would either violate FK constraints or lose referential integrity. The project already uses `is_active` on `products`, `suppliers`, and `users`, but the remaining master tables lack it.
+
+**Decision:** All master/catalog tables use `is_active BOOLEAN NOT NULL DEFAULT TRUE` as the single soft-delete mechanism. `deleted_at` is **not** used — the pattern is boolean, consistent with existing usage. Semantics:
+- `GetAll` in stores filters `WHERE is_active = TRUE` by default
+- Hard `DELETE` remains only for rows with zero FK references (orphaned records)
+- Deactivation (`is_active = FALSE`) keeps history intact; entity disappears from selection UI but remains in reports and historical references
+
+**Consequences:**
+- Consistent query pattern across all master entities
+- No cascade rules needed — FK constraints in PostgreSQL already prevent hard deletion of referenced rows
+- UI shows deactivate/activate buttons instead of delete when records are in use
+- Adding `is_active` to a new entity is a one-line migration + one field in the model struct
+
 ---
 
 ## Protocols

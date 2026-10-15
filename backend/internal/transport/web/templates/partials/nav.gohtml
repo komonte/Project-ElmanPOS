@@ -17,14 +17,13 @@
       </div>
 
       <div class="flex items-center gap-3">
-        <form hx-post="/settings/language" hx-trigger="change" hx-swap="none" class="flex items-center gap-1">
-          <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
-          <select id="lang-select" name="lang" onchange="this.form.requestSubmit()"
-                  class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
-            <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
-            <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
-          </select>
-        </form>
+        <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
+        <select id="lang-select" name="lang"
+                hx-post="/settings/language" hx-trigger="change" hx-swap="none"
+                class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+          <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+        </select>
       </div>
     </div>
   </div>

@@ -102,9 +102,8 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
-		h.renderPartial(w, r, "brands.gohtml", map[string]any{
-			"Brands":  brands,
-			"Section": "brands.gohtml",
+		h.renderPartial(w, r, "brand_table.gohtml", map[string]any{
+			"Brands": brands,
 		})
 		return
 	}
@@ -208,7 +207,7 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderPartial(w, r, "brands.gohtml", map[string]any{
+	h.renderPartial(w, r, "brand_table.gohtml", map[string]any{
 		"Brands": brands,
 	})
 }
@@ -234,7 +233,7 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
-		h.renderPartial(w, r, "taxes.gohtml", map[string]any{
+		h.renderPartial(w, r, "tax_table.gohtml", map[string]any{
 			"Taxes": taxes,
 		})
 		return
@@ -357,7 +356,7 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderPartial(w, r, "taxes.gohtml", map[string]any{
+	h.renderPartial(w, r, "tax_table.gohtml", map[string]any{
 		"Taxes": taxes,
 	})
 }

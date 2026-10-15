@@ -28,6 +28,8 @@ func NewTemplateEngine() *TemplateEngine {
 		"templates/pages/taxes.gohtml",
 		"templates/partials/brand_form.gohtml",
 		"templates/partials/tax_form.gohtml",
+		"templates/partials/brand_table.gohtml",
+		"templates/partials/tax_table.gohtml",
 	}
 
 	for _, lang := range langs {

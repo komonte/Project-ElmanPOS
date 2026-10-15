@@ -1,4 +1,4 @@
 bin/
 /api
-/mainnode_modules/
+node_modules/
 main

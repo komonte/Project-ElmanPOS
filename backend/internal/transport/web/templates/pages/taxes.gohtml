@@ -20,14 +20,13 @@
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <form hx-post="/settings/language" hx-trigger="change" hx-swap="none" class="flex items-center gap-1">
-            <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
-            <select id="lang-select" name="lang" onchange="this.form.requestSubmit()"
-                    class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
-              <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
-              <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
-            </select>
-          </form>
+          <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}:</label>
+          <select id="lang-select" name="lang"
+                  hx-post="/settings/language" hx-trigger="change" hx-swap="none"
+                  class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+            <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+          </select>
         </div>
       </div>
     </div>
@@ -52,37 +51,7 @@
                  class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
         </div>
         <div id="taxes-table">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.id"}}</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "tax.name"}}</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "tax.rate"}}</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.created_at"}}</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{{t "common.actions"}}</th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              {{range .Taxes}}
-              <tr class="hover:bg-gray-50 transition-colors">
-                <td class="px-6 py-4 text-sm text-gray-500">{{.ID}}</td>
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{.Name}}</td>
-                <td class="px-6 py-4 text-sm text-gray-900">{{.Rate}}%</td>
-                <td class="px-6 py-4 text-sm text-gray-500">{{formatTime .CreatedAt}}</td>
-                <td class="px-6 py-4 text-right text-sm">
-                  <button hx-get="/taxes/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
-                          class="text-indigo-600 hover:text-indigo-800 font-medium mr-3">{{t "common.edit"}}</button>
-                  <button hx-delete="/taxes/{{.ID}}" hx-confirm="{{t "tax.delete_confirm"}}" hx-target="#taxes-table" hx-swap="innerHTML"
-                          class="text-red-600 hover:text-red-800 font-medium">{{t "common.delete"}}</button>
-                </td>
-              </tr>
-              {{else}}
-              <tr>
-                <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">{{t "common.no_results"}}</td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
+          {{template "tax_table.gohtml" .}}
         </div>
       </div>
     </div>

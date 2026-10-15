@@ -1,13 +1,16 @@
 <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog">
   <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-gray-900">{{if .Brand}}{{t "brand.edit"}}{{else}}{{t "brand.create"}}{{end}}</h2>
-      <button hx-get="" hx-target="#form-modal" hx-swap="innerHTML"
+      <h2 class="text-lg font-semibold text-gray-900">{{if .Brand.ID}}{{t "brand.edit"}}{{else}}{{t "brand.create"}}{{end}}</h2>
+      <button onclick="document.getElementById('form-modal').innerHTML=''"
               class="text-gray-400 hover:text-gray-600">&times;</button>
     </div>
-    <form hx-post="{{if .Brand}}/brands/{{.Brand.ID}}/edit{{else}}/brands/new{{end}}"
-          hx-target="#brands-table" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful) document.getElementById('form-modal').innerHTML = ''"
+    {{if .Error}}
+    <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{.Error}}</div>
+    {{end}}
+    <form hx-post="{{if .Brand.ID}}/brands/{{.Brand.ID}}/edit{{else}}/brands/new{{end}}"
+          hx-target="#form-modal" hx-swap="innerHTML"
+          hx-on::after-request="if(event.detail.successful){document.getElementById('form-modal').innerHTML='';htmx.ajax('GET','/brands',{target:'#brands-table',swap:'innerHTML'})}"
           class="space-y-4">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1">{{t "brand.name"}}</label>
@@ -15,7 +18,7 @@
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div class="flex justify-end gap-3 pt-2">
-        <button type="button" hx-get="" hx-target="#form-modal" hx-swap="innerHTML"
+        <button type="button" onclick="document.getElementById('form-modal').innerHTML=''"
                 class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
           {{t "common.cancel"}}
         </button>

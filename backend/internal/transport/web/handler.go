@@ -124,17 +124,22 @@ func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	brand := &model.Brand{Name: r.FormValue("name")}
 	if _, err := h.brandSvc.Create(ctx, brand); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
+			"Error": err.Error(),
+			"Brand": brand,
+		})
 		return
 	}
 
-	h.brandsTable(w, r)
+	w.WriteHeader(http.StatusOK)
 }
 
 // BrandsEditForm handles GET /brands/{id}/edit
@@ -162,22 +167,35 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
-	brand := &model.Brand{Name: r.FormValue("name")}
+	brand, err := h.brandSvc.GetByID(ctx, id)
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		return
+	}
+	brand.Name = r.FormValue("name")
+
 	if _, err := h.brandSvc.Update(ctx, id, brand); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
+			"Error": err.Error(),
+			"Brand": brand,
+		})
 		return
 	}
 
-	h.brandsTable(w, r)
+	w.WriteHeader(http.StatusOK)
 }
 
 // BrandsDelete handles DELETE /brands/{id}
@@ -255,13 +273,15 @@ func (h *WebHandler) TaxesNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		http.Error(w, "invalid rate", http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
 		return
 	}
 
@@ -270,11 +290,15 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 		Rate: decimal.NewFromFloat(rate),
 	}
 	if _, err := h.taxSvc.Create(ctx, tax); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
+			"Error": err.Error(),
+			"Tax":   tax,
+		})
 		return
 	}
 
-	h.taxesTable(w, r)
+	w.WriteHeader(http.StatusOK)
 }
 
 // TaxesEditForm handles GET /taxes/{id}/edit
@@ -302,31 +326,43 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		http.Error(w, "invalid rate", http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
 		return
 	}
 
-	tax := &model.Tax{
-		Name: r.FormValue("name"),
-		Rate: decimal.NewFromFloat(rate),
+	tax, err := h.taxSvc.GetByID(ctx, id)
+	if err != nil {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		return
 	}
+	tax.Name = r.FormValue("name")
+	tax.Rate = decimal.NewFromFloat(rate)
+
 	if _, err := h.taxSvc.Update(ctx, id, tax); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
+			"Error": err.Error(),
+			"Tax":   tax,
+		})
 		return
 	}
 
-	h.taxesTable(w, r)
+	w.WriteHeader(http.StatusOK)
 }
 
 // TaxesDelete handles DELETE /taxes/{id}

@@ -90,10 +90,11 @@ Semantics:
 ### 4.1 `taxes`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(80) | NOT NULL | e.g. `IVA 21%` |
 | rate | NUMERIC(5,2) | NOT NULL, CHECK (rate >= 0 AND rate <= 100) | Percentage (0, 10.5, 21, 27). |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | (index) | | UNIQUE INDEX `idx_taxes_name_unique_lower` on `LOWER(name)` | Case-insensitive unique name |
@@ -101,11 +102,12 @@ Semantics:
 ### 4.2 `categories`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | parent_id | BIGINT | FK → categories.id, NULL | Tree hierarchy (self-reference). NULL = root. |
 | name | VARCHAR(120) | NOT NULL | e.g. `Almacén` → `Galletitas` |
 | tax_id | BIGINT | FK → taxes.id, NOT NULL | Default IVA rate inherited by products in this category. |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -114,9 +116,10 @@ Index: `(parent_id)`.
 ### 4.3 `brands`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(120) | NOT NULL, UNIQUE | |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -149,7 +152,7 @@ Indexes: `(category_id)`, `(brand_id)`, `(is_active)`.
 ### 4.5 `product_codes`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | code_type | product_code_type | NOT NULL | `INTERNAL` for store-printed pack/scale codes. |
@@ -161,7 +164,7 @@ Supports **multiple barcodes per product** (manufacturer packaging changes, dual
 ### 4.6 `product_components`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | pack_id | BIGINT | FK → products.id, NOT NULL | The `COMPOSITE` product. |
 | component_id | BIGINT | FK → products.id, NOT NULL | A component whose stock actually moves. |
@@ -175,7 +178,7 @@ CHECK: `pack_id <> component_id`. Index: `(pack_id)`.
 
 `prices`:
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | unit_price | NUMERIC(12,2) | NOT NULL, CHECK (unit_price > 0) | PVP. For `WEIGHT` products: price per kg. |
@@ -203,20 +206,22 @@ Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DE
 ### 4.8 `stores`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(120) | NOT NULL | |
 | address | VARCHAR(200) | NULL | |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 ### 4.9 `cash_registers`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
 | name | VARCHAR(80) | NOT NULL | Terminal label: `Caja 1`, `Caja 2`. |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -225,7 +230,7 @@ Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DE
 ### 4.10 `suppliers`
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|---|
+|---|---|---|---|
 | id | BIGSERIAL | PK | |
 | name | VARCHAR(160) | NOT NULL | |
 | tax_id_number | VARCHAR(20) | NULL | CUIT/RUC. |

@@ -39,7 +39,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - Category exists (`products.category_id` required).
   - If `sale_type = 'COMPOSITE'`, components must already exist (F-05).
 - **Business flow:**
-  1. Form: `sku`, `name`, `description`, `brand`, `category`, `measure_unit`, `sale_type`, `controls_batches`, `reorder_point`, `max_stock`, `margin_percent`, `preferred_supplier_id`, `is_consignment`, `is_active`.
+  1. Form: `sku`, `name`, `description`, `brand` (active only), `category` (active only), `measure_unit`, `sale_type`, `controls_batches`, `reorder_point`, `max_stock`, `margin_percent`, `preferred_supplier_id` (active only), `is_consignment`, `is_active`.
   2. Save → system validates and persists (create: `INSERT`; edit: `UPDATE`).
 - **DB transaction:**
   1. `BEGIN;`
@@ -48,6 +48,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Invariants:**
   - `sku` unique (`UNIQUE(sku)`).
   - `max_stock` either `NULL` or strictly greater than `reorder_point` (`CHECK`).
+  - Brand, category, and supplier selectors only display entities where `is_active = TRUE` (**BR-06**).
   - Once the product has any `stock_movements` or `sale_items`, the fields `sale_type`, `controls_batches`, and `measure_unit` **cannot be changed** (changing them would corrupt past valuation). Only an `ADMIN` may change them after verifying zero stock, and it must be recorded in `audit_log`.
 - **Errors / rollback:** duplicate `sku` → reject with message; any failure → full rollback.
 - **Edge cases:**

@@ -40,6 +40,9 @@ Sales processing and stock deductions must occur within a single database transa
 ### BR-05: Immutable Stock Ledger
 Stock levels cannot be edited arbitrarily. Every change in inventory must generate a 'stock_movements' entry specifying movement type (sale, purchase, adjustment, expiration, return), user ID, and timestamp.
 
+### BR-06: Catalog Soft Delete
+Master entities (brands, taxes, categories, suppliers, stores, cash registers, users) must support deactivation via `is_active = FALSE` rather than hard `DELETE`. Deactivated entities are excluded from selection dropdowns but remain referenced by existing records (products, transactions, reports). Hard `DELETE` is only permitted when no foreign-key references exist.
+
 --- 
 
 ## 4. Non-Functional Requirements (NFR)

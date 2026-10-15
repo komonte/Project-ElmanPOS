@@ -58,5 +58,11 @@
   "dashboard.total_products": "Total Products",
   "dashboard.total_brands": "Total Brands",
   "dashboard.total_taxes": "Tax Rates",
-  "dashboard.recent_activity": "Recent Activity"
+  "dashboard.recent_activity": "Recent Activity",
+
+  "error.already_exists": "Already exists",
+  "error.not_found": "Not found",
+  "error.in_use": "In use by other records",
+  "error.invalid_id": "Invalid ID",
+  "error.invalid_rate": "Invalid rate"
 }

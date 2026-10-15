@@ -62,6 +62,24 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	}
 }
 
+func (h *WebHandler) errMsg(r *http.Request, err error) string {
+	lang := transport.GetLocale(r.Context())
+	switch {
+	case errors.Is(err, service.ErrAlreadyExists):
+		return i18n.T(lang, "error.already_exists")
+	case errors.Is(err, service.ErrNotFound):
+		return i18n.T(lang, "error.not_found")
+	case errors.Is(err, service.ErrInUse):
+		return i18n.T(lang, "error.in_use")
+	default:
+		return err.Error()
+	}
+}
+
+func (h *WebHandler) tr(r *http.Request, key string) string {
+	return i18n.T(transport.GetLocale(r.Context()), key)
+}
+
 // Index shows the dashboard
 func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -127,14 +145,14 @@ func (h *WebHandler) BrandsNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) BrandsCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 
 	brand := &model.Brand{Name: r.FormValue("name")}
 	if _, err := h.brandSvc.Create(ctx, brand); err != nil {
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
-			"Error": err.Error(),
+			"Error": h.errMsg(r, err),
 			"Brand": brand,
 		})
 		return
@@ -169,25 +187,25 @@ func (h *WebHandler) BrandsUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": "invalid id"})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": h.tr(r, "error.invalid_id")})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 
 	brand, err := h.brandSvc.GetByID(ctx, id)
 	if err != nil {
-		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 	brand.Name = r.FormValue("name")
 
 	if _, err := h.brandSvc.Update(ctx, id, brand); err != nil {
 		h.renderPartial(w, r, "brand_form.gohtml", map[string]any{
-			"Error": err.Error(),
+			"Error": h.errMsg(r, err),
 			"Brand": brand,
 		})
 		return
@@ -272,13 +290,13 @@ func (h *WebHandler) TaxesNewForm(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.tr(r, "error.invalid_rate")})
 		return
 	}
 
@@ -288,7 +306,7 @@ func (h *WebHandler) TaxesCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := h.taxSvc.Create(ctx, tax); err != nil {
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
-			"Error": err.Error(),
+			"Error": h.errMsg(r, err),
 			"Tax":   tax,
 		})
 		return
@@ -323,24 +341,24 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid id"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.tr(r, "error.invalid_id")})
 		return
 	}
 
 	if err := r.ParseForm(); err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 
 	rate, err := strconv.ParseFloat(r.FormValue("rate"), 64)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": "invalid rate"})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.tr(r, "error.invalid_rate")})
 		return
 	}
 
 	tax, err := h.taxSvc.GetByID(ctx, id)
 	if err != nil {
-		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": err.Error()})
+		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
 		return
 	}
 	tax.Name = r.FormValue("name")
@@ -348,7 +366,7 @@ func (h *WebHandler) TaxesUpdate(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := h.taxSvc.Update(ctx, id, tax); err != nil {
 		h.renderPartial(w, r, "tax_form.gohtml", map[string]any{
-			"Error": err.Error(),
+			"Error": h.errMsg(r, err),
 			"Tax":   tax,
 		})
 		return

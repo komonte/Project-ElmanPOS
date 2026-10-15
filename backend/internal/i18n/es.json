@@ -58,5 +58,11 @@
   "dashboard.total_products": "Total de Productos",
   "dashboard.total_brands": "Total de Marcas",
   "dashboard.total_taxes": "Impuestos",
-  "dashboard.recent_activity": "Actividad Reciente"
+  "dashboard.recent_activity": "Actividad Reciente",
+
+  "error.already_exists": "Ya existe",
+  "error.not_found": "No encontrado",
+  "error.in_use": "Está siendo utilizado por otros registros",
+  "error.invalid_id": "ID inválido",
+  "error.invalid_rate": "Alícuota inválida"
 }

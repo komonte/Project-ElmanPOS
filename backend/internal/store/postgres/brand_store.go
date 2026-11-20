@@ -22,8 +22,8 @@ func (s *BrandStore) Create(ctx context.Context, brand *model.Brand) (*model.Bra
 		return nil, errors.New("brand cannot be nil")
 	}
 
-	q := `INSERT INTO brands (name) VALUES ($1) RETURNING id, created_at, updated_at;`
-	err := s.db.QueryRowContext(ctx, q, brand.Name).Scan(&brand.ID, &brand.CreatedAt, &brand.UpdatedAt)
+	q := `INSERT INTO brands (name) VALUES ($1) RETURNING id, is_active, created_at, updated_at;`
+	err := s.db.QueryRowContext(ctx, q, brand.Name).Scan(&brand.ID, &brand.IsActive, &brand.CreatedAt, &brand.UpdatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, store.ErrDuplicateName
@@ -34,7 +34,7 @@ func (s *BrandStore) Create(ctx context.Context, brand *model.Brand) (*model.Bra
 }
 
 func (s *BrandStore) GetAll(ctx context.Context) ([]*model.Brand, error) {
-	q := `SELECT id, name, created_at, updated_at FROM brands;`
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE is_active = TRUE;`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,32 @@ func (s *BrandStore) GetAll(ctx context.Context) ([]*model.Brand, error) {
 	brands := make([]*model.Brand, 0)
 	for rows.Next() {
 		b := new(model.Brand)
-		if err := rows.Scan(&b.ID, &b.Name, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		brands = append(brands, b)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return brands, nil
+}
+
+func (s *BrandStore) GetAllIncludingInactive(ctx context.Context) ([]*model.Brand, error) {
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands ORDER BY is_active DESC, name ASC;`
+	rows, err := s.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	brands := make([]*model.Brand, 0)
+	for rows.Next() {
+		b := new(model.Brand)
+		if err := rows.Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -59,11 +84,11 @@ func (s *BrandStore) GetAll(ctx context.Context) ([]*model.Brand, error) {
 }
 
 func (s *BrandStore) GetByID(ctx context.Context, id int64) (*model.Brand, error) {
-	q := `SELECT id, name, created_at, updated_at FROM brands WHERE id = $1;`
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE id = $1;`
 
 	var b model.Brand
 
-	err := s.db.QueryRowContext(ctx, q, id).Scan(&b.ID, &b.Name, &b.CreatedAt, &b.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, q, id).Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
@@ -75,7 +100,7 @@ func (s *BrandStore) GetByID(ctx context.Context, id int64) (*model.Brand, error
 }
 
 func (s *BrandStore) SearchByName(ctx context.Context, query string) ([]*model.Brand, error) {
-	q := `SELECT id, name, created_at, updated_at FROM brands WHERE name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE is_active = TRUE AND name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
 	rows, err := s.db.QueryContext(ctx, q, query)
 	if err != nil {
 		return nil, err
@@ -85,7 +110,30 @@ func (s *BrandStore) SearchByName(ctx context.Context, query string) ([]*model.B
 	brands := make([]*model.Brand, 0)
 	for rows.Next() {
 		b := new(model.Brand)
-		if err := rows.Scan(&b.ID, &b.Name, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
+			return nil, err
+		}
+
+		brands = append(brands, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return brands, nil
+}
+
+func (s *BrandStore) SearchAllByName(ctx context.Context, query string) ([]*model.Brand, error) {
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE name ILIKE '%' || $1 || '%' ORDER BY is_active DESC, name ASC LIMIT 20;`
+	rows, err := s.db.QueryContext(ctx, q, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	brands := make([]*model.Brand, 0)
+	for rows.Next() {
+		b := new(model.Brand)
+		if err := rows.Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
 			return nil, err
 		}
 
@@ -101,9 +149,9 @@ func (s *BrandStore) Update(ctx context.Context, id int64, brand *model.Brand) (
 	if brand == nil {
 		return nil, errors.New("brand cannot be nil")
 	}
-	q := `UPDATE brands SET name = $1 WHERE id = $2 RETURNING id, created_at, updated_at;`
+	q := `UPDATE brands SET name = $1, is_active = $2 WHERE id = $3 RETURNING id, is_active, created_at, updated_at;`
 
-	err := s.db.QueryRowContext(ctx, q, brand.Name, id).Scan(&brand.ID, &brand.CreatedAt, &brand.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, q, brand.Name, brand.IsActive, id).Scan(&brand.ID, &brand.IsActive, &brand.CreatedAt, &brand.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
@@ -125,6 +173,26 @@ func (s *BrandStore) Delete(ctx context.Context, id int64) error {
 		if isForeignKeyViolation(err) {
 			return store.ErrInUse
 		}
+		return err
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rows == 0 {
+		return store.ErrNotFound
+	}
+
+	return nil
+}
+
+func (s *BrandStore) SetActive(ctx context.Context, id int64, active bool) error {
+	q := `UPDATE brands SET is_active = $1 WHERE id = $2;`
+
+	res, err := s.db.ExecContext(ctx, q, active, id)
+	if err != nil {
 		return err
 	}
 

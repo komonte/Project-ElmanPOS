@@ -85,11 +85,8 @@ func main() {
 	// Configurar rutas
 	mux := http.NewServeMux()
 
-	// API routes (sin cambios)
-	mux.HandleFunc("/api/brands", brandH.HandleCollection)
-	mux.HandleFunc("/api/brand/", brandH.HandleEntity)
-	mux.HandleFunc("/api/taxes", taxH.HandleCollection)
-	mux.HandleFunc("/api/tax/", taxH.HandleEntity)
+	// API routes
+	transport.RegisterAPIRoutes(mux, brandH, taxH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")

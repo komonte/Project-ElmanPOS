@@ -1,0 +1,94 @@
+package transport_test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/shopspring/decimal"
+)
+
+// newTestMux builds the same API routing as main.go, backed by mock stores.
+func newTestMux() *http.ServeMux {
+	brand := &model.Brand{ID: 1, Name: "Sony"}
+	tax := &model.Tax{ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21)}
+
+	brandStore := &MockStore[model.Brand]{
+		getByIDFn: func(_ context.Context, id int64) (*model.Brand, error) {
+			if id != 1 {
+				return nil, store.ErrNotFound
+			}
+			return brand, nil
+		},
+		deleteFn: func(_ context.Context, id int64) error {
+			if id != 1 {
+				return store.ErrNotFound
+			}
+			return nil
+		},
+	}
+	taxStore := &MockStore[model.Tax]{
+		getByIDFn: func(_ context.Context, id int64) (*model.Tax, error) {
+			if id != 1 {
+				return nil, store.ErrNotFound
+			}
+			return tax, nil
+		},
+		deleteFn: func(_ context.Context, id int64) error {
+			if id != 1 {
+				return store.ErrNotFound
+			}
+			return nil
+		},
+	}
+
+	mux := http.NewServeMux()
+	transport.RegisterAPIRoutes(mux,
+		transport.NewResourceHandler[model.Brand](service.NewService[model.Brand](brandStore, nil), "brand"),
+		transport.NewResourceHandler[model.Tax](service.NewService[model.Tax](taxStore, nil), "tax"),
+	)
+	return mux
+}
+
+func TestAPIRoutesThroughMux(t *testing.T) {
+	t.Parallel()
+	mux := newTestMux()
+
+	cases := []struct {
+		method string
+		path   string
+		want   int
+	}{
+		{http.MethodGet, "/api/brands/1", http.StatusOK},
+		{http.MethodGet, "/api/brands/999", http.StatusNotFound},
+		{http.MethodGet, "/api/brands/abc", http.StatusBadRequest},
+		{http.MethodDelete, "/api/brands/1", http.StatusNoContent},
+		{http.MethodPatch, "/api/brands/1", http.StatusMethodNotAllowed},
+		{http.MethodPatch, "/api/brands", http.StatusMethodNotAllowed},
+
+		{http.MethodGet, "/api/taxes/1", http.StatusOK},
+		{http.MethodGet, "/api/taxes/999", http.StatusNotFound},
+		{http.MethodGet, "/api/taxes/abc", http.StatusBadRequest},
+		{http.MethodDelete, "/api/taxes/1", http.StatusNoContent},
+		{http.MethodPatch, "/api/taxes/1", http.StatusMethodNotAllowed},
+		{http.MethodPatch, "/api/taxes", http.StatusMethodNotAllowed},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+
+			if rec.Code != tc.want {
+				t.Fatalf("expected %d, got %d. Body: %s", tc.want, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}

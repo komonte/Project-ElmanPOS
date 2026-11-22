@@ -32,7 +32,15 @@ func (m *MockStore[T]) SearchByName(ctx context.Context, q string) ([]*T, error)
 func (m *MockStore[T]) Update(ctx context.Context, id int64, entity *T) (*T, error) { return m.updateFn(ctx, id, entity) }
 func (m *MockStore[T]) Delete(ctx context.Context, id int64) error            { return m.deleteFn(ctx, id) }
 
-func runHandlerTests[T any](t *testing.T, label string, entity *T) {
+// serve routes req through a ServeMux wired with Register, the same way
+// RegisterAPIRoutes does in main.go, instead of calling handlers directly.
+func serve[T any](h *transport.ResourceHandler[T], base string, rec *httptest.ResponseRecorder, req *http.Request) {
+	mux := http.NewServeMux()
+	h.Register(mux, base)
+	mux.ServeHTTP(rec, req)
+}
+
+func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 	t.Run("GET collection returns all", func(t *testing.T) {
 		mock := &MockStore[T]{
 			getAllFn: func(_ context.Context) ([]*T, error) {
@@ -42,9 +50,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "s", nil)
+		req := httptest.NewRequest(http.MethodGet, base, nil)
 		rec := httptest.NewRecorder()
-		h.HandleCollection(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d. Body: %s", rec.Code, rec.Body.String())
@@ -60,9 +68,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "s", nil)
+		req := httptest.NewRequest(http.MethodGet, base, nil)
 		rec := httptest.NewRecorder()
-		h.HandleCollection(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d. Body: %s", rec.Code, rec.Body.String())
@@ -78,9 +86,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "s", nil)
+		req := httptest.NewRequest(http.MethodGet, base, nil)
 		rec := httptest.NewRecorder()
-		h.HandleCollection(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", rec.Code)
@@ -96,9 +104,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "s?name=test", nil)
+		req := httptest.NewRequest(http.MethodGet, base + "?name=test", nil)
 		rec := httptest.NewRecorder()
-		h.HandleCollection(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d. Body: %s", rec.Code, rec.Body.String())
@@ -114,9 +122,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "/1", nil)
+		req := httptest.NewRequest(http.MethodGet, base + "/1", nil)
 		rec := httptest.NewRecorder()
-		h.HandleEntity(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", rec.Code)
@@ -130,9 +138,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodDelete, "/" + label + "/1", nil)
+		req := httptest.NewRequest(http.MethodDelete, base + "/1", nil)
 		rec := httptest.NewRecorder()
-		h.HandleEntity(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusNoContent {
 			t.Fatalf("expected 204, got %d", rec.Code)
@@ -146,9 +154,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodDelete, "/" + label + "/999", nil)
+		req := httptest.NewRequest(http.MethodDelete, base + "/999", nil)
 		rec := httptest.NewRecorder()
-		h.HandleEntity(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d", rec.Code)
@@ -162,9 +170,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 		svc := service.NewService[T](mock, nil)
 		h := transport.NewResourceHandler[T](svc, label)
 
-		req := httptest.NewRequest(http.MethodDelete, "/" + label + "/1", nil)
+		req := httptest.NewRequest(http.MethodDelete, base + "/1", nil)
 		rec := httptest.NewRecorder()
-		h.HandleEntity(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("expected 409, got %d", rec.Code)
@@ -174,9 +182,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 	t.Run("invalid id returns 400", func(t *testing.T) {
 		h := transport.NewResourceHandler[T](service.NewService[T](&MockStore[T]{}, nil), label)
 
-		req := httptest.NewRequest(http.MethodGet, "/" + label + "/abc", nil)
+		req := httptest.NewRequest(http.MethodGet, base + "/abc", nil)
 		rec := httptest.NewRecorder()
-		h.HandleEntity(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d", rec.Code)
@@ -186,9 +194,9 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 	t.Run("unsupported method returns 405", func(t *testing.T) {
 		h := transport.NewResourceHandler[T](service.NewService[T](&MockStore[T]{}, nil), label)
 
-		req := httptest.NewRequest(http.MethodPatch, "/" + label + "s", nil)
+		req := httptest.NewRequest(http.MethodPatch, base, nil)
 		rec := httptest.NewRecorder()
-		h.HandleCollection(rec, req)
+		serve(h, base, rec, req)
 
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("expected 405, got %d", rec.Code)
@@ -198,14 +206,14 @@ func runHandlerTests[T any](t *testing.T, label string, entity *T) {
 
 func TestHandlerWithBrand(t *testing.T) {
 	t.Parallel()
-	runHandlerTests[model.Brand](t, "brand", &model.Brand{
+	runHandlerTests[model.Brand](t, "brand", "/api/brands", &model.Brand{
 		ID: 1, Name: "Sony",
 	})
 }
 
 func TestHandlerWithTax(t *testing.T) {
 	t.Parallel()
-	runHandlerTests[model.Tax](t, "tax", &model.Tax{
+	runHandlerTests[model.Tax](t, "tax", "/api/taxes", &model.Tax{
 		ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21),
 	})
 }

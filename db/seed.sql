@@ -19,7 +19,7 @@ INSERT INTO brands (name) VALUES ('Bagley'), ('Coca-Cola'), ('Sancor');
 
 -- Supplier
 INSERT INTO suppliers (name, tax_id_number, phone, payment_terms, is_active)
-VALUES ('Distribuidora del Sur S.A.', '20-12345678-9', '+54 11 5555-0100', 'Contado', TRUE);
+VALUES ('Distribuidora del Sur S.A.', '20123456786', '+54 11 5555-0100', 'Contado', TRUE);
 
 -- Users (hashes are placeholders; the app seed writes real bcrypt hashes)
 INSERT INTO users (username, name, password_hash, role, is_active)

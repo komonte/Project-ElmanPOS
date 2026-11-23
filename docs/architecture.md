@@ -51,7 +51,7 @@ Manual dependency injection in `cmd/api/main.go` — no DI framework.
 
 ### D-04: Soft delete via `is_active`
 
-**Context:** Master/catalog tables (brands, taxes, categories, suppliers, stores, cash registers, users) can be referenced by transactional rows. Hard `DELETE` would either violate FK constraints or lose referential integrity. The project already uses `is_active` on `products`, `suppliers`, and `users`, but the remaining master tables lack it.
+**Context:** Master/catalog tables (brands, taxes, categories, suppliers, stores, cash registers, users) can be referenced by transactional rows. Hard `DELETE` would either violate FK constraints or lose referential integrity. All of them carry `is_active` (categories, stores and cash registers since migration `0008`).
 
 **Decision:** All master/catalog tables use `is_active BOOLEAN NOT NULL DEFAULT TRUE` as the single soft-delete mechanism. `deleted_at` is **not** used — the pattern is boolean, consistent with existing usage. Semantics:
 - `GetAll` in stores filters `WHERE is_active = TRUE` by default
@@ -63,6 +63,10 @@ Manual dependency injection in `cmd/api/main.go` — no DI framework.
 - No cascade rules needed — FK constraints in PostgreSQL already prevent hard deletion of referenced rows
 - UI shows deactivate/activate buttons instead of delete when records are in use
 - Adding `is_active` to a new entity is a one-line migration + one field in the model struct
+- Soft delete is part of the generic layer: `postgres.Store[T]` requires `GetAllIncludingInactive`,
+  `SearchAllByName` and `SetActive`, and `service.Service[T]` exposes them as
+  `GetAllIncludingInactive`, `SearchAllByName`, `Deactivate` and `Reactivate`.
+  No per-entity service is needed just for soft delete.
 
 ---
 
@@ -77,14 +81,17 @@ model/entity.go → store/postgres/entity_store.go → main.go: 5 lines
 Steps:
 1. Create `model/entity.go` — struct + `Validate()`
 2. Create `store/postgres/entity_store.go` — implements `Store[Entity]` using
-   `QueryContext`/`QueryRowContext`/`ExecContext` with explicit SQL
+   `QueryContext`/`QueryRowContext`/`ExecContext` with explicit SQL, including
+   the soft-delete methods (D-04). Add `var _ Store[model.Entity] = (*EntityStore)(nil)`
+   so a missing method fails at compile time. Unique-column errors wrap
+   `store.ErrDuplicate` (e.g. `fmt.Errorf("name %w", ErrDuplicate)`) so the
+   generic service maps them to `ErrAlreadyExists`.
 3. In `main.go`:
    ```go
    store := postgres.NewEntityStore(db)
    svc   := NewService[model.Entity](store, func(e *model.Entity) error { return e.Validate() })
    h     := NewResourceHandler[model.Entity](svc, "entity")
-   mux.HandleFunc("/entities", h.HandleCollection)
-   mux.HandleFunc("/entity/",  h.HandleEntity)
+   h.Register(mux, "/api/entities")
    ```
 
 ### P-02: Entity deviates from standard CRUD

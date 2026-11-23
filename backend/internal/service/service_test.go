@@ -20,6 +20,10 @@ type MockStore[T any] struct {
 	searchByNameFn func(ctx context.Context, q string) ([]*T, error)
 	updateFn       func(ctx context.Context, id int64, entity *T) (*T, error)
 	deleteFn       func(ctx context.Context, id int64) error
+
+	getAllIncludingInactiveFn func(ctx context.Context) ([]*T, error)
+	searchAllByNameFn         func(ctx context.Context, q string) ([]*T, error)
+	setActiveFn               func(ctx context.Context, id int64, active bool) error
 }
 
 func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
@@ -28,6 +32,15 @@ func (m *MockStore[T]) GetByID(ctx context.Context, id int64) (*T, error)    { r
 func (m *MockStore[T]) SearchByName(ctx context.Context, q string) ([]*T, error) { return m.searchByNameFn(ctx, q) }
 func (m *MockStore[T]) Update(ctx context.Context, id int64, entity *T) (*T, error) { return m.updateFn(ctx, id, entity) }
 func (m *MockStore[T]) Delete(ctx context.Context, id int64) error            { return m.deleteFn(ctx, id) }
+func (m *MockStore[T]) GetAllIncludingInactive(ctx context.Context) ([]*T, error) {
+	return m.getAllIncludingInactiveFn(ctx)
+}
+func (m *MockStore[T]) SearchAllByName(ctx context.Context, q string) ([]*T, error) {
+	return m.searchAllByNameFn(ctx, q)
+}
+func (m *MockStore[T]) SetActive(ctx context.Context, id int64, active bool) error {
+	return m.setActiveFn(ctx, id, active)
+}
 
 type ServiceTestSuite[T any] struct {
 	label      string

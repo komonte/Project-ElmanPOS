@@ -50,7 +50,7 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 	}
 	created, err := s.store.Create(ctx, entity)
 	if err != nil {
-		if errors.Is(err, store.ErrDuplicateName) {
+		if errors.Is(err, store.ErrDuplicate) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, err
@@ -75,7 +75,7 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, ErrNotFound
 		}
-		if errors.Is(err, store.ErrDuplicateName) {
+		if errors.Is(err, store.ErrDuplicate) {
 			return nil, ErrAlreadyExists
 		}
 		return nil, err

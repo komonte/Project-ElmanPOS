@@ -76,6 +76,16 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	}
 }
 
+// setActiveError responde el error de Deactivate/Reactivate: 404 si la
+// entidad no existe, 400 para el resto (como antes).
+func (h *WebHandler) setActiveError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, service.ErrNotFound) {
+		http.Error(w, h.errMsg(r, err), http.StatusNotFound)
+		return
+	}
+	http.Error(w, err.Error(), http.StatusBadRequest)
+}
+
 func (h *WebHandler) tr(r *http.Request, key string) string {
 	return i18n.T(transport.GetLocale(r.Context()), key)
 }
@@ -246,7 +256,7 @@ func (h *WebHandler) BrandsDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Deactivate(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.setActiveError(w, r, err)
 		return
 	}
 
@@ -263,7 +273,7 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Reactivate(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.setActiveError(w, r, err)
 		return
 	}
 
@@ -441,7 +451,7 @@ func (h *WebHandler) TaxesDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Deactivate(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.setActiveError(w, r, err)
 		return
 	}
 
@@ -458,7 +468,7 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Reactivate(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.setActiveError(w, r, err)
 		return
 	}
 

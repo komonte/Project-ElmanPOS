@@ -9,6 +9,9 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
 
+// Falla al compilar si TaxStore deja de cumplir la interfaz Store.
+var _ Store[model.Tax] = (*TaxStore)(nil)
+
 type TaxStore struct {
 	db *sql.DB
 }

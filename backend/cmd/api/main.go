@@ -69,14 +69,12 @@ func main() {
 	// Inyectar dependencias
 
 	brandStore := postgres.NewBrandStore(db)
-	brandSvcGen := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
-	brandSvc := service.NewBrandService(brandSvcGen, brandStore)
-	brandH := transport.NewResourceHandler[model.Brand](brandSvcGen, "brand")
+	brandSvc := service.NewService[model.Brand](brandStore, func(b *model.Brand) error { return b.Validate() })
+	brandH := transport.NewResourceHandler[model.Brand](brandSvc, "brand")
 
 	taxStore := postgres.NewTaxStore(db)
-	taxSvcGen := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
-	taxSvc := service.NewTaxService(taxSvcGen, taxStore)
-	taxH := transport.NewResourceHandler[model.Tax](taxSvcGen, "tax")
+	taxSvc := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
+	taxH := transport.NewResourceHandler[model.Tax](taxSvc, "tax")
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()

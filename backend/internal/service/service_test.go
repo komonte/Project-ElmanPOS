@@ -20,6 +20,10 @@ type MockStore[T any] struct {
 	searchByNameFn func(ctx context.Context, q string) ([]*T, error)
 	updateFn       func(ctx context.Context, id int64, entity *T) (*T, error)
 	deleteFn       func(ctx context.Context, id int64) error
+
+	getAllIncludingInactiveFn func(ctx context.Context) ([]*T, error)
+	searchAllByNameFn         func(ctx context.Context, q string) ([]*T, error)
+	setActiveFn               func(ctx context.Context, id int64, active bool) error
 }
 
 func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
@@ -28,6 +32,15 @@ func (m *MockStore[T]) GetByID(ctx context.Context, id int64) (*T, error)    { r
 func (m *MockStore[T]) SearchByName(ctx context.Context, q string) ([]*T, error) { return m.searchByNameFn(ctx, q) }
 func (m *MockStore[T]) Update(ctx context.Context, id int64, entity *T) (*T, error) { return m.updateFn(ctx, id, entity) }
 func (m *MockStore[T]) Delete(ctx context.Context, id int64) error            { return m.deleteFn(ctx, id) }
+func (m *MockStore[T]) GetAllIncludingInactive(ctx context.Context) ([]*T, error) {
+	return m.getAllIncludingInactiveFn(ctx)
+}
+func (m *MockStore[T]) SearchAllByName(ctx context.Context, q string) ([]*T, error) {
+	return m.searchAllByNameFn(ctx, q)
+}
+func (m *MockStore[T]) SetActive(ctx context.Context, id int64, active bool) error {
+	return m.setActiveFn(ctx, id, active)
+}
 
 type ServiceTestSuite[T any] struct {
 	label      string
@@ -346,6 +359,122 @@ func runServiceTests[T any](t *testing.T, ts *ServiceTestSuite[T]) {
 		}
 		svc := service.NewService[T](mock, nil)
 		_, err := svc.SearchByName(ctx, "test")
+		if !errors.Is(err, errStore) {
+			t.Fatalf("error: got %v, want errStore", err)
+		}
+	})
+
+	t.Run("GetAllIncludingInactive success", func(t *testing.T) {
+		mock := &MockStore[T]{
+			getAllIncludingInactiveFn: func(_ context.Context) ([]*T, error) {
+				return []*T{ts.makeEntity(), ts.makeEntity()}, nil
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		entities, err := svc.GetAllIncludingInactive(ctx)
+		if err != nil {
+			t.Fatalf("error: got %v, want nil", err)
+		}
+		if len(entities) != 2 {
+			t.Errorf("len: got %d, want 2", len(entities))
+		}
+	})
+
+	t.Run("SearchAllByName whitespace query", func(t *testing.T) {
+		svc := service.NewService[T](&MockStore[T]{}, nil)
+		entities, err := svc.SearchAllByName(ctx, "  ")
+		if err != nil {
+			t.Fatalf("error: got %v, want nil", err)
+		}
+		if len(entities) != 0 {
+			t.Errorf("len: got %d, want 0", len(entities))
+		}
+	})
+
+	t.Run("SearchAllByName trims query", func(t *testing.T) {
+		var got string
+		mock := &MockStore[T]{
+			searchAllByNameFn: func(_ context.Context, q string) ([]*T, error) {
+				got = q
+				return []*T{ts.makeEntity()}, nil
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		entities, err := svc.SearchAllByName(ctx, "  test ")
+		if err != nil {
+			t.Fatalf("error: got %v, want nil", err)
+		}
+		if got != "test" {
+			t.Errorf("query: got %q, want %q", got, "test")
+		}
+		if len(entities) != 1 {
+			t.Errorf("len: got %d, want 1", len(entities))
+		}
+	})
+
+	t.Run("Deactivate invalid id", func(t *testing.T) {
+		svc := service.NewService[T](&MockStore[T]{}, nil)
+		err := svc.Deactivate(ctx, 0)
+		if !errors.Is(err, service.ErrInvalidID) {
+			t.Fatalf("error: got %v, want ErrInvalidID", err)
+		}
+	})
+
+	t.Run("Deactivate not found", func(t *testing.T) {
+		mock := &MockStore[T]{
+			setActiveFn: func(_ context.Context, _ int64, _ bool) error {
+				return store.ErrNotFound
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		err := svc.Deactivate(ctx, 1)
+		if !errors.Is(err, service.ErrNotFound) {
+			t.Fatalf("error: got %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("Deactivate sets active false", func(t *testing.T) {
+		got := true
+		mock := &MockStore[T]{
+			setActiveFn: func(_ context.Context, _ int64, active bool) error {
+				got = active
+				return nil
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		if err := svc.Deactivate(ctx, 1); err != nil {
+			t.Fatalf("error: got %v, want nil", err)
+		}
+		if got {
+			t.Error("active: got true, want false")
+		}
+	})
+
+	t.Run("Reactivate sets active true", func(t *testing.T) {
+		got := false
+		mock := &MockStore[T]{
+			setActiveFn: func(_ context.Context, _ int64, active bool) error {
+				got = active
+				return nil
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		if err := svc.Reactivate(ctx, 1); err != nil {
+			t.Fatalf("error: got %v, want nil", err)
+		}
+		if !got {
+			t.Error("active: got false, want true")
+		}
+	})
+
+	t.Run("Reactivate store failure", func(t *testing.T) {
+		mock := &MockStore[T]{
+			setActiveFn: func(_ context.Context, _ int64, _ bool) error {
+				return errStore
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		err := svc.Reactivate(ctx, 1)
 		if !errors.Is(err, errStore) {
 			t.Fatalf("error: got %v, want errStore", err)
 		}

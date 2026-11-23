@@ -15,11 +15,11 @@ import (
 
 type WebHandler struct {
 	engine   *TemplateEngine
-	brandSvc *service.BrandService
-	taxSvc   *service.TaxService
+	brandSvc *service.Service[model.Brand]
+	taxSvc   *service.Service[model.Tax]
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.BrandService, taxSvc *service.TaxService) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax]) *WebHandler {
 	return &WebHandler{
 		engine:   engine,
 		brandSvc: brandSvc,

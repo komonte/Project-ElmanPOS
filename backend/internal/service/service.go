@@ -107,3 +107,39 @@ func (s *Service[T]) SearchByName(ctx context.Context, query string) ([]*T, erro
 	}
 	return s.store.SearchByName(ctx, q)
 }
+func (s *Service[T]) GetAllIncludingInactive(ctx context.Context) ([]*T, error) {
+	return s.store.GetAllIncludingInactive(ctx)
+}
+
+// SearchAllByName busca también entre los inactivos (para la vista de admin).
+// Igual que SearchByName: una búsqueda vacía o de solo espacios no va a la DB.
+func (s *Service[T]) SearchAllByName(ctx context.Context, query string) ([]*T, error) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return make([]*T, 0), nil
+	}
+	return s.store.SearchAllByName(ctx, q)
+}
+
+// Deactivate es la baja lógica (D-04): is_active = FALSE, la fila queda.
+func (s *Service[T]) Deactivate(ctx context.Context, id int64) error {
+	return s.setActive(ctx, id, false)
+}
+
+func (s *Service[T]) Reactivate(ctx context.Context, id int64) error {
+	return s.setActive(ctx, id, true)
+}
+
+func (s *Service[T]) setActive(ctx context.Context, id int64, active bool) error {
+	if id <= 0 {
+		return ErrInvalidID
+	}
+	err := s.store.SetActive(ctx, id, active)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
+}

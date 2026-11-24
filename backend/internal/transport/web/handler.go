@@ -20,14 +20,16 @@ type WebHandler struct {
 	brandSvc    *service.Service[model.Brand]
 	taxSvc      *service.Service[model.Tax]
 	supplierSvc *service.Service[model.Supplier]
+	categorySvc *service.Service[model.Category]
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category]) *WebHandler {
 	return &WebHandler{
 		engine:      engine,
 		brandSvc:    brandSvc,
 		taxSvc:      taxSvc,
 		supplierSvc: supplierSvc,
+		categorySvc: categorySvc,
 	}
 }
 
@@ -106,6 +108,15 @@ var errorKeys = []struct {
 	{model.ErrInvalidSupplierPhone, "error.invalid_phone"},
 	{model.ErrInvalidSupplierEmail, "error.invalid_email"},
 	{model.ErrSupplierPaymentTermsTooLong, "error.payment_terms_too_long"},
+
+	{model.ErrEmptyCategoryName, "error.name_required"},
+	{model.ErrCategoryNameTooShort, "error.name_too_short"},
+	{model.ErrCategoryNameTooLong, "error.name_too_long"},
+	{model.ErrCategoryTaxRequired, "error.category_tax_required"},
+	{model.ErrInvalidCategoryParent, "error.category_parent_invalid"},
+	{store.ErrCategoryCycle, "error.category_cycle"},
+	{store.ErrCategoryHasActiveChildren, "error.category_has_active_children"},
+	{store.ErrCategoryParentInactive, "error.category_parent_inactive"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no
@@ -140,7 +151,10 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 // ve un mensaje genérico, no el detalle interno.
 func (h *WebHandler) actionError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, service.ErrInUse):
+	case errors.Is(err, service.ErrInUse),
+		// Reglas del árbol al desactivar / reactivar una categoría.
+		errors.Is(err, store.ErrCategoryHasActiveChildren),
+		errors.Is(err, store.ErrCategoryParentInactive):
 		http.Error(w, h.errMsg(r, err), http.StatusConflict)
 	case errors.Is(err, service.ErrNotFound):
 		http.Error(w, h.errMsg(r, err), http.StatusNotFound)
@@ -178,12 +192,19 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 		supplierCount = len(suppliers)
 	}
 
+	categories, err := h.categorySvc.GetAll(ctx)
+	categoryCount := 0
+	if err == nil {
+		categoryCount = len(categories)
+	}
+
 	h.render(w, r, "index.gohtml", map[string]any{
 		"Section":       "dashboard",
 		"TitleKey":      "nav.dashboard",
 		"BrandCount":    brandCount,
 		"TaxCount":      taxCount,
 		"SupplierCount": supplierCount,
+		"CategoryCount": categoryCount,
 	})
 }
 

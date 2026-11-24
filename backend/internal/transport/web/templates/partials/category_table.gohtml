@@ -1,0 +1,48 @@
+{{/* Ordenada por camino: cada subcategoría queda debajo de su padre. El
+     camino de padres va en gris y el nombre en negrita, como una ruta:
+     "Almacen › Galletitas". Filas inactivas en gris. */}}
+<table class="min-w-full text-left">
+  <thead class="border-b-2 border-line text-muted">
+    <tr>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "common.id"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "category.name_col"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "category.tax"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "common.status"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "common.actions"}}</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line">
+    {{range .Categories}}
+    <tr class="hover:bg-paper {{if not .IsActive}}text-muted{{end}}">
+      <td class="px-3 py-3 text-muted whitespace-nowrap">{{.ID}}</td>
+      <td class="px-3 py-3 min-w-48">{{if .ParentPath}}<span class="text-muted">{{.ParentPath}} › </span>{{end}}<span class="font-bold">{{.Name}}</span></td>
+      <td class="px-3 py-3 whitespace-nowrap">{{.TaxName}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">
+        <span class="inline-flex items-center gap-2">
+          <span aria-hidden="true" class="size-3 rounded-full {{if .IsActive}}bg-stock{{else}}border-2 border-muted{{end}}"></span>
+          {{if .IsActive}}{{t "common.status_active"}}{{else}}{{t "common.status_inactive"}}{{end}}
+        </span>
+      </td>
+      <td class="px-2 py-2">
+        <div class="flex flex-wrap justify-end">
+        <button hx-get="/categories/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-ink underline-offset-4 hover:underline">{{t "common.edit"}}</button>
+        {{if .IsActive}}
+        <button hx-include="[name='search']" hx-patch="/categories/{{.ID}}/deactivate" hx-confirm="{{t "category.deactivate_confirm"}}" hx-target="#categories-table" hx-swap="innerHTML"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-muted underline-offset-4 hover:underline hover:text-ink">{{t "category.deactivate"}}</button>
+        {{else}}
+        <button hx-include="[name='search']" hx-patch="/categories/{{.ID}}/reactivate" hx-target="#categories-table" hx-swap="innerHTML"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-stock underline-offset-4 hover:underline">{{t "category.activate"}}</button>
+        {{end}}
+        <button hx-include="[name='search']" hx-delete="/categories/{{.ID}}" hx-confirm="{{t "category.delete_confirm"}}" hx-target="#categories-table" hx-swap="innerHTML"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-danger underline-offset-4 hover:underline">{{t "common.delete"}}</button>
+        </div>
+      </td>
+    </tr>
+    {{else}}
+    <tr>
+      <td colspan="5" class="px-4 py-12 text-center text-muted whitespace-normal">{{t "common.no_results"}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>

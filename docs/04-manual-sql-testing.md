@@ -98,9 +98,9 @@ INSERT INTO categories (parent_id, name, tax_id) VALUES (1, 'Fiambreria', 1);
 -- 4.3 Brands
 INSERT INTO brands (name) VALUES ('Bagley'), ('Coca-Cola'), ('Sancor');
 
--- 4.4 Supplier
+-- 4.4 Supplier (CUIT stored as 11 digits with a valid check digit, like model.Supplier.Validate leaves it)
 INSERT INTO suppliers (name, tax_id_number, phone, payment_terms, is_active)
-VALUES ('Distribuidora del Sur S.A.', '20-12345678-9', '+54 11 5555-0100', 'Contado', TRUE);
+VALUES ('Distribuidora del Sur S.A.', '20123456786', '+54 11 5555-0100', 'Contado', TRUE);
 
 -- 4.5 Users (hashes are placeholders; the app seed writes real bcrypt hashes)
 INSERT INTO users (username, name, password_hash, role, is_active)

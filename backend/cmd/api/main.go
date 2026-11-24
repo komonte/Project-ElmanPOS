@@ -84,6 +84,10 @@ func main() {
 	categorySvc := service.NewService[model.Category](categoryStore, func(c *model.Category) error { return c.Validate() })
 	categoryH := transport.NewResourceHandler[model.Category](categorySvc, "category")
 
+	productStore := postgres.NewProductStore(db)
+	productSvc := service.NewService[model.Product](productStore, func(p *model.Product) error { return p.Validate() })
+	productH := transport.NewResourceHandler[model.Product](productSvc, "product")
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
 	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc)
@@ -92,7 +96,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")

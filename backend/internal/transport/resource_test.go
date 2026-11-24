@@ -315,3 +315,10 @@ func TestHandlerWithCategory(t *testing.T) {
 		ID: 1, Name: "Limpieza", TaxID: 1,
 	})
 }
+
+func TestHandlerWithProduct(t *testing.T) {
+	t.Parallel()
+	runHandlerTests[model.Product](t, "product", "/api/products", &model.Product{
+		ID: 1, SKU: "OREO-200", Name: "GALLETITAS OREO 200G", CategoryID: 1,
+	})
+}

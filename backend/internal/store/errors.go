@@ -23,8 +23,22 @@ var (
 	ErrDuplicateName  = fmt.Errorf("name %w", ErrDuplicate)
 	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
 
+	// ErrConflict es la base de los errores de "choca con cómo están los
+	// datos ahora" (ej. desactivar una categoría con hijas activas). Igual
+	// que con ErrDuplicate, el service solo pregunta por ErrConflict y la
+	// API responde 409 sin conocer cada regla.
+	ErrConflict = errors.New("conflict")
+
 	// Árbol de categorías (02 4.2).
-	ErrCategoryCycle             = errors.New("category cannot be moved under itself or one of its subcategories")
-	ErrCategoryHasActiveChildren = errors.New("category has active subcategories")
-	ErrCategoryParentInactive    = errors.New("category parent is inactive")
+	ErrCategoryCycle             = conflictError("category cannot be moved under itself or one of its subcategories")
+	ErrCategoryHasActiveChildren = conflictError("category has active subcategories")
+	ErrCategoryParentInactive    = conflictError("category parent is inactive")
 )
+
+// conflictError es un error de regla que cumple errors.Is(err, ErrConflict).
+// Con fmt.Errorf("...: %w", ErrConflict) pasaría lo mismo, pero el mensaje
+// terminaría en ": conflict". Con el método Is, el mensaje queda limpio.
+type conflictError string
+
+func (e conflictError) Error() string        { return string(e) }
+func (e conflictError) Is(target error) bool { return target == ErrConflict }

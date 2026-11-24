@@ -15,4 +15,8 @@ var (
 	// sin conocer los errores de cada model, y errors.Is sigue encontrando
 	// el error puntual (ej. model.ErrEmptyBrandName) adentro.
 	ErrValidation = errors.New("validation failed")
+
+	// ErrConflict: el pedido choca con cómo están los datos ahora (ej.
+	// desactivar una categoría que tiene subcategorías activas).
+	ErrConflict = errors.New("conflict")
 )

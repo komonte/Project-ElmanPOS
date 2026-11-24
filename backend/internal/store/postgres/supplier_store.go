@@ -12,10 +12,10 @@ import (
 var _ Store[model.Supplier] = (*SupplierStore)(nil)
 
 type SupplierStore struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewSupplierStore(db *sql.DB) *SupplierStore {
+func NewSupplierStore(db DBTX) *SupplierStore {
 	return &SupplierStore{db: db}
 }
 
@@ -27,7 +27,7 @@ func (s *SupplierStore) Create(ctx context.Context, supplier *model.Supplier) (*
 	// Los opcionales vacíos ("") se guardan como NULL.
 	// id, is_active y las fechas los pone la DB y vuelven por RETURNING.
 	q := `INSERT INTO suppliers (name, tax_id_number, phone, email, payment_terms)
-	      VALUES ($1, COALESCE($2, ''), COALESCE($3, ''), COALESCE($4, ''), COALESCE($5, ''))
+	      VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''))
 	      RETURNING id, is_active, created_at, updated_at;`
 
 	err := s.db.QueryRowContext(ctx, q, supplier.Name, supplier.TaxIDNumber, supplier.Phone, supplier.Email, supplier.PaymentTerms).Scan(&supplier.ID, &supplier.IsActive, &supplier.CreatedAt, &supplier.UpdatedAt)
@@ -187,17 +187,17 @@ func (s *SupplierStore) Update(ctx context.Context, id int64, supplier *model.Su
 		return nil, errors.New("supplier cannot be nil")
 	}
 
+	// No toca is_active: eso pasa solo por SetActive (ver BrandStore.Update).
 	q := `UPDATE suppliers
 	      SET name = $1,
 	          tax_id_number = NULLIF($2, ''),
 	          phone = NULLIF($3, ''),
 	          email = NULLIF($4, ''),
-	          payment_terms = NULLIF($5, ''),
-	          is_active = $6
-	      WHERE id = $7
+	          payment_terms = NULLIF($5, '')
+	      WHERE id = $6
 	      RETURNING id, is_active, created_at, updated_at;`
 
-	err := s.db.QueryRowContext(ctx, q, supplier.Name, supplier.TaxIDNumber, supplier.Phone, supplier.Email, supplier.PaymentTerms, supplier.IsActive, id).Scan(&supplier.ID, &supplier.IsActive, &supplier.CreatedAt, &supplier.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, q, supplier.Name, supplier.TaxIDNumber, supplier.Phone, supplier.Email, supplier.PaymentTerms, id).Scan(&supplier.ID, &supplier.IsActive, &supplier.CreatedAt, &supplier.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound

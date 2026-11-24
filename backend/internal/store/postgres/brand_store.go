@@ -13,10 +13,10 @@ import (
 var _ Store[model.Brand] = (*BrandStore)(nil)
 
 type BrandStore struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewBrandStore(db *sql.DB) *BrandStore {
+func NewBrandStore(db DBTX) *BrandStore {
 	return &BrandStore{db: db}
 }
 
@@ -152,9 +152,12 @@ func (s *BrandStore) Update(ctx context.Context, id int64, brand *model.Brand) (
 	if brand == nil {
 		return nil, errors.New("brand cannot be nil")
 	}
-	q := `UPDATE brands SET name = $1, is_active = $2 WHERE id = $3 RETURNING id, is_active, created_at, updated_at;`
+	// No toca is_active: eso pasa solo por SetActive. Si lo escribiera, un
+	// PUT de la API sin "is_active" (llega como false) desactivaría la marca.
+	// RETURNING devuelve el is_active real.
+	q := `UPDATE brands SET name = $1 WHERE id = $2 RETURNING id, is_active, created_at, updated_at;`
 
-	err := s.db.QueryRowContext(ctx, q, brand.Name, brand.IsActive, id).Scan(&brand.ID, &brand.IsActive, &brand.CreatedAt, &brand.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, q, brand.Name, id).Scan(&brand.ID, &brand.IsActive, &brand.CreatedAt, &brand.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound

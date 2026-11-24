@@ -82,6 +82,9 @@ func (s *ProductStore) Create(ctx context.Context, product *model.Product) (*mod
 	if product == nil {
 		return nil, errors.New("product cannot be nil")
 	}
+	if err := s.checkReferences(ctx, 0, product); err != nil {
+		return nil, err
+	}
 
 	// is_active y las fechas las pone la DB. Los punteros nil se guardan
 	// como NULL, y una description vacía también (NULLIF).
@@ -157,6 +160,9 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 	if product == nil {
 		return nil, errors.New("product cannot be nil")
 	}
+	if err := s.checkReferences(ctx, id, product); err != nil {
+		return nil, err
+	}
 
 	q := `UPDATE products
 	      SET sku = $1, name = $2, description = NULLIF($3, ''), brand_id = $4,
@@ -200,6 +206,46 @@ func (s *ProductStore) SetActive(ctx context.Context, id int64, active bool) err
 		return err
 	}
 	return requireOneRow(res)
+}
+
+// checkReferences frena elegir una marca, categoría o proveedor inactivo
+// (BR-06). id es el producto que se edita (0 al crear, porque todavía no
+// existe). Al editar, una referencia inactiva vale si es la que el producto
+// ya tenía: así se puede corregir un producto viejo sin moverlo de categoría.
+//
+// Cada EXISTS da TRUE solo si la referencia existe, está inactiva y no es la
+// actual. Una referencia vacía (NULL) o inexistente da FALSE: la inexistente
+// la frena después la FK, con ErrInvalidReference.
+//
+// Igual que en categorías: si alguien desactiva algo entre este chequeo y el
+// INSERT/UPDATE, se guardaría igual. Con un solo admin no es un riesgo real.
+func (s *ProductStore) checkReferences(ctx context.Context, id int64, p *model.Product) error {
+	q := `SELECT
+	          EXISTS (SELECT 1 FROM brands b
+	                  WHERE b.id = $1 AND NOT b.is_active
+	                    AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = $4 AND p.brand_id = b.id)),
+	          EXISTS (SELECT 1 FROM categories c
+	                  WHERE c.id = $2 AND NOT c.is_active
+	                    AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = $4 AND p.category_id = c.id)),
+	          EXISTS (SELECT 1 FROM suppliers s
+	                  WHERE s.id = $3 AND NOT s.is_active
+	                    AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = $4 AND p.preferred_supplier_id = s.id));`
+
+	var brandInactive, categoryInactive, supplierInactive bool
+	err := s.db.QueryRowContext(ctx, q, p.BrandID, p.CategoryID, p.PreferredSupplierID, id).
+		Scan(&brandInactive, &categoryInactive, &supplierInactive)
+	if err != nil {
+		return err
+	}
+	switch {
+	case categoryInactive:
+		return store.ErrProductCategoryInactive
+	case brandInactive:
+		return store.ErrProductBrandInactive
+	case supplierInactive:
+		return store.ErrProductSupplierInactive
+	}
+	return nil
 }
 
 // productWriteError traduce los errores de la DB al crear o editar un producto.

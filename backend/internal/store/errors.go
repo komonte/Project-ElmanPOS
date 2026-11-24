@@ -34,6 +34,12 @@ var (
 	ErrCategoryCycle             = conflictError("category cannot be moved under itself or one of its subcategories")
 	ErrCategoryHasActiveChildren = conflictError("category has active subcategories")
 	ErrCategoryParentInactive    = conflictError("category parent is inactive")
+
+	// Productos (F-01, BR-06): no se elige una marca, categoría o proveedor
+	// inactivo. Al editar, sí se puede conservar el que ya tenía.
+	ErrProductBrandInactive    = conflictError("product brand is inactive")
+	ErrProductCategoryInactive = conflictError("product category is inactive")
+	ErrProductSupplierInactive = conflictError("product preferred supplier is inactive")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

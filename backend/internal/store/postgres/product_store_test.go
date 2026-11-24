@@ -319,3 +319,127 @@ func TestProductStore_DeleteInUse(t *testing.T) {
 	}
 	wantErr(t, f.store.Delete(f.ctx, p.ID), store.ErrInUse)
 }
+
+// deactivate desactiva una fila de una tabla maestra directo en la DB, para
+// armar el caso sin depender de los otros stores.
+func (f *productFixture) deactivate(t *testing.T, table string, id int64) {
+	t.Helper()
+	_, err := f.tx.ExecContext(f.ctx, `UPDATE `+table+` SET is_active = FALSE WHERE id = $1;`, id)
+	if err != nil {
+		t.Fatalf("deactivate %s %d: %v", table, id, err)
+	}
+}
+
+// insertID corre un INSERT ... RETURNING id y devuelve el id.
+func (f *productFixture) insertID(t *testing.T, q string, args ...any) int64 {
+	t.Helper()
+	var id int64
+	if err := f.tx.QueryRowContext(f.ctx, q, args...).Scan(&id); err != nil {
+		t.Fatalf("insert %q: %v", q, err)
+	}
+	return id
+}
+
+func TestProductStore_CreateWithInactiveReference(t *testing.T) {
+	tests := []struct {
+		name    string
+		table   string
+		pick    func(f *productFixture, p *model.Product) int64 // usa la referencia y devuelve su id
+		wantErr error
+	}{
+		{
+			name:  "brand",
+			table: "brands",
+			pick: func(f *productFixture, p *model.Product) int64 {
+				p.BrandID = &f.brandID
+				return f.brandID
+			},
+			wantErr: store.ErrProductBrandInactive,
+		},
+		{
+			name:    "category",
+			table:   "categories",
+			pick:    func(f *productFixture, p *model.Product) int64 { return f.categoryID },
+			wantErr: store.ErrProductCategoryInactive,
+		},
+		{
+			name:  "supplier",
+			table: "suppliers",
+			pick: func(f *productFixture, p *model.Product) int64 {
+				p.PreferredSupplierID = &f.supplierID
+				return f.supplierID
+			},
+			wantErr: store.ErrProductSupplierInactive,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newProductFixture(t)
+			p := f.product("TEST-INACT", "REFERENCIA INACTIVA TEST")
+			f.deactivate(t, tt.table, tt.pick(f, p))
+
+			_, err := f.store.Create(f.ctx, p)
+			wantErr(t, err, tt.wantErr)
+			wantErr(t, err, store.ErrConflict) // la API lo responde como 409
+		})
+	}
+}
+
+func TestProductStore_UpdateKeepsInactiveReferences(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.product("TEST-KEEP", "CONSERVA REFERENCIAS TEST")
+	p.BrandID = &f.brandID
+	p.PreferredSupplierID = &f.supplierID
+	p, err := f.store.Create(f.ctx, p)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Se desactivan después de cargar el producto: igual se tiene que poder
+	// corregir el nombre sin cambiar de marca, categoría ni proveedor.
+	f.deactivate(t, "brands", f.brandID)
+	f.deactivate(t, "categories", f.categoryID)
+	f.deactivate(t, "suppliers", f.supplierID)
+
+	p.Name = "NOMBRE CORREGIDO TEST"
+	got, err := f.store.Update(f.ctx, p.ID, p)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.Name != "NOMBRE CORREGIDO TEST" {
+		t.Fatalf("name: got %q", got.Name)
+	}
+}
+
+func TestProductStore_UpdateToAnotherInactiveReference(t *testing.T) {
+	f := newProductFixture(t)
+	taxID := f.insertID(t, `INSERT INTO taxes (name, rate) VALUES ('IVA test product 2', 10.5) RETURNING id;`)
+	otherCategory := f.insertID(t, `INSERT INTO categories (name, tax_id) VALUES ('Otra categoria test', $1) RETURNING id;`, taxID)
+	otherBrand := f.insertID(t, `INSERT INTO brands (name) VALUES ('OTRA MARCA TEST PRODUCT') RETURNING id;`)
+	otherSupplier := f.insertID(t, `INSERT INTO suppliers (name) VALUES ('Otro proveedor test') RETURNING id;`)
+	f.deactivate(t, "categories", otherCategory)
+	f.deactivate(t, "brands", otherBrand)
+	f.deactivate(t, "suppliers", otherSupplier)
+
+	p := f.create(t, "TEST-SWITCH", "CAMBIA REFERENCIA TEST")
+
+	tests := []struct {
+		name    string
+		modify  func(p *model.Product)
+		wantErr error
+	}{
+		{"category", func(p *model.Product) { p.CategoryID = otherCategory }, store.ErrProductCategoryInactive},
+		{"brand", func(p *model.Product) { p.BrandID = &otherBrand }, store.ErrProductBrandInactive},
+		{"supplier", func(p *model.Product) { p.PreferredSupplierID = &otherSupplier }, store.ErrProductSupplierInactive},
+	}
+	for _, tt := range tests {
+		// El error sale del chequeo en Go, no de la DB: la transacción sigue
+		// sana y los casos pueden compartir el fixture.
+		t.Run(tt.name, func(t *testing.T) {
+			changed := *p
+			tt.modify(&changed)
+			_, err := f.store.Update(f.ctx, p.ID, &changed)
+			wantErr(t, err, tt.wantErr)
+		})
+	}
+}

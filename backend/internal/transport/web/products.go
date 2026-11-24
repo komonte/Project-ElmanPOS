@@ -1,12 +1,16 @@
 package web
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -148,6 +152,19 @@ func productFromForm(r *http.Request, p *model.Product) string {
 func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p *model.Product, errMsg string) {
 	ctx := r.Context()
 	data := map[string]any{"Product": p, "Error": errMsg}
+	// Alta: si vuelve con un error, conserva el código de barras escrito.
+	// Edición: los códigos van en su propia sección (product_codes.gohtml).
+	if p.ID == 0 {
+		data["Barcode"] = r.FormValue("barcode")
+	} else {
+		codes, err := h.productCodes.List(ctx, p.ID)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		data["Codes"] = codes
+	}
 
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
 	if err != nil {
@@ -199,6 +216,26 @@ func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request
 	h.renderPartial(w, r, "product_brand_options.gohtml", map[string]any{"Brands": brands, "Query": query})
 }
 
+// ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
+// que se escaneó en el alta, antes de llenar el resto. Si ya es de un
+// producto, lo dice y ofrece editarlo; si está libre, no muestra nada.
+// Es solo un aviso: al guardar se vuelve a revisar.
+func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{}
+	if raw := strings.TrimSpace(r.FormValue("barcode")); raw != "" {
+		err := h.productCodes.Check(r.Context(), raw)
+		var taken *productcodes.CodeTakenError
+		switch {
+		case errors.As(err, &taken):
+			data["OwnerID"] = taken.ProductID
+			data["Message"] = fmt.Sprintf(h.tr(r, "product.barcode_exists"), taken.ProductSKU, taken.ProductName)
+		case err != nil:
+			data["Message"] = h.errMsg(r, err)
+		}
+	}
+	h.renderPartial(w, r, "product_barcode_check.gohtml", data)
+}
+
 // ProductsList handles GET /products
 func (h *WebHandler) ProductsList(w http.ResponseWriter, r *http.Request) {
 	data, err := h.productsTableData(r)
@@ -222,7 +259,9 @@ func (h *WebHandler) ProductsNewForm(w http.ResponseWriter, r *http.Request) {
 	h.renderProductForm(w, r, &model.Product{}, "")
 }
 
-// ProductsCreate handles POST /products/new
+// ProductsCreate handles POST /products/new. El código de barras es
+// opcional: si viene, se guarda junto con el producto en una sola
+// transacción (caso de uso createproduct).
 func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 	product := &model.Product{}
 	if err := r.ParseForm(); err != nil {
@@ -234,7 +273,7 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.productSvc.Create(r.Context(), product); err != nil {
+	if _, err := h.createProduct.Create(r.Context(), product, r.FormValue("barcode")); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}
@@ -350,4 +389,55 @@ func (h *WebHandler) productsTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderPartial(w, r, "product_table.gohtml", data)
+}
+
+// renderProductCodes redibuja la sección de códigos de un producto, con un
+// error (y lo que se escribió) si la acción falló. focus vuelve a poner el
+// cursor en el campo: después de agregar, se puede escanear el siguiente.
+func (h *WebHandler) renderProductCodes(w http.ResponseWriter, r *http.Request, productID int64, errMsg, value string, focus bool) {
+	data := map[string]any{"ProductID": productID, "CodeError": errMsg, "CodeValue": value, "Focus": focus}
+	codes, err := h.productCodes.List(r.Context(), productID)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	data["Codes"] = codes
+	h.renderPartial(w, r, "product_codes.gohtml", data)
+}
+
+// ProductCodesAdd handles POST /products/{id}/codes. Se guarda al momento,
+// sin esperar al "Guardar" del producto (F-02).
+func (h *WebHandler) ProductCodesAdd(w http.ResponseWriter, r *http.Request) {
+	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	code := r.FormValue("code")
+	if _, err := h.productCodes.Add(r.Context(), productID, code); err != nil {
+		// Un producto que no existe (lo borraron con el panel abierto) no
+		// tiene sección que redibujar: va como error de acción.
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			h.actionError(w, r, err)
+			return
+		}
+		h.renderProductCodes(w, r, productID, h.errMsg(r, err), code, true)
+		return
+	}
+	h.renderProductCodes(w, r, productID, "", "", true)
+}
+
+// ProductCodesRemove handles DELETE /products/{id}/codes/{codeID}.
+func (h *WebHandler) ProductCodesRemove(w http.ResponseWriter, r *http.Request) {
+	productID, err1 := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	codeID, err2 := strconv.ParseInt(r.PathValue("codeID"), 10, 64)
+	if err1 != nil || err2 != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	if err := h.productCodes.Remove(r.Context(), productID, codeID); err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	h.renderProductCodes(w, r, productID, "", "", false)
 }

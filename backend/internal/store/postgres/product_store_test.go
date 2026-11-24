@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/lib/pq"
 	"github.com/shopspring/decimal"
 )
 
@@ -313,13 +315,53 @@ func TestProductStore_DeleteInUse(t *testing.T) {
 	f := newProductFixture(t)
 	p := f.create(t, "TEST-USE", "EN USO TEST")
 
-	// Con un código de barras cargado, el producto ya no se puede borrar.
+	// Con un precio cargado (historial), el producto ya no se puede borrar.
 	_, err := f.tx.ExecContext(f.ctx,
-		`INSERT INTO product_codes (product_id, code_type, code) VALUES ($1, 'INTERNAL', 'TESTUSE01');`, p.ID)
+		`INSERT INTO prices (product_id, unit_price, valid_from) VALUES ($1, 100, now());`, p.ID)
 	if err != nil {
-		t.Fatalf("insert code: %v", err)
+		t.Fatalf("insert price: %v", err)
 	}
 	wantErr(t, f.store.Delete(f.ctx, p.ID), store.ErrInUse)
+}
+
+// Los códigos de barra no son historial: borrar el producto se los lleva
+// (migración 0012, ON DELETE CASCADE).
+func TestProductStore_DeleteTakesItsCodes(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-CODES", "CON CODIGOS TEST")
+
+	_, err := f.tx.ExecContext(f.ctx,
+		`INSERT INTO product_codes (product_id, code_type, code)
+		 VALUES ($1, 'INTERNAL', '0000000900101'), ($1, 'INTERNAL', '0000000900102');`, p.ID)
+	if err != nil {
+		t.Fatalf("insert codes: %v", err)
+	}
+	if err := f.store.Delete(f.ctx, p.ID); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	var left int
+	err = f.tx.QueryRowContext(f.ctx, `SELECT count(*) FROM product_codes WHERE product_id = $1;`, p.ID).Scan(&left)
+	if err != nil {
+		t.Fatalf("count codes: %v", err)
+	}
+	if left != 0 {
+		t.Errorf("codes left after delete: %d, want 0", left)
+	}
+}
+
+// La DB solo acepta códigos como los guarda la app: 13 o 14 dígitos.
+func TestProductCodes_FormatCheck(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-FMT", "FORMATO TEST")
+
+	_, err := f.tx.ExecContext(f.ctx,
+		`INSERT INTO product_codes (product_id, code_type, code) VALUES ($1, 'INTERNAL', '4242');`, p.ID)
+	// 23514 = check_violation.
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) || pqErr.Code != "23514" {
+		t.Fatalf("short code: got %v, want check violation", err)
+	}
 }
 
 // deactivate desactiva una fila de una tabla maestra directo en la DB, para
@@ -642,4 +684,60 @@ func TestProductStore_ListAll(t *testing.T) {
 	if err != nil || total != 4 || len(list) != 0 {
 		t.Fatalf("limit 0: got %d rows, total %d, err %v", len(list), total, err)
 	}
+}
+
+// La búsqueda también encuentra por código de barras exacto, escrito como
+// lo lee el escáner (sin los ceros de adelante) o completo.
+func TestProductStore_SearchByBarcode(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-BC", "BUSCAR POR CODIGO TEST")
+	f.create(t, "TEST-BC-OTRO", "OTRO PRODUCTO TEST")
+	_, err := f.tx.ExecContext(f.ctx,
+		`INSERT INTO product_codes (product_id, code_type, code) VALUES ($1, 'INTERNAL', '0000009770301');`, p.ID)
+	if err != nil {
+		t.Fatalf("insert code: %v", err)
+	}
+
+	only := func(t *testing.T, got []*model.Product) {
+		t.Helper()
+		if len(got) != 1 || got[0].ID != p.ID {
+			t.Errorf("got %d products, want only %d", len(got), p.ID)
+		}
+	}
+
+	for _, q := range []string{"9770301", "0000009770301", " 9770301 "} {
+		t.Run("search "+q, func(t *testing.T) {
+			active, err := f.store.SearchByName(f.ctx, q)
+			if err != nil {
+				t.Fatalf("SearchByName: %v", err)
+			}
+			only(t, active)
+
+			all, err := f.store.SearchAllByName(f.ctx, q)
+			if err != nil {
+				t.Fatalf("SearchAllByName: %v", err)
+			}
+			only(t, all)
+
+			page, total, err := f.store.ListAll(f.ctx, q, 50)
+			if err != nil {
+				t.Fatalf("ListAll: %v", err)
+			}
+			if total != 1 {
+				t.Errorf("ListAll total: %d, want 1", total)
+			}
+			only(t, page)
+		})
+	}
+
+	// El código se busca exacto: un pedazo no lo encuentra.
+	t.Run("partial code", func(t *testing.T) {
+		_, total, err := f.store.ListAll(f.ctx, "977030", 50)
+		if err != nil {
+			t.Fatalf("ListAll: %v", err)
+		}
+		if total != 0 {
+			t.Errorf("total: %d, want 0", total)
+		}
+	})
 }

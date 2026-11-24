@@ -1,0 +1,13 @@
+{{/* Aviso al escanear en el alta (GET /products/barcode-check). Vacío si el
+     código está libre. Si ya es de un producto, ofrece editar ese en vez de
+     crear otro: así no se llena el formulario entero para nada.
+     Datos: .Message y, si el código es de alguien, .OwnerID. */}}
+{{if .Message}}
+<div role="alert" class="mt-4 p-4 bg-danger-soft border-l-8 border-danger rounded-sm flex flex-col items-start gap-3">
+  <p class="font-bold">{{.Message}}</p>
+  {{if .OwnerID}}
+  <button type="button" hx-get="/products/{{.OwnerID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
+          class="btn-secondary">{{t "product.barcode_exists_edit"}}</button>
+  {{end}}
+</div>
+{{end}}

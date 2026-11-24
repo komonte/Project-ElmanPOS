@@ -19,6 +19,8 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -88,15 +90,22 @@ func main() {
 	productSvc := service.NewService[model.Product](productStore, func(p *model.Product) error { return p.Validate() })
 	productH := transport.NewResourceHandler[model.Product](productSvc, "product")
 
+	// Casos de uso (D-02): códigos de barra (F-02).
+	productCodeStore := postgres.NewProductCodeStore(db)
+	productCodes := productcodes.New(productStore, productCodeStore)
+	productCodesH := transport.NewProductCodesHandler(productCodes)
+	// Alta de producto con código de barras opcional, en una transacción.
+	createProduct := createproduct.New(postgres.NewTxRunner(db))
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -144,12 +153,15 @@ func main() {
 	mux.HandleFunc("GET /products", webH.ProductsList)
 	mux.HandleFunc("GET /products/new", webH.ProductsNewForm)
 	mux.HandleFunc("GET /products/brand-options", webH.ProductsBrandOptions)
+	mux.HandleFunc("GET /products/barcode-check", webH.ProductsBarcodeCheck)
 	mux.HandleFunc("POST /products/new", webH.ProductsCreate)
 	mux.HandleFunc("GET /products/{id}/edit", webH.ProductsEditForm)
 	mux.HandleFunc("POST /products/{id}/edit", webH.ProductsUpdate)
 	mux.HandleFunc("DELETE /products/{id}", webH.ProductsDelete)
 	mux.HandleFunc("PATCH /products/{id}/deactivate", webH.ProductsDeactivate)
 	mux.HandleFunc("PATCH /products/{id}/reactivate", webH.ProductsReactivate)
+	mux.HandleFunc("POST /products/{id}/codes", webH.ProductCodesAdd)
+	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

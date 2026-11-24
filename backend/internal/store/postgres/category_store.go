@@ -298,7 +298,7 @@ func (s *CategoryStore) ListAll(ctx context.Context, query string, limit int) ([
 		`SELECT count(*) FROM categories c `+where+`;`,
 		categorySelect+` `+where+`
 		 ORDER BY c.is_active DESC, c.name LIMIT $2;`,
-		scanCategory, query, limit)
+		scanCategory, limit, query)
 }
 
 // categoryWriteError traduce los errores de la DB al crear o editar una categoría.

@@ -49,3 +49,19 @@ func TestRenderPartialWithoutLayout(t *testing.T) {
 		t.Error("partial rendered with layout")
 	}
 }
+
+// Cada lista arranca con el cursor en el buscador: se busca (o se escanea,
+// en productos) sin tocar el mouse.
+func TestListPagesFocusSearch(t *testing.T) {
+	e := NewTemplateEngine()
+	for _, page := range []string{"brands.gohtml", "taxes.gohtml", "suppliers.gohtml", "categories.gohtml", "products.gohtml"} {
+		var buf bytes.Buffer
+		data := map[string]any{"Lang": "es", "Section": "", "TitleKey": ""}
+		if err := e.Render(&buf, "es", page, data); err != nil {
+			t.Fatalf("%s: %v", page, err)
+		}
+		if !strings.Contains(buf.String(), `id="search" type="search" name="search" autofocus`) {
+			t.Errorf("%s: search has no autofocus", page)
+		}
+	}
+}

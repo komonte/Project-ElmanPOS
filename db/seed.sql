@@ -38,11 +38,12 @@ VALUES ('ORE-200G',  'GALLETITAS OREO 200G', 'Paquete de galletitas', 1, 2, 'UNI
        ('MORTA-KG',  'MORTADELA',            'A granel, precio por kg', 3, 3, 'KILOGRAM', 'WEIGHT',
         TRUE, 2, 10, 25.00, NULL, TRUE);                             -- P3: batch control + weight
 
--- Barcodes
+-- Barcodes: as the app stores them (model.NormalizeBarcode): digits only,
+-- left-padded to 13. EAN13 only with a valid check digit, like BarcodeType.
 INSERT INTO product_codes (product_id, code_type, code)
-VALUES (1, 'EAN13', '7790070991234'),
-       (2, 'EAN13', '7790895001619'),
-       (3, 'INTERNAL', '9000001');
+VALUES (1, 'EAN13', '7790070991232'),
+       (2, 'EAN13', '7790895001611'),
+       (3, 'INTERNAL', '0000009000001');
 
 -- Prices (per kg for P3)
 INSERT INTO prices (product_id, unit_price, valid_from)

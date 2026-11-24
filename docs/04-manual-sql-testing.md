@@ -121,9 +121,9 @@ VALUES ('ORE-200G',  'GALLETITAS OREO 200G', 'Paquete de galletitas', 1, 2, 'UNI
 
 -- 4.7 Barcodes
 INSERT INTO product_codes (product_id, code_type, code)
-VALUES (1, 'EAN13', '7790070991234'),
-       (2, 'EAN13', '7790895001619'),
-       (3, 'INTERNAL', '9000001');
+VALUES (1, 'EAN13', '7790070991232'),
+       (2, 'EAN13', '7790895001611'),
+       (3, 'INTERNAL', '0000009000001');
 
 -- 4.8 Prices (per kg for P3)
 INSERT INTO prices (product_id, unit_price, valid_from)

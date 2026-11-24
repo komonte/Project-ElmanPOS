@@ -52,6 +52,13 @@ Result with the 2026-08-12 dataset: 6,224 brands, 64,602 products (2,728 by
 weight), 67,439 barcodes (60,660 EAN13, 412 EAN8, 6,367 INTERNAL). Every row
 passes the Go `Validate()` (checked with a throwaway program).
 
+The barcode rules exist twice: in `clean_catalog.sql` and in Go
+(`model.NormalizeBarcode`, `model.BarcodeType`), which the app uses for codes
+typed or scanned later. They must stay the same. Checked on 2026-11-24 with a
+throwaway program: all 67,439 loaded codes are already normalized and get the
+same type in Go. Migration `0012` also enforces the format in the DB
+(13–14 digits), so a code the import gets wrong fails the load.
+
 ## 4. Load it
 
 On a **new** database, with all migrations and **without** `db/seed.sql`

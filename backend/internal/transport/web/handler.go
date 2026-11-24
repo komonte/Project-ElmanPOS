@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -11,6 +12,8 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -21,16 +24,22 @@ type WebHandler struct {
 	supplierSvc *service.Service[model.Supplier]
 	categorySvc *service.Service[model.Category]
 	productSvc  *service.Service[model.Product]
+
+	// Casos de uso (D-02).
+	createProduct *createproduct.Service
+	productCodes  *productcodes.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service) *WebHandler {
 	return &WebHandler{
-		engine:      engine,
-		brandSvc:    brandSvc,
-		taxSvc:      taxSvc,
-		supplierSvc: supplierSvc,
-		categorySvc: categorySvc,
-		productSvc:  productSvc,
+		engine:        engine,
+		brandSvc:      brandSvc,
+		taxSvc:        taxSvc,
+		supplierSvc:   supplierSvc,
+		categorySvc:   categorySvc,
+		productSvc:    productSvc,
+		createProduct: createProduct,
+		productCodes:  productCodes,
 	}
 }
 
@@ -93,6 +102,8 @@ var errorKeys = []struct {
 }{
 	{store.ErrDuplicateTaxID, "error.duplicate_tax_id"},
 	{store.ErrDuplicateSKU, "error.duplicate_sku"},
+	// Código repetido sin el dueño (dos altas a la vez). Con dueño, ver errMsg.
+	{store.ErrDuplicateCode, "error.barcode_duplicate"},
 	{store.ErrDuplicateName, "error.duplicate_name"},
 
 	{model.ErrEmptyBrandName, "error.name_required"},
@@ -141,12 +152,22 @@ var errorKeys = []struct {
 	{store.ErrProductCategoryInactive, "error.product_category_inactive"},
 	{store.ErrProductSupplierInactive, "error.product_supplier_inactive"},
 	{store.ErrProductHasHistory, "error.product_has_history"},
+
+	{model.ErrEmptyBarcode, "error.barcode_required"},
+	{model.ErrBarcodeNotDigits, "error.barcode_not_digits"},
+	{model.ErrBarcodeTooLong, "error.barcode_too_long"},
+	{model.ErrBarcodeAllZeros, "error.barcode_all_zeros"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no
 // está en la lista (ej. la DB caída) se loguea y se muestra uno genérico.
 func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	lang := transport.GetLocale(r.Context())
+	// El código repetido dice de qué producto es: el mensaje lleva datos.
+	var taken *productcodes.CodeTakenError
+	if errors.As(err, &taken) {
+		return fmt.Sprintf(i18n.T(lang, "error.barcode_taken"), taken.ProductSKU, taken.ProductName)
+	}
 	for _, e := range errorKeys {
 		if errors.Is(err, e.err) {
 			return i18n.T(lang, e.key)

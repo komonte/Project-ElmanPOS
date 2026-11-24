@@ -10,6 +10,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -102,6 +103,7 @@ func newTestMux() *http.ServeMux {
 		transport.NewResourceHandler[model.Supplier](service.NewService[model.Supplier](supplierStore, nil), "supplier"),
 		transport.NewResourceHandler[model.Category](service.NewService[model.Category](categoryStore, nil), "category"),
 		transport.NewResourceHandler[model.Product](service.NewService[model.Product](productStore, nil), "product"),
+		transport.NewProductCodesHandler(productcodes.New(productStore, newFakeCodes())),
 	)
 	return mux
 }
@@ -149,6 +151,16 @@ func TestAPIRoutesThroughMux(t *testing.T) {
 		{http.MethodDelete, "/api/products/1", http.StatusNoContent},
 		{http.MethodPatch, "/api/products/1", http.StatusMethodNotAllowed},
 		{http.MethodPatch, "/api/products", http.StatusMethodNotAllowed},
+
+		// Códigos de barra (fakeCodes: el producto 1 tiene el código 10).
+		{http.MethodGet, "/api/products/1/codes", http.StatusOK},
+		{http.MethodGet, "/api/products/999/codes", http.StatusNotFound},
+		{http.MethodGet, "/api/products/abc/codes", http.StatusBadRequest},
+		{http.MethodDelete, "/api/products/1/codes/10", http.StatusNoContent},
+		{http.MethodDelete, "/api/products/1/codes/999", http.StatusNotFound},
+		{http.MethodDelete, "/api/products/1/codes/abc", http.StatusBadRequest},
+		{http.MethodPut, "/api/products/1/codes", http.StatusMethodNotAllowed},
+		{http.MethodPatch, "/api/products/1/codes/10", http.StatusMethodNotAllowed},
 	}
 
 	for _, tc := range cases {

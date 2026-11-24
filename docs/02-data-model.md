@@ -161,12 +161,16 @@ Indexes: `(category_id)`, `(brand_id)`, `(is_active)`; for the large catalog (mi
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
-| product_id | BIGINT | FK → products.id, NOT NULL | |
-| code_type | product_code_type | NOT NULL | `INTERNAL` for store-printed pack/scale codes. |
-| code | VARCHAR(14) | NOT NULL, UNIQUE | EAN-13 (13), EAN-8 (8), or internal. |
+| product_id | BIGINT | FK → products.id ON DELETE CASCADE, NOT NULL | Deleting a product deletes its codes (migration `0012`): a code is not history, sales and movements point to the product. A product with history still cannot be deleted. |
+| code_type | product_code_type | NOT NULL | **Derived from the code, never chosen** (`model.BarcodeType`, see below). `INTERNAL` for store-printed pack/scale codes. |
+| code | VARCHAR(14) | NOT NULL, UNIQUE, CHECK (`code ~ '^[0-9]{13,14}$'`) | Digits only, **left-padded with zeros to 13** (14 kept for DUN-14). EAN-8 `40170725` is stored `0000040170725`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Supports **multiple barcodes per product** (manufacturer packaging changes, dual EAN-13/8).
+
+> **Normalization (`model.NormalizeBarcode`):** trim spaces (scanners append an Enter), digits only, 1–14 digits, not all zeros, left-pad to 13. A scanned code goes through the same function before any lookup, so `40170725` and `0000040170725` are the same code. The `CHECK` keeps a manual `INSERT` or a future import from storing `9000001` next to `0000009000001`, which `UNIQUE` would see as different.
+
+> **Type (`model.BarcodeType`), the same rule as `db/import/clean_catalog.sql`:** strip the leading zeros; `EAN8` if 8 digits remain and the GS1 check digit is valid; `EAN13` if 12 or more remain (UPC-A included), the check digit is valid and it does not start with `2` (scale / in-store prefix); else `INTERNAL`. Quirk kept on purpose so the catalog and the app agree: an EAN-8 or UPC-A starting with `0` loses that zero and comes out `INTERNAL`. Today the type is only a label; nothing depends on it.
 
 ### 4.6 `product_components`
 
@@ -506,7 +510,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 
 | Table | Index | Purpose |
 |---|---|---|
-| product_codes | UNIQUE(code) | O(1) barcode lookup — **NFR-01** (<100ms scan). |
+| product_codes | UNIQUE(code) | O(1) barcode lookup — **NFR-01** (<100ms scan). Also used by the product search (`p.id = (SELECT product_id ... WHERE code = $2)`, D-05). |
 | products | UNIQUE(sku) | SKU lookup. |
 | product_batches | (product_id, remaining_quantity, expiry_date) | FIFO candidate scan. |
 | stock_movements | (product_id, created_at) | Ledger per product. |

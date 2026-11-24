@@ -36,6 +36,27 @@ The generic layer covers flat CRUD only.
   simple field validation → use case
 - Use cases can orchestrate multiple stores and services
 
+**Implementation** (first use cases: barcodes, F-02):
+- One package per use case: `usecase/productcodes` (list/add/remove a
+  product's barcodes) and `usecase/createproduct` (product + optional barcode
+  in one transaction).
+- A use case declares the small interfaces it needs (`ProductGetter`,
+  `CodeStore`...) instead of taking whole stores; the postgres stores satisfy
+  them, and tests can pass a fake.
+- Errors come out as the generic service's (`service.ErrNotFound`,
+  `ErrValidation`, `ErrAlreadyExists`...), so the API and the web map them the
+  same way. An error may carry data (`productcodes.CodeTakenError` names the
+  owner product) and still match `errors.Is(err, service.ErrAlreadyExists)`.
+- **Transactions:** `postgres.TxRunner` runs a function inside one
+  transaction and rolls it back on error: `InTx(ctx, func(tx DBTX) error)`.
+  The use case builds its stores on `tx` (`NewProductStore(tx)`...), and may
+  reuse the generic service on it. `DBTxRunner` opens a real `BEGIN/COMMIT`;
+  `SavepointRunner` uses a `SAVEPOINT` inside the test transaction.
+- Inside a transaction, a failed statement aborts it (Postgres accepts no more
+  queries until `ROLLBACK`). Check what you need to report (e.g. who owns a
+  code) **before** the write that may fail; the DB constraint stays as the
+  guard for concurrent requests.
+
 ### D-03: Layers and dependencies
 
 ```
@@ -97,6 +118,12 @@ form weighed 460 KB).
 - Measured with the real catalog: product table 90 ms → 0.06 ms, search
   "queso" 81 ms → 16 ms, product form 460 KB → 8 KB, `GET /api/products`
   ~30 MB → 45 KB.
+- **Product search also matches an exact barcode** (normalized first). It is
+  written `OR p.id = (SELECT product_id FROM product_codes WHERE code = $2)`:
+  the code is `UNIQUE`, so Postgres runs the subquery once and compares an id.
+  Measured with the real catalog: no slower than without it (list ~6 ms,
+  "queso" ~19 ms from Go), a barcode ~3 ms. A correlated `EXISTS` took
+  100–400 ms. `listPage` takes the filter arguments as a list for this.
 - A new master store must implement `ListAll` (use `listPage` in `db.go`).
 - Searches shorter than 3 characters cannot use the trigram index (they scan
   the table); still a few ms at this size.

@@ -228,5 +228,5 @@ func (s *BrandStore) ListAll(ctx context.Context, query string, limit int) ([]*m
 		`SELECT count(*) FROM brands `+where+`;`,
 		`SELECT id, name, is_active, created_at, updated_at FROM brands `+where+`
 		 ORDER BY is_active DESC, name LIMIT $2;`,
-		scanBrand, query, limit)
+		scanBrand, limit, query)
 }

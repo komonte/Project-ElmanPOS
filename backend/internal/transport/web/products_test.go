@@ -2,6 +2,10 @@ package web
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
@@ -9,6 +13,9 @@ import (
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -211,11 +218,24 @@ func TestRenderProductPartials(t *testing.T) {
 				t.Errorf("missing %q", s)
 			}
 		}
+		// Al editar, los códigos de barra tienen su propia sección, fuera del
+		// <form> del producto (no puede haber un form dentro de otro).
+		if strings.Contains(html, `name="barcode"`) {
+			t.Error("edit form: has a barcode field")
+		}
+		if !strings.Contains(html, `name="name" autofocus`) {
+			t.Error("edit form: name should have the focus")
+		}
+		section := strings.Index(html, `id="product-codes"`)
+		if section < 0 || section < strings.Index(html, "</form>") {
+			t.Error("edit form: barcode section missing or inside the product form")
+		}
 	})
 
 	t.Run("new form", func(t *testing.T) {
 		var buf bytes.Buffer
-		data := map[string]any{"Product": &model.Product{}, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits}
+		data := map[string]any{"Product": &model.Product{}, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits,
+			"Barcode": "7790070991232"}
 		if err := e.Render(&buf, "en", "product_form.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
@@ -226,6 +246,18 @@ func TestRenderProductPartials(t *testing.T) {
 		// El código interno lo genera la DB: el alta no tiene ese campo.
 		if strings.Contains(html, `name="sku"`) {
 			t.Error("new form: has an sku field")
+		}
+		// El código de barras sí, y vuelve con lo escrito si hubo un error.
+		if !strings.Contains(html, `name="barcode"`) || !strings.Contains(html, `value="7790070991232"`) {
+			t.Error("new form: missing barcode field or its value")
+		}
+		// Se escanea primero: el código va antes que el nombre y tiene el foco.
+		barcode, name := strings.Index(html, `id="product-barcode"`), strings.Index(html, `id="product-name"`)
+		if barcode < 0 || barcode > name {
+			t.Error("new form: barcode is not the first field")
+		}
+		if strings.Count(html, "autofocus") != 1 || !strings.Contains(html[barcode:name], "autofocus") {
+			t.Error("new form: autofocus should be on the barcode only")
 		}
 		// Sin stock máximo el campo queda vacío, no "<nil>".
 		if !strings.Contains(html, `name="max_stock" inputmode="decimal" aria-describedby="product-max-stock-hint"
@@ -274,5 +306,131 @@ func TestRenderBrandOptions(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "No hay marcas") {
 		t.Fatalf("no results: got %s", buf.String())
+	}
+}
+
+func TestErrMsgBarcode(t *testing.T) {
+	h := &WebHandler{}
+	r := httptest.NewRequest(http.MethodPost, "/products/new", nil) // sin idioma: "en"
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"taken names the owner",
+			&productcodes.CodeTakenError{Code: "7790070991232", ProductSKU: "000123", ProductName: "SODA COLA 1.5L"},
+			"That barcode already belongs to product 000123 SODA COLA 1.5L."},
+		{"taken without owner (race)",
+			fmt.Errorf("%w: %w", service.ErrAlreadyExists, store.ErrDuplicateCode),
+			"Another product already has that barcode."},
+		{"invalid characters",
+			fmt.Errorf("%w: %w", service.ErrValidation, model.ErrBarcodeNotDigits),
+			"A barcode can only contain digits."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := h.errMsg(r, tc.err); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRenderProductCodes(t *testing.T) {
+	e := NewTemplateEngine()
+	codes := []*model.ProductCode{
+		{ID: 4, ProductID: 7, CodeType: model.CodeTypeEAN13, Code: "7790070991232"},
+		{ID: 5, ProductID: 7, CodeType: model.CodeTypeInternal, Code: "0000009000001"},
+	}
+
+	t.Run("list", func(t *testing.T) {
+		var buf bytes.Buffer
+		data := map[string]any{"ProductID": int64(7), "Codes": codes}
+		if err := e.Render(&buf, "es", "product_codes.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		for _, s := range []string{
+			"7790070991232", "EAN-13", "0000009000001", "Interno",
+			`hx-delete="/products/7/codes/4"`, `hx-post="/products/7/codes"`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
+			t.Error("plain list: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("error keeps the typed code and the focus", func(t *testing.T) {
+		var buf bytes.Buffer
+		data := map[string]any{"ProductID": int64(7), "Codes": []*model.ProductCode{},
+			"CodeError": "Ese código de barras ya es del producto 000123 X.", "CodeValue": "7790070991232", "Focus": true}
+		if err := e.Render(&buf, "es", "product_codes.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		for _, s := range []string{`role="alert"`, "ya es del producto 000123 X.", `value="7790070991232"`, "autofocus",
+			"no tiene códigos de barra"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+}
+
+// checkCodes es un store de códigos de mentira para productcodes.Service:
+// solo FindByCode importa (Check no escribe). 7790070991232 es de OREO (id 1).
+type checkCodes struct{}
+
+func (checkCodes) FindByCode(_ context.Context, code string) (*model.ProductCode, error) {
+	if code == "7790070991232" {
+		return &model.ProductCode{ID: 9, ProductID: 1, Code: code, ProductSKU: "ORE-200G", ProductName: "GALLETITAS OREO 200G"}, nil
+	}
+	return nil, store.ErrNotFound
+}
+func (checkCodes) ListByProduct(context.Context, int64) ([]*model.ProductCode, error) {
+	return nil, nil
+}
+func (checkCodes) Add(context.Context, *model.ProductCode) (*model.ProductCode, error) {
+	return nil, errors.New("not used")
+}
+func (checkCodes) Delete(context.Context, int64, int64) error { return errors.New("not used") }
+
+func TestProductsBarcodeCheck(t *testing.T) {
+	h := &WebHandler{engine: NewTemplateEngine(), productCodes: productcodes.New(nil, checkCodes{})}
+
+	cases := []struct {
+		name    string
+		barcode string
+		want    []string // vacío: la respuesta no muestra nada
+	}{
+		{"taken offers to edit the owner", "7790070991232",
+			[]string{"already belongs to product ORE-200G GALLETITAS OREO 200G", `hx-get="/products/1/edit"`}},
+		{"free shows nothing", "40170725", nil},
+		{"empty shows nothing", "  ", nil},
+		{"invalid", "77-90", []string{"A barcode can only contain digits."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/products/barcode-check?barcode="+url.QueryEscape(tc.barcode), nil)
+			rec := httptest.NewRecorder()
+			h.ProductsBarcodeCheck(rec, r)
+
+			body := rec.Body.String()
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, body)
+			}
+			if tc.want == nil && strings.Contains(body, `role="alert"`) {
+				t.Errorf("got an alert: %s", body)
+			}
+			for _, s := range tc.want {
+				if !strings.Contains(body, s) {
+					t.Errorf("missing %q in %s", s, body)
+				}
+			}
+		})
 	}
 }

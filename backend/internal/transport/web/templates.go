@@ -43,6 +43,8 @@ var partialFiles = []string{
 	"templates/partials/product_form.gohtml",
 	"templates/partials/product_brand_options.gohtml",
 	"templates/partials/product_table.gohtml",
+	"templates/partials/product_codes.gohtml",
+	"templates/partials/product_barcode_check.gohtml",
 }
 
 type TemplateEngine struct {

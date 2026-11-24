@@ -46,7 +46,7 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 	}
 	if s.validate != nil {
 		if err := s.validate(entity); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrValidation, err)
 		}
 	}
 	created, err := s.store.Create(ctx, entity)
@@ -55,6 +55,9 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 			// Se envuelven los dos: quien llama ve ErrAlreadyExists, y la web
 			// todavía puede preguntar qué se repitió (nombre, CUIT...).
 			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
+		}
+		if errors.Is(err, store.ErrConflict) {
+			return nil, fmt.Errorf("%w: %w", ErrConflict, err)
 		}
 		if errors.Is(err, store.ErrInvalidReference) {
 			// Igual que el duplicado: se conserva el error del store por si
@@ -75,7 +78,7 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 	}
 	if s.validate != nil {
 		if err := s.validate(entity); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrValidation, err)
 		}
 	}
 	updated, err := s.store.Update(ctx, id, entity)
@@ -87,6 +90,9 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 			// Se envuelven los dos: quien llama ve ErrAlreadyExists, y la web
 			// todavía puede preguntar qué se repitió (nombre, CUIT...).
 			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
+		}
+		if errors.Is(err, store.ErrConflict) {
+			return nil, fmt.Errorf("%w: %w", ErrConflict, err)
 		}
 		if errors.Is(err, store.ErrInvalidReference) {
 			// Igual que el duplicado: se conserva el error del store por si
@@ -153,6 +159,9 @@ func (s *Service[T]) setActive(ctx context.Context, id int64, active bool) error
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return ErrNotFound
+		}
+		if errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("%w: %w", ErrConflict, err)
 		}
 		return err
 	}

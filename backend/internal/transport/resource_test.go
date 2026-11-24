@@ -1,10 +1,13 @@
 package transport_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
@@ -189,6 +192,75 @@ func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 
 		if rec.Code != http.StatusConflict {
 			t.Fatalf("expected 409, got %d", rec.Code)
+		}
+	})
+
+	// Crear y editar: cada error del service tiene su código. Un error que
+	// no se reconoce (ej. la DB caída) es 500, no 400: no es culpa del pedido.
+	body, err := json.Marshal(entity)
+	if err != nil {
+		t.Fatalf("marshal entity: %v", err)
+	}
+	errBadData := errors.New("bad data")
+
+	writeCases := []struct {
+		name     string
+		validate func(*T) error
+		storeErr error
+		want     int
+	}{
+		{"success", nil, nil, 0}, // 201 al crear, 200 al editar
+		{"validation error returns 400", func(*T) error { return errBadData }, nil, http.StatusBadRequest},
+		{"invalid reference returns 400", nil, store.ErrInvalidReference, http.StatusBadRequest},
+		{"duplicate returns 409", nil, store.ErrDuplicateName, http.StatusConflict},
+		{"rule conflict returns 409", nil, store.ErrCategoryCycle, http.StatusConflict},
+		{"store failure returns 500", nil, errStore, http.StatusInternalServerError},
+	}
+	for _, method := range []string{http.MethodPost, http.MethodPut} {
+		for _, tc := range writeCases {
+			t.Run(method+" "+tc.name, func(t *testing.T) {
+				mock := &MockStore[T]{
+					createFn: func(_ context.Context, e *T) (*T, error) {
+						if tc.storeErr != nil {
+							return nil, tc.storeErr
+						}
+						return e, nil
+					},
+					updateFn: func(_ context.Context, _ int64, e *T) (*T, error) {
+						if tc.storeErr != nil {
+							return nil, tc.storeErr
+						}
+						return e, nil
+					},
+				}
+				h := transport.NewResourceHandler[T](service.NewService[T](mock, tc.validate), label)
+
+				path, want := base, tc.want
+				if method == http.MethodPut {
+					path = base + "/1"
+				}
+				if want == 0 {
+					want = map[string]int{http.MethodPost: http.StatusCreated, http.MethodPut: http.StatusOK}[method]
+				}
+
+				req := httptest.NewRequest(method, path, bytes.NewReader(body))
+				rec := httptest.NewRecorder()
+				serve(h, base, rec, req)
+
+				if rec.Code != want {
+					t.Fatalf("expected %d, got %d. Body: %s", want, rec.Code, rec.Body.String())
+				}
+			})
+		}
+	}
+
+	t.Run("validation error message says what is wrong", func(t *testing.T) {
+		h := transport.NewResourceHandler[T](service.NewService[T](&MockStore[T]{}, func(*T) error { return errBadData }), label)
+		req := httptest.NewRequest(http.MethodPost, base, bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		serve(h, base, rec, req)
+		if !strings.Contains(rec.Body.String(), "bad data") {
+			t.Fatalf("body %s does not explain the error", rec.Body.String())
 		}
 	})
 

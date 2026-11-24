@@ -139,10 +139,25 @@ func runServiceTests[T any](t *testing.T, ts *ServiceTestSuite[T]) {
 		}
 	})
 
+	// Un error de Validate() sale envuelto en ErrValidation, con el error
+	// puntual todavía adentro, y no llega al store.
+	errBadData := errors.New("bad data")
+	failValidate := func(*T) error { return errBadData }
+
 	t.Run("Create validation error", func(t *testing.T) {
-		svc := service.NewService[T](&MockStore[T]{}, ts.validate)
-		_, err := svc.Create(ctx, nil)
-		_ = err // validation returns nil error for nil
+		svc := service.NewService[T](&MockStore[T]{}, failValidate)
+		_, err := svc.Create(ctx, ts.makeEntity())
+		if !errors.Is(err, service.ErrValidation) || !errors.Is(err, errBadData) {
+			t.Fatalf("error: got %v, want ErrValidation wrapping errBadData", err)
+		}
+	})
+
+	t.Run("Update validation error", func(t *testing.T) {
+		svc := service.NewService[T](&MockStore[T]{}, failValidate)
+		_, err := svc.Update(ctx, 1, ts.makeEntity())
+		if !errors.Is(err, service.ErrValidation) || !errors.Is(err, errBadData) {
+			t.Fatalf("error: got %v, want ErrValidation wrapping errBadData", err)
+		}
 	})
 
 	t.Run("Create duplicate name", func(t *testing.T) {
@@ -591,10 +606,10 @@ func TestServiceSupplierDuplicateTaxID(t *testing.T) {
 	}
 }
 
-// Los errores del árbol de categorías no son del genérico: el service los
-// deja pasar tal cual, y la web los reconoce con errors.Is para mostrar un
-// mensaje claro (ej. "desactivá primero las subcategorías").
-func TestServiceCategoryTreeErrorsPassThrough(t *testing.T) {
+// Los errores del árbol de categorías salen como ErrConflict (la API responde
+// 409) y con el error puntual adentro, que la web reconoce con errors.Is para
+// mostrar un mensaje claro (ej. "desactivá primero las subcategorías").
+func TestServiceCategoryTreeErrorsAreConflicts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -612,13 +627,19 @@ func TestServiceCategoryTreeErrorsPassThrough(t *testing.T) {
 	svc := service.NewService[model.Category](mock, func(c *model.Category) error { return c.Validate() })
 
 	_, err := svc.Update(ctx, 1, &model.Category{Name: "Limpieza", TaxID: 1})
-	if !errors.Is(err, store.ErrCategoryCycle) {
-		t.Fatalf("update: got %v, want ErrCategoryCycle", err)
+	if !errors.Is(err, service.ErrConflict) || !errors.Is(err, store.ErrCategoryCycle) {
+		t.Fatalf("update: got %v, want ErrConflict wrapping ErrCategoryCycle", err)
 	}
-	if err := svc.Deactivate(ctx, 1); !errors.Is(err, store.ErrCategoryHasActiveChildren) {
-		t.Fatalf("deactivate: got %v, want ErrCategoryHasActiveChildren", err)
+	err = svc.Deactivate(ctx, 1)
+	if !errors.Is(err, service.ErrConflict) || !errors.Is(err, store.ErrCategoryHasActiveChildren) {
+		t.Fatalf("deactivate: got %v, want ErrConflict wrapping ErrCategoryHasActiveChildren", err)
 	}
-	if err := svc.Reactivate(ctx, 1); !errors.Is(err, store.ErrCategoryParentInactive) {
-		t.Fatalf("reactivate: got %v, want ErrCategoryParentInactive", err)
+	err = svc.Reactivate(ctx, 1)
+	if !errors.Is(err, service.ErrConflict) || !errors.Is(err, store.ErrCategoryParentInactive) {
+		t.Fatalf("reactivate: got %v, want ErrConflict wrapping ErrCategoryParentInactive", err)
+	}
+	// Una regla no se confunde con otra.
+	if errors.Is(err, store.ErrCategoryCycle) {
+		t.Fatal("ErrCategoryParentInactive matched ErrCategoryCycle")
 	}
 }

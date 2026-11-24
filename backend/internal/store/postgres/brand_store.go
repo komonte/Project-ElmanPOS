@@ -9,6 +9,9 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
 
+// Falla al compilar si BrandStore deja de cumplir la interfaz Store.
+var _ Store[model.Brand] = (*BrandStore)(nil)
+
 type BrandStore struct {
 	db *sql.DB
 }

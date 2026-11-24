@@ -21,9 +21,14 @@ coverage.out
 !.env.*.example
 
 # ---- Datos locales ----
+# Nada de datos en el repo: dumps, catálogos y CSV/ZIP del dataset SEPA viven
+# fuera (../productos_dataset). Solo se versiona el código que los procesa.
 data/
 *.dump
 *.sql.gz
+*.csv
+*.zip
+catalog_*.sql
 
 # ---- Editor y sistema operativo ----
 .vscode/

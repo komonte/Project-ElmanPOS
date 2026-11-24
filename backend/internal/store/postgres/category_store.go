@@ -222,7 +222,7 @@ func (s *CategoryStore) SetActive(ctx context.Context, id int64, active bool) er
 // checkParent revisa el padre elegido antes de guardar. id es la categoría
 // que se edita (0 al crear, porque todavía no existe).
 //   - Sin padre (raíz): no hay nada que revisar.
-//   - El padre tiene que existir y estar activo.
+//   - El padre tiene que existir, y estar activo si la categoría lo está.
 //   - Al editar, el padre no puede ser la misma categoría ni una de sus
 //     subcategorías: eso armaría un ciclo (A dentro de B, B dentro de A).
 //
@@ -244,7 +244,23 @@ func (s *CategoryStore) checkParent(ctx context.Context, id int64, parentID *int
 		return err
 	}
 	if !parentActive {
-		return store.ErrCategoryParentInactive
+		// Una categoría activa no puede colgar de un padre inactivo. Una
+		// inactiva sí (ej. corregir el nombre de una subcategoría que se
+		// desactivó junto con su padre). Al crear, la nueva siempre es activa.
+		if id == 0 {
+			return store.ErrCategoryParentInactive
+		}
+		var selfActive bool
+		err := s.db.QueryRowContext(ctx, `SELECT is_active FROM categories WHERE id = $1;`, id).Scan(&selfActive)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return store.ErrNotFound
+			}
+			return err
+		}
+		if selfActive {
+			return store.ErrCategoryParentInactive
+		}
 	}
 
 	if id == 0 {

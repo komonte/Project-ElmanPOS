@@ -295,3 +295,27 @@ func TestCategoryStore_DeleteWithChildren(t *testing.T) {
 
 	wantErr(t, f.store.Delete(f.ctx, root.ID), store.ErrInUse)
 }
+
+func TestCategoryStore_UpdateUnderInactiveParent(t *testing.T) {
+	f := newCategoryFixture(t)
+	root := f.create(t, "Limpieza test", nil)
+	child := f.create(t, "Jabones", &root.ID)
+	other := f.create(t, "Perfumeria test", nil)
+
+	// Desactivar la hija y después el padre.
+	if err := f.store.SetActive(f.ctx, child.ID, false); err != nil {
+		t.Fatalf("deactivate child: %v", err)
+	}
+	if err := f.store.SetActive(f.ctx, root.ID, false); err != nil {
+		t.Fatalf("deactivate root: %v", err)
+	}
+
+	// Una hija inactiva se puede editar aunque su padre esté inactivo.
+	if _, err := f.store.Update(f.ctx, child.ID, &model.Category{Name: "Jabones en barra", TaxID: f.taxID, ParentID: &root.ID}); err != nil {
+		t.Fatalf("update inactive child: %v", err)
+	}
+
+	// Una activa no se puede mover debajo del padre inactivo.
+	_, err := f.store.Update(f.ctx, other.ID, &model.Category{Name: "Perfumeria test", TaxID: f.taxID, ParentID: &root.ID})
+	wantErr(t, err, store.ErrCategoryParentInactive)
+}

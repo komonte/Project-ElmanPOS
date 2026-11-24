@@ -14,16 +14,18 @@ import (
 )
 
 type WebHandler struct {
-	engine   *TemplateEngine
-	brandSvc *service.Service[model.Brand]
-	taxSvc   *service.Service[model.Tax]
+	engine      *TemplateEngine
+	brandSvc    *service.Service[model.Brand]
+	taxSvc      *service.Service[model.Tax]
+	supplierSvc *service.Service[model.Supplier]
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier]) *WebHandler {
 	return &WebHandler{
-		engine:   engine,
-		brandSvc: brandSvc,
-		taxSvc:   taxSvc,
+		engine:      engine,
+		brandSvc:    brandSvc,
+		taxSvc:      taxSvc,
+		supplierSvc: supplierSvc,
 	}
 }
 
@@ -483,6 +485,200 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 	}
 	h.renderPartial(w, r, "tax_table.gohtml", map[string]any{
 		"Taxes": taxes,
+	})
+}
+
+// SuppliersList handles GET /suppliers
+func (h *WebHandler) SuppliersList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	query := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	var suppliers []*model.Supplier
+	var err error
+	if query != "" {
+		suppliers, err = h.supplierSvc.SearchAllByName(ctx, query)
+	} else {
+		suppliers, err = h.supplierSvc.GetAllIncludingInactive(ctx)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if r.Header.Get("HX-Request") != "" {
+		h.renderPartial(w, r, "supplier_table.gohtml", map[string]any{
+			"Suppliers": suppliers,
+		})
+		return
+	}
+
+	h.render(w, r, "suppliers.gohtml", map[string]any{
+		"Suppliers": suppliers,
+		"Section":   "suppliers",
+		"TitleKey":  "supplier.title",
+	})
+}
+
+// SuppliersNewForm handles GET /suppliers/new
+func (h *WebHandler) SuppliersNewForm(w http.ResponseWriter, r *http.Request) {
+	h.renderPartial(w, r, "supplier_form.gohtml", nil)
+}
+
+// supplierFromForm copia los campos del formulario a s. La limpieza
+// (espacios, CUIT sin guiones, email en minúscula) la hace Validate().
+func supplierFromForm(r *http.Request, s *model.Supplier) {
+	s.Name = r.FormValue("name")
+	s.TaxIDNumber = r.FormValue("tax_id_number")
+	s.Phone = r.FormValue("phone")
+	s.Email = r.FormValue("email")
+	s.PaymentTerms = r.FormValue("payment_terms")
+}
+
+// SuppliersCreate handles POST /suppliers/new
+func (h *WebHandler) SuppliersCreate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseForm(); err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
+		return
+	}
+
+	supplier := &model.Supplier{}
+	supplierFromForm(r, supplier)
+	if _, err := h.supplierSvc.Create(ctx, supplier); err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{
+			"Error":    h.errMsg(r, err),
+			"Supplier": supplier,
+		})
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/suppliers")
+	w.WriteHeader(http.StatusOK)
+}
+
+// SuppliersEditForm handles GET /suppliers/{id}/edit
+func (h *WebHandler) SuppliersEditForm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	supplier, err := h.supplierSvc.GetByID(ctx, id)
+	if err != nil {
+		http.Error(w, h.errMsg(r, err), http.StatusNotFound)
+		return
+	}
+
+	h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{
+		"Supplier": supplier,
+	})
+}
+
+// SuppliersUpdate handles POST /suppliers/{id}/edit
+func (h *WebHandler) SuppliersUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{"Error": h.tr(r, "error.invalid_id")})
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
+		return
+	}
+
+	// Se parte del proveedor guardado para no perder is_active.
+	supplier, err := h.supplierSvc.GetByID(ctx, id)
+	if err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{"Error": h.errMsg(r, err)})
+		return
+	}
+	supplierFromForm(r, supplier)
+
+	if _, err := h.supplierSvc.Update(ctx, id, supplier); err != nil {
+		h.renderPartial(w, r, "supplier_form.gohtml", map[string]any{
+			"Error":    h.errMsg(r, err),
+			"Supplier": supplier,
+		})
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/suppliers")
+	w.WriteHeader(http.StatusOK)
+}
+
+// SuppliersDelete handles DELETE /suppliers/{id}
+func (h *WebHandler) SuppliersDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.supplierSvc.Delete(ctx, id); err != nil {
+		switch {
+		case errors.Is(err, service.ErrInUse):
+			http.Error(w, h.errMsg(r, err), http.StatusConflict)
+		case errors.Is(err, service.ErrNotFound):
+			http.Error(w, h.errMsg(r, err), http.StatusNotFound)
+		default:
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		return
+	}
+
+	h.suppliersTable(w, r)
+}
+
+// SuppliersDeactivate handles PATCH /suppliers/{id}/deactivate
+func (h *WebHandler) SuppliersDeactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.supplierSvc.Deactivate(ctx, id); err != nil {
+		h.setActiveError(w, r, err)
+		return
+	}
+
+	h.suppliersTable(w, r)
+}
+
+// SuppliersReactivate handles PATCH /suppliers/{id}/reactivate
+func (h *WebHandler) SuppliersReactivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.supplierSvc.Reactivate(ctx, id); err != nil {
+		h.setActiveError(w, r, err)
+		return
+	}
+
+	h.suppliersTable(w, r)
+}
+
+// suppliersTable redibuja la tabla después de una acción. Incluye los
+// inactivos, igual que SuppliersList: si no, al desactivar uno desaparecería
+// de la lista y no se podría reactivar sin recargar la página.
+func (h *WebHandler) suppliersTable(w http.ResponseWriter, r *http.Request) {
+	suppliers, err := h.supplierSvc.GetAllIncludingInactive(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderPartial(w, r, "supplier_table.gohtml", map[string]any{
+		"Suppliers": suppliers,
 	})
 }
 

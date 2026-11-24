@@ -504,3 +504,38 @@ func TestServiceWithTax(t *testing.T) {
 		validate: func(t *model.Tax) error { return t.Validate() },
 	})
 }
+func TestServiceWithSupplier(t *testing.T) {
+	t.Parallel()
+
+	runServiceTests[model.Supplier](t, &ServiceTestSuite[model.Supplier]{
+		label: "supplier",
+		makeEntity: func() *model.Supplier {
+			return &model.Supplier{Name: "Arcor", TaxIDNumber: "30-50279317-5"}
+		},
+		validate: func(s *model.Supplier) error { return s.Validate() },
+	})
+}
+
+// Un CUIT repetido tiene que llegar como ErrAlreadyExists (409), igual que un
+// nombre repetido: store.ErrDuplicateTaxID envuelve a store.ErrDuplicate.
+func TestServiceSupplierDuplicateTaxID(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	mock := &MockStore[model.Supplier]{
+		createFn: func(_ context.Context, _ *model.Supplier) (*model.Supplier, error) {
+			return nil, store.ErrDuplicateTaxID
+		},
+		updateFn: func(_ context.Context, _ int64, _ *model.Supplier) (*model.Supplier, error) {
+			return nil, store.ErrDuplicateTaxID
+		},
+	}
+	svc := service.NewService[model.Supplier](mock, func(s *model.Supplier) error { return s.Validate() })
+
+	if _, err := svc.Create(ctx, &model.Supplier{Name: "Arcor"}); !errors.Is(err, service.ErrAlreadyExists) {
+		t.Errorf("Create: got %v, want ErrAlreadyExists", err)
+	}
+	if _, err := svc.Update(ctx, 1, &model.Supplier{Name: "Arcor"}); !errors.Is(err, service.ErrAlreadyExists) {
+		t.Errorf("Update: got %v, want ErrAlreadyExists", err)
+	}
+}

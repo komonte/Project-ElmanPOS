@@ -230,3 +230,9 @@ func TestHandlerWithTax(t *testing.T) {
 		ID: 1, Name: "IVA", Rate: decimal.NewFromInt(21),
 	})
 }
+func TestHandlerWithSupplier(t *testing.T) {
+	t.Parallel()
+	runHandlerTests[model.Supplier](t, "supplier", "/api/suppliers", &model.Supplier{
+		ID: 1, Name: "Arcor",
+	})
+}

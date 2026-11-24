@@ -13,6 +13,7 @@ var (
 	// Cada columna única tiene su propio error que la envuelve, así el mensaje
 	// dice qué se repitió, pero el service solo pregunta por ErrDuplicate:
 	// errors.Is(ErrDuplicateName, ErrDuplicate) == true.
-	ErrDuplicate     = errors.New("already exists")
-	ErrDuplicateName = fmt.Errorf("name %w", ErrDuplicate)
+	ErrDuplicate      = errors.New("already exists")
+	ErrDuplicateName  = fmt.Errorf("name %w", ErrDuplicate)
+	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
 )

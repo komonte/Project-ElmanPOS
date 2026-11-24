@@ -76,15 +76,19 @@ func main() {
 	taxSvc := service.NewService[model.Tax](taxStore, func(t *model.Tax) error { return t.Validate() })
 	taxH := transport.NewResourceHandler[model.Tax](taxSvc, "tax")
 
+	supplierStore := postgres.NewSupplierStore(db)
+	supplierSvc := service.NewService[model.Supplier](supplierStore, func(s *model.Supplier) error { return s.Validate() })
+	supplierH := transport.NewResourceHandler[model.Supplier](supplierSvc, "supplier")
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -111,6 +115,14 @@ func main() {
 	mux.HandleFunc("DELETE /taxes/{id}", webH.TaxesDelete)
 	mux.HandleFunc("PATCH /taxes/{id}/deactivate", webH.TaxesDeactivate)
 	mux.HandleFunc("PATCH /taxes/{id}/reactivate", webH.TaxesReactivate)
+	mux.HandleFunc("GET /suppliers", webH.SuppliersList)
+	mux.HandleFunc("GET /suppliers/new", webH.SuppliersNewForm)
+	mux.HandleFunc("POST /suppliers/new", webH.SuppliersCreate)
+	mux.HandleFunc("GET /suppliers/{id}/edit", webH.SuppliersEditForm)
+	mux.HandleFunc("POST /suppliers/{id}/edit", webH.SuppliersUpdate)
+	mux.HandleFunc("DELETE /suppliers/{id}", webH.SuppliersDelete)
+	mux.HandleFunc("PATCH /suppliers/{id}/deactivate", webH.SuppliersDeactivate)
+	mux.HandleFunc("PATCH /suppliers/{id}/reactivate", webH.SuppliersReactivate)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

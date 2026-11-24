@@ -19,6 +19,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -88,6 +89,11 @@ func main() {
 	productSvc := service.NewService[model.Product](productStore, func(p *model.Product) error { return p.Validate() })
 	productH := transport.NewResourceHandler[model.Product](productSvc, "product")
 
+	// Casos de uso (D-02): códigos de barra (F-02).
+	productCodeStore := postgres.NewProductCodeStore(db)
+	productCodes := productcodes.New(productStore, productCodeStore)
+	productCodesH := transport.NewProductCodesHandler(productCodes)
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
 	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc)
@@ -96,7 +102,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")

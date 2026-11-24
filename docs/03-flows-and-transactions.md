@@ -48,8 +48,9 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Invariants:**
   - `sku` unique (`UNIQUE(sku)`).
   - `max_stock` either `NULL` or strictly greater than `reorder_point` (`CHECK`).
-  - Brand, category, and supplier selectors only display entities where `is_active = TRUE` (**BR-06**).
+  - Brand, category, and supplier selectors only display entities where `is_active = TRUE` (**BR-06**). The server rejects choosing an inactive one too; on edit, the product may **keep** the one it already had even if it was deactivated later.
   - Once the product has any `stock_movements` or `sale_items`, the fields `sale_type`, `controls_batches`, and `measure_unit` **cannot be changed** (changing them would corrupt past valuation). Only an `ADMIN` may change them after verifying zero stock, and it must be recorded in `audit_log`.
+    - *Current implementation:* `purchase_items` and `product_batches` also count as history. The check runs inside the `UPDATE` itself (no gap between check and write). Until users and login exist, the change is **always** rejected (409); the `ADMIN` override is pending.
 - **Errors / rollback:** duplicate `sku` → reject with message; any failure → full rollback.
 - **Edge cases:**
   - Mass import (SEPA ETL): sets `reorder_point`, `margin_percent`, and category defaults in bulk; individual products are tuned later.

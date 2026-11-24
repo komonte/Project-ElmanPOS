@@ -30,6 +30,7 @@ type MockStore[T any] struct {
 	getAllIncludingInactiveFn func(ctx context.Context) ([]*T, error)
 	searchAllByNameFn         func(ctx context.Context, q string) ([]*T, error)
 	setActiveFn               func(ctx context.Context, id int64, active bool) error
+	listAllFn                 func(ctx context.Context, q string, limit int) ([]*T, int, error)
 }
 
 func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
@@ -46,6 +47,9 @@ func (m *MockStore[T]) SearchAllByName(ctx context.Context, q string) ([]*T, err
 }
 func (m *MockStore[T]) SetActive(ctx context.Context, id int64, active bool) error {
 	return m.setActiveFn(ctx, id, active)
+}
+func (m *MockStore[T]) ListAll(ctx context.Context, q string, limit int) ([]*T, int, error) {
+	return m.listAllFn(ctx, q, limit)
 }
 
 // serve routes req through a ServeMux wired with Register, the same way

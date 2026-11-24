@@ -213,3 +213,20 @@ func (s *BrandStore) SetActive(ctx context.Context, id int64, active bool) error
 
 	return nil
 }
+
+func scanBrand(row rowScanner) (*model.Brand, error) {
+	b := new(model.Brand)
+	if err := row.Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+func (s *BrandStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Brand, int, error) {
+	const where = `WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')`
+	return listPage(ctx, s.db,
+		`SELECT count(*) FROM brands `+where+`;`,
+		`SELECT id, name, is_active, created_at, updated_at FROM brands `+where+`
+		 ORDER BY is_active DESC, name LIMIT $2;`,
+		scanBrand, query, limit)
+}

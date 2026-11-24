@@ -292,6 +292,15 @@ func (s *CategoryStore) checkParent(ctx context.Context, id int64, parentID *int
 	return nil
 }
 
+func (s *CategoryStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Category, int, error) {
+	const where = `WHERE ($1 = '' OR c.name ILIKE '%' || $1 || '%')`
+	return listPage(ctx, s.db,
+		`SELECT count(*) FROM categories c `+where+`;`,
+		categorySelect+` `+where+`
+		 ORDER BY c.is_active DESC, c.name LIMIT $2;`,
+		scanCategory, query, limit)
+}
+
 // categoryWriteError traduce los errores de la DB al crear o editar una categoría.
 func categoryWriteError(err error) error {
 	switch {

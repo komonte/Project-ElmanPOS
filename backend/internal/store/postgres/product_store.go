@@ -156,6 +156,18 @@ func (s *ProductStore) SearchAllByName(ctx context.Context, query string) ([]*mo
 		LIMIT 20;`, query)
 }
 
+// ListAll busca por nombre o por sku, como SearchByName. El orden coincide
+// con el índice idx_products_admin_list, así Postgres frena en las limit
+// primeras en vez de ordenar todo el catálogo.
+func (s *ProductStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Product, int, error) {
+	const where = `WHERE ($1 = '' OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')`
+	return listPage(ctx, s.db,
+		`SELECT count(*) FROM products p `+where+`;`,
+		productSelect+` `+where+`
+		 ORDER BY p.is_active DESC, p.name, p.sku LIMIT $2;`,
+		scanProduct, query, limit)
+}
+
 // Update cambia todos los campos salvo is_active: activar y desactivar pasan
 // solo por SetActive. Así un PUT por la API sin "is_active" no desactiva.
 // Un sku vacío deja el que tenía (la pantalla de edición no lo manda).

@@ -603,3 +603,43 @@ func TestProductStore_SKUFormatGrowsPastSixDigits(t *testing.T) {
 		}
 	}
 }
+
+func TestProductStore_ListAll(t *testing.T) {
+	f := newProductFixture(t)
+	for _, sku := range []string{"ZZPAGE-1", "ZZPAGE-2", "ZZPAGE-3"} {
+		f.create(t, sku, "ZZPAGINA "+sku)
+	}
+	inactive := f.create(t, "ZZPAGE-4", "ZZPAGINA INACTIVA")
+	if err := f.store.SetActive(f.ctx, inactive.ID, false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Buscando: 4 en total (incluye la inactiva), la página trae 2, activas primero.
+	list, total, err := f.store.ListAll(f.ctx, "zzpagina", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 || len(list) != 2 || !list[0].IsActive || !list[1].IsActive {
+		t.Fatalf("got total %d, %d rows", total, len(list))
+	}
+
+	// También por sku.
+	if _, total, _ := f.store.ListAll(f.ctx, "zzpage-", 50); total != 4 {
+		t.Fatalf("by sku: got total %d, want 4", total)
+	}
+
+	// Sin búsqueda: cuenta todo el catálogo (con el seed), corta en el límite.
+	list, total, err = f.store.ListAll(f.ctx, "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total < 4 || len(list) != 2 {
+		t.Fatalf("no search: got total %d, %d rows", total, len(list))
+	}
+
+	// Límite 0: solo el total, sin filas.
+	list, total, err = f.store.ListAll(f.ctx, "zzpagina", 0)
+	if err != nil || total != 4 || len(list) != 0 {
+		t.Fatalf("limit 0: got %d rows, total %d, err %v", len(list), total, err)
+	}
+}

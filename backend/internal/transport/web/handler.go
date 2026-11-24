@@ -143,7 +143,7 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "brands.gohtml", map[string]any{
 		"Brands":   brands,
-		"Section":  "brands.gohtml",
+		"Section":  "brands",
 		"TitleKey": "brand.title",
 	})
 }
@@ -322,7 +322,7 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "taxes.gohtml", map[string]any{
 		"Taxes":    taxes,
-		"Section":  "taxes.gohtml",
+		"Section":  "taxes",
 		"TitleKey": "tax.title",
 	})
 }

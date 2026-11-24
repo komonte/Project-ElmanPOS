@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between h-16">
       <div class="flex items-center gap-8">
         <a href="/" class="text-xl font-bold text-indigo-600 tracking-tight">{{t "app.title"}}</a>
-        <div class="hidden md:flex items-center gap-1">
+        <div class="flex items-center gap-1">
           <a href="/" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "dashboard"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">
             {{t "nav.dashboard"}}
           </a>
@@ -12,6 +12,9 @@
           </a>
           <a href="/taxes" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "taxes"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">
             {{t "nav.taxes"}}
+          </a>
+          <a href="/suppliers" class="px-3 py-2 rounded-md text-sm font-medium {{if eq .Section "suppliers"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">
+            {{t "nav.suppliers"}}
           </a>
         </div>
       </div>

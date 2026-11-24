@@ -27,9 +27,10 @@ type WebHandler struct {
 
 	// Casos de uso (D-02).
 	createProduct *createproduct.Service
+	productCodes  *productcodes.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -38,6 +39,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		categorySvc:   categorySvc,
 		productSvc:    productSvc,
 		createProduct: createProduct,
+		productCodes:  productCodes,
 	}
 }
 

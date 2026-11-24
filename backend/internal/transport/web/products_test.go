@@ -216,9 +216,14 @@ func TestRenderProductPartials(t *testing.T) {
 				t.Errorf("missing %q", s)
 			}
 		}
-		// Al editar, los códigos de barra tienen su propia sección.
+		// Al editar, los códigos de barra tienen su propia sección, fuera del
+		// <form> del producto (no puede haber un form dentro de otro).
 		if strings.Contains(html, `name="barcode"`) {
 			t.Error("edit form: has a barcode field")
+		}
+		section := strings.Index(html, `id="product-codes"`)
+		if section < 0 || section < strings.Index(html, "</form>") {
+			t.Error("edit form: barcode section missing or inside the product form")
 		}
 	})
 
@@ -317,4 +322,48 @@ func TestErrMsgBarcode(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRenderProductCodes(t *testing.T) {
+	e := NewTemplateEngine()
+	codes := []*model.ProductCode{
+		{ID: 4, ProductID: 7, CodeType: model.CodeTypeEAN13, Code: "7790070991232"},
+		{ID: 5, ProductID: 7, CodeType: model.CodeTypeInternal, Code: "0000009000001"},
+	}
+
+	t.Run("list", func(t *testing.T) {
+		var buf bytes.Buffer
+		data := map[string]any{"ProductID": int64(7), "Codes": codes}
+		if err := e.Render(&buf, "es", "product_codes.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		for _, s := range []string{
+			"7790070991232", "EAN-13", "0000009000001", "Interno",
+			`hx-delete="/products/7/codes/4"`, `hx-post="/products/7/codes"`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
+			t.Error("plain list: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("error keeps the typed code and the focus", func(t *testing.T) {
+		var buf bytes.Buffer
+		data := map[string]any{"ProductID": int64(7), "Codes": []*model.ProductCode{},
+			"CodeError": "Ese código de barras ya es del producto 000123 X.", "CodeValue": "7790070991232", "Focus": true}
+		if err := e.Render(&buf, "es", "product_codes.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		for _, s := range []string{`role="alert"`, "ya es del producto 000123 X.", `value="7790070991232"`, "autofocus",
+			"no tiene códigos de barra"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
 }

@@ -1,0 +1,51 @@
+{{/* Códigos de barra de un producto (F-02), en el panel de edición. Va
+     fuera del <form> del producto (HTML no permite un form dentro de otro) y
+     cada acción guarda al momento: agregar y quitar no esperan al "Guardar"
+     del producto. Las dos devuelven esta misma sección (outerHTML).
+
+     Datos: .ProductID, .Codes, y al volver de una acción .CodeError,
+     .CodeValue (lo que se escribió, si hubo error) y .Focus (volver a poner
+     el cursor en el campo, para escanear varios seguidos). */}}
+<section id="product-codes" class="mt-5 pt-6 space-y-5" aria-labelledby="product-codes-title">
+  <div>
+    <h3 id="product-codes-title" class="font-display font-bold text-2xl">{{t "product.barcodes"}}</h3>
+    <p class="text-sm text-muted">{{t "product.barcodes_hint"}}</p>
+  </div>
+
+  {{if .CodeError}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.CodeError}}</div>
+  {{end}}
+
+  {{if .Codes}}
+  <ul class="divide-y-2 divide-line border-2 border-line rounded-md">
+    {{$productID := .ProductID}}
+    {{range .Codes}}
+    <li class="flex items-center justify-between gap-4 px-4 py-3">
+      <span>
+        <span class="font-display font-bold text-lg tabular">{{.Code}}</span>
+        <span class="text-sm text-muted"> · {{t (printf "product.code_type_%s" .CodeType)}}</span>
+      </span>
+      <button type="button" hx-delete="/products/{{$productID}}/codes/{{.ID}}"
+              hx-confirm="{{t "product.barcode_remove_confirm"}}"
+              hx-target="#product-codes" hx-swap="outerHTML"
+              class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-danger underline-offset-4 hover:underline">{{t "product.barcode_remove"}}</button>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-muted">{{t "product.barcodes_empty"}}</p>
+  {{end}}
+
+  {{/* Acá Enter sí envía: el escáner manda el código y un Enter, y eso
+       agrega el código. */}}
+  <form hx-post="/products/{{.ProductID}}/codes" hx-target="#product-codes" hx-swap="outerHTML"
+        class="flex flex-wrap items-end gap-3">
+    <div>
+      <label for="product-code-new" class="field-label">{{t "product.barcode_new"}}</label>
+      <input type="text" id="product-code-new" name="code" inputmode="numeric" autocomplete="off" maxlength="20" required
+             value="{{.CodeValue}}" {{if .Focus}}autofocus{{end}}
+             class="field max-w-60 tabular">
+    </div>
+    <button type="submit" class="btn-secondary">{{t "product.barcode_add"}}</button>
+  </form>
+</section>

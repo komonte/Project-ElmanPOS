@@ -1,12 +1,14 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/shopspring/decimal"
 )
 
@@ -149,9 +151,17 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	ctx := r.Context()
 	data := map[string]any{"Product": p, "Error": errMsg}
 	// Alta: si vuelve con un error, conserva el código de barras escrito.
-	// (Al editar, los códigos se manejan aparte, no en este formulario.)
+	// Edición: los códigos van en su propia sección (product_codes.gohtml).
 	if p.ID == 0 {
 		data["Barcode"] = r.FormValue("barcode")
+	} else {
+		codes, err := h.productCodes.List(ctx, p.ID)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		data["Codes"] = codes
 	}
 
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
@@ -357,4 +367,55 @@ func (h *WebHandler) productsTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderPartial(w, r, "product_table.gohtml", data)
+}
+
+// renderProductCodes redibuja la sección de códigos de un producto, con un
+// error (y lo que se escribió) si la acción falló. focus vuelve a poner el
+// cursor en el campo: después de agregar, se puede escanear el siguiente.
+func (h *WebHandler) renderProductCodes(w http.ResponseWriter, r *http.Request, productID int64, errMsg, value string, focus bool) {
+	data := map[string]any{"ProductID": productID, "CodeError": errMsg, "CodeValue": value, "Focus": focus}
+	codes, err := h.productCodes.List(r.Context(), productID)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	data["Codes"] = codes
+	h.renderPartial(w, r, "product_codes.gohtml", data)
+}
+
+// ProductCodesAdd handles POST /products/{id}/codes. Se guarda al momento,
+// sin esperar al "Guardar" del producto (F-02).
+func (h *WebHandler) ProductCodesAdd(w http.ResponseWriter, r *http.Request) {
+	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	code := r.FormValue("code")
+	if _, err := h.productCodes.Add(r.Context(), productID, code); err != nil {
+		// Un producto que no existe (lo borraron con el panel abierto) no
+		// tiene sección que redibujar: va como error de acción.
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			h.actionError(w, r, err)
+			return
+		}
+		h.renderProductCodes(w, r, productID, h.errMsg(r, err), code, true)
+		return
+	}
+	h.renderProductCodes(w, r, productID, "", "", true)
+}
+
+// ProductCodesRemove handles DELETE /products/{id}/codes/{codeID}.
+func (h *WebHandler) ProductCodesRemove(w http.ResponseWriter, r *http.Request) {
+	productID, err1 := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	codeID, err2 := strconv.ParseInt(r.PathValue("codeID"), 10, 64)
+	if err1 != nil || err2 != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	if err := h.productCodes.Remove(r.Context(), productID, codeID); err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	h.renderProductCodes(w, r, productID, "", "", false)
 }

@@ -22,4 +22,9 @@ var (
 	ErrDuplicate      = errors.New("already exists")
 	ErrDuplicateName  = fmt.Errorf("name %w", ErrDuplicate)
 	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
+
+	// Árbol de categorías (02 4.2).
+	ErrCategoryCycle             = errors.New("category cannot be moved under itself or one of its subcategories")
+	ErrCategoryHasActiveChildren = errors.New("category has active subcategories")
+	ErrCategoryParentInactive    = errors.New("category parent is inactive")
 )

@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,19 +74,29 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 		return i18n.T(lang, "error.not_found")
 	case errors.Is(err, service.ErrInUse):
 		return i18n.T(lang, "error.in_use")
+	case errors.Is(err, service.ErrInvalidID):
+		return i18n.T(lang, "error.invalid_id")
 	default:
 		return err.Error()
 	}
 }
 
-// setActiveError responde el error de Deactivate/Reactivate: 404 si la
-// entidad no existe, 400 para el resto (como antes).
-func (h *WebHandler) setActiveError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, service.ErrNotFound) {
+// actionError responde el error de una acción de tabla (borrar, desactivar,
+// reactivar). El layout muestra el texto de la respuesta en un aviso, así que
+// va traducido. Un error inesperado (ej. la DB caída) se loguea y el usuario
+// ve un mensaje genérico, no el detalle interno.
+func (h *WebHandler) actionError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrInUse):
+		http.Error(w, h.errMsg(r, err), http.StatusConflict)
+	case errors.Is(err, service.ErrNotFound):
 		http.Error(w, h.errMsg(r, err), http.StatusNotFound)
-		return
+	case errors.Is(err, service.ErrInvalidID):
+		http.Error(w, h.errMsg(r, err), http.StatusBadRequest)
+	default:
+		slog.Error("web action failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		http.Error(w, h.tr(r, "error.unexpected"), http.StatusInternalServerError)
 	}
-	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
 func (h *WebHandler) tr(r *http.Request, key string) string {
@@ -237,11 +248,7 @@ func (h *WebHandler) BrandsDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Delete(ctx, id); err != nil {
-		if errors.Is(err, service.ErrInUse) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -258,7 +265,7 @@ func (h *WebHandler) BrandsDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -275,7 +282,7 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -432,11 +439,7 @@ func (h *WebHandler) TaxesDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Delete(ctx, id); err != nil {
-		if errors.Is(err, service.ErrInUse) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -453,7 +456,7 @@ func (h *WebHandler) TaxesDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -470,7 +473,7 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -620,14 +623,7 @@ func (h *WebHandler) SuppliersDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.supplierSvc.Delete(ctx, id); err != nil {
-		switch {
-		case errors.Is(err, service.ErrInUse):
-			http.Error(w, h.errMsg(r, err), http.StatusConflict)
-		case errors.Is(err, service.ErrNotFound):
-			http.Error(w, h.errMsg(r, err), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -644,7 +640,7 @@ func (h *WebHandler) SuppliersDeactivate(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.supplierSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -661,7 +657,7 @@ func (h *WebHandler) SuppliersReactivate(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.supplierSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 

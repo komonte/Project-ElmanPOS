@@ -91,7 +91,9 @@
 
   "error.already_exists": "Ya existe",
   "error.not_found": "No encontrado",
-  "error.in_use": "Está siendo utilizado por otros registros",
+  "error.in_use": "No se puede eliminar porque otros registros lo usan. Podés desactivarlo.",
   "error.invalid_id": "ID inválido",
-  "error.invalid_rate": "Alícuota inválida"
+  "error.invalid_rate": "Alícuota inválida",
+  "error.unexpected": "Algo falló en el servidor. Probá de nuevo; si sigue fallando, revisá el log del servidor.",
+  "error.network": "No se pudo conectar con el servidor. Revisá que esté andando y probá de nuevo."
 }

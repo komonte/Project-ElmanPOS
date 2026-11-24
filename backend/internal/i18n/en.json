@@ -91,7 +91,9 @@
 
   "error.already_exists": "Already exists",
   "error.not_found": "Not found",
-  "error.in_use": "In use by other records",
+  "error.in_use": "Can't delete it because other records use it. You can deactivate it instead.",
   "error.invalid_id": "Invalid ID",
-  "error.invalid_rate": "Invalid rate"
+  "error.invalid_rate": "Invalid rate",
+  "error.unexpected": "Something went wrong on the server. Try again; if it keeps failing, check the server log.",
+  "error.network": "Could not reach the server. Check that it is running and try again."
 }

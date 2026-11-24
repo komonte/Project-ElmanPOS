@@ -1,11 +1,108 @@
 @import "tailwindcss";
 
-/* Foco visible para quien navega con teclado (botones y links de las tablas
-   no tenían ningún indicador). Solo con :focus-visible, así el click con
-   mouse no deja el contorno marcado. */
+/* ---- Fuentes (servidas desde /static/fonts, funcionan sin internet) ----
+   Atkinson Hyperlegible: texto. Diseñada para que letras parecidas
+   (1 l I, 0 O, rn m) no se confundan: importa en códigos, CUIT y precios.
+   Barlow Condensed: títulos y números, el estilo de los carteles de góndola. */
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-weight: 600;
+  font-display: swap;
+  src: url("/static/fonts/barlow-condensed-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/barlow-condensed-latin-700-normal.woff2") format("woff2");
+}
+
+/* ---- Tokens ----
+   Una sola cosa llamativa: el amarillo de los carteles de góndola. Se usa en
+   el título de cada sección (como el cartel del pasillo), en el link activo
+   del menú y en el foco. Los botones son de tinta. El rojo queda para borrar
+   y para errores. */
+@theme {
+  --font-sans: "Atkinson Hyperlegible", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", ui-sans-serif, sans-serif;
+
+  --color-ink: #1e2a44;     /* texto: tinta de birome */
+  --color-muted: #566079;   /* texto secundario (5.9:1 sobre papel) */
+  --color-paper: #f6f7f4;   /* fondo */
+  --color-surface: #ffffff; /* tablas y paneles */
+  --color-line: #d9dcd3;    /* bordes */
+  --color-tag: #ffcc00;     /* amarillo góndola */
+  --color-tag-deep: #e6b800;
+  --color-stock: #2e7d32;   /* activo */
+  --color-danger: #c62828;  /* borrar, errores */
+  --color-danger-soft: #fdecea;
+}
+
 @layer base {
+  /* Letra más grande que el default (16px): 1rem = 18px en toda la app. */
+  html {
+    font-size: 112.5%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+  }
+
+  /* Foco visible para teclado: contorno de tinta con halo amarillo,
+     se ve tanto sobre blanco como sobre el amarillo de los botones. */
   :focus-visible {
-    outline: 2px solid var(--color-indigo-600);
+    outline: 3px solid var(--color-ink);
     outline-offset: 2px;
+    box-shadow: 0 0 0 6px var(--color-tag);
+  }
+
+  /* Números alineados en columnas (ID, CUIT, alícuotas). */
+  td, .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-md bg-ink text-white font-bold
+           border-2 border-ink hover:bg-ink/85;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center px-4 py-2 rounded-md bg-surface text-ink font-bold
+           border-2 border-line hover:border-ink;
+  }
+  .field {
+    @apply w-full px-3 py-2 rounded-md bg-surface text-ink border-2 border-line
+           placeholder:text-muted/70 focus:border-ink focus:outline-none;
+  }
+  .field-label {
+    @apply block font-bold mb-1;
+  }
+  .field-hint {
+    @apply block text-sm text-muted mt-1;
+  }
+  /* Título de sección: un cartel amarillo de góndola. */
+  .shelf-title {
+    @apply inline-block bg-tag text-ink font-display font-bold uppercase
+           text-4xl leading-none tracking-wide px-4 pt-2 pb-1.5 rounded-sm
+           border-b-4 border-ink;
   }
 }

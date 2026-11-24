@@ -58,6 +58,17 @@ func NewTemplateEngine() *TemplateEngine {
 			"t": func(key string) string {
 				return i18n.T(lang, key)
 			},
+			// dict arma un map para pasarle varios valores a un template
+			// interno: (dict "Href" "/brands" "Count" 3).
+			"dict": func(kv ...any) map[string]any {
+				m := make(map[string]any, len(kv)/2)
+				for i := 0; i+1 < len(kv); i += 2 {
+					if k, ok := kv[i].(string); ok {
+						m[k] = kv[i+1]
+					}
+				}
+				return m
+			},
 			"formatTime": func(t string) string {
 				if t == "" {
 					return "-"

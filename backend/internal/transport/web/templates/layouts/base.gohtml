@@ -4,14 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{t "app.title"}}{{if .TitleKey}} - {{t .TitleKey}}{{end}}</title>
+  <link rel="preload" href="/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/output.css">
   <script src="/static/js/htmx.min.js" defer></script>
 </head>
-<body class="bg-gray-50 min-h-screen flex flex-col">
+<body class="min-h-screen md:flex">
   {{template "nav.gohtml" .}}
 
-  <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
-    {{template "content" .}}
+  <main class="flex-1 min-w-0 px-4 py-6 sm:px-8 md:py-10">
+    <div class="max-w-6xl">
+      {{template "content" .}}
+    </div>
   </main>
 
   {{/* Aviso para errores de acciones htmx (borrar, desactivar...). htmx no
@@ -19,10 +23,10 @@
        no hacer nada. El texto lo manda el servidor, ya traducido. */}}
   <div id="toast" role="alert" hidden
        data-network-error="{{t "error.network"}}"
-       class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] p-4 pr-10 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 shadow-lg">
-    <span id="toast-text"></span>
+       class="fixed bottom-4 right-4 left-4 sm:left-auto z-50 sm:max-w-md p-4 pr-12 bg-danger-soft text-ink border-l-8 border-danger rounded-md shadow-[0_6px_24px_rgb(30_42_68/0.25)]">
+    <span id="toast-text" class="font-bold"></span>
     <button type="button" aria-label="{{t "common.close"}}" onclick="this.parentElement.hidden = true"
-            class="absolute top-2 right-3 text-red-400 hover:text-red-600 text-lg leading-none">&times;</button>
+            class="absolute top-2 right-3 text-2xl leading-none text-danger hover:text-ink">&times;</button>
   </div>
   <script>
     // Los formularios se abren en #form-modal; vaciarlo lo cierra.
@@ -54,8 +58,5 @@
     })();
   </script>
 
-  <footer class="text-center text-xs text-gray-400 py-4 border-t">
-    {{t "app.title"}} v0.1.0
-  </footer>
 </body>
 </html>

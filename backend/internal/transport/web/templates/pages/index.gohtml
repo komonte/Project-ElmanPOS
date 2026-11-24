@@ -1,34 +1,25 @@
 {{define "content"}}
-<div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">{{t "dashboard.welcome"}}</h1>
-    <p class="text-gray-500 mt-1">{{t "app.tagline"}}</p>
-  </div>
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "nav.dashboard"}}</h1>
+  <p class="mt-4 text-lg text-muted">{{t "app.tagline"}}</p>
+</header>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_brands"}}</p>
-          <p class="text-3xl font-bold text-gray-900 mt-1">{{.BrandCount}}</p>
-        </div>
-        <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center"></div>
-      </div>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-sm font-medium text-gray-500">{{t "dashboard.total_taxes"}}</p>
-          <p class="text-3xl font-bold text-gray-900 mt-1">{{.TaxCount}}</p>
-        </div>
-        <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center"></div>
-      </div>
-    </div>
-  </div>
+<section aria-labelledby="catalog-heading" class="max-w-2xl">
+  <h2 id="catalog-heading" class="font-display font-bold text-3xl leading-none">{{t "nav.group_catalog"}}</h2>
+  <p class="mt-1 mb-3 text-muted">{{t "dashboard.active_counts"}}</p>
+  <ul class="bg-surface border-2 border-line rounded-md divide-y-2 divide-line">
+    {{template "dashboard-row" (dict "Href" "/brands" "Label" (t "nav.brands") "Count" .BrandCount)}}
+    {{template "dashboard-row" (dict "Href" "/taxes" "Label" (t "nav.taxes") "Count" .TaxCount)}}
+    {{template "dashboard-row" (dict "Href" "/suppliers" "Label" (t "nav.suppliers") "Count" .SupplierCount)}}
+  </ul>
+</section>
+{{end}}
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-    <h2 class="text-lg font-semibold text-gray-900 mb-4">{{t "dashboard.recent_activity"}}</h2>
-    <p class="text-gray-500 text-sm">{{t "common.no_results"}}</p>
-  </div>
-</div>
+{{define "dashboard-row"}}
+<li>
+  <a href="{{.Href}}" class="flex items-center justify-between gap-4 px-5 py-4 hover:bg-paper">
+    <span class="text-lg font-bold">{{.Label}}</span>
+    <span class="font-display font-bold text-4xl leading-none tabular">{{.Count}}</span>
+  </a>
+</li>
 {{end}}

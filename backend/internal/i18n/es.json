@@ -12,7 +12,7 @@
   "nav.suppliers": "Proveedores",
   "nav.settings": "Configuración",
 
-  "common.search": "Buscar...",
+  "common.search": "Buscar por nombre",
   "common.save": "Guardar",
   "common.cancel": "Cancelar",
   "common.delete": "Eliminar",
@@ -22,7 +22,7 @@
   "common.confirm": "Confirmar",
   "common.close": "Cerrar",
   "common.loading": "Cargando...",
-  "common.no_results": "Sin resultados",
+  "common.no_results": "No hay nada acá. Probá con otra búsqueda o cargá uno nuevo con el botón de arriba.",
   "common.actions": "Acciones",
   "common.name": "Nombre",
   "common.description": "Descripción",
@@ -104,5 +104,12 @@
   "error.invalid_tax_id": "Revisá el CUIT: tiene que tener 11 dígitos y el dígito verificador correcto (ej. 20-12345678-6).",
   "error.invalid_phone": "Revisá el teléfono: al menos 8 dígitos; se permiten espacios, guiones, paréntesis y un + al principio.",
   "error.invalid_email": "Revisá el email: tiene que tener la forma nombre@dominio.com.",
-  "error.payment_terms_too_long": "Las condiciones de pago pueden tener hasta 120 caracteres."
+  "error.payment_terms_too_long": "Las condiciones de pago pueden tener hasta 120 caracteres.",
+  "nav.group_catalog": "Catálogo",
+  "common.required": "(obligatorio)",
+  "dashboard.active_counts": "Registros activos en cada lista.",
+  "brand.name_hint": "Se guarda en mayúsculas.",
+  "supplier.tax_id_hint": "11 dígitos, con o sin guiones.",
+  "supplier.payment_terms_short": "Pago",
+  "supplier.contact": "Contacto"
 }

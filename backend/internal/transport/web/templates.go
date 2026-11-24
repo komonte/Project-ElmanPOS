@@ -26,10 +26,13 @@ func NewTemplateEngine() *TemplateEngine {
 		"templates/pages/index.gohtml",
 		"templates/pages/brands.gohtml",
 		"templates/pages/taxes.gohtml",
+		"templates/pages/suppliers.gohtml",
 		"templates/partials/brand_form.gohtml",
 		"templates/partials/tax_form.gohtml",
 		"templates/partials/brand_table.gohtml",
 		"templates/partials/tax_table.gohtml",
+		"templates/partials/supplier_form.gohtml",
+		"templates/partials/supplier_table.gohtml",
 	}
 
 	for _, lang := range langs {

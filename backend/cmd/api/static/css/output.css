@@ -346,6 +346,9 @@
   .overflow-hidden {
     overflow: hidden;
   }
+  .overflow-x-auto {
+    overflow-x: auto;
+  }
   .rounded-full {
     border-radius: calc(infinity * 1px);
   }

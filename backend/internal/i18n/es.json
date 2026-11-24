@@ -95,5 +95,14 @@
   "error.invalid_id": "ID inválido",
   "error.invalid_rate": "Alícuota inválida",
   "error.unexpected": "Algo falló en el servidor. Probá de nuevo; si sigue fallando, revisá el log del servidor.",
-  "error.network": "No se pudo conectar con el servidor. Revisá que esté andando y probá de nuevo."
+  "error.network": "No se pudo conectar con el servidor. Revisá que esté andando y probá de nuevo.",
+  "error.duplicate_name": "Ya hay uno con ese nombre.",
+  "error.duplicate_tax_id": "Ese CUIT ya lo tiene otro proveedor.",
+  "error.name_required": "Ingresá un nombre.",
+  "error.name_too_short": "El nombre tiene que tener al menos 2 caracteres.",
+  "error.name_too_long": "El nombre es demasiado largo.",
+  "error.invalid_tax_id": "Revisá el CUIT: tiene que tener 11 dígitos y el dígito verificador correcto (ej. 20-12345678-6).",
+  "error.invalid_phone": "Revisá el teléfono: al menos 8 dígitos; se permiten espacios, guiones, paréntesis y un + al principio.",
+  "error.invalid_email": "Revisá el email: tiene que tener la forma nombre@dominio.com.",
+  "error.payment_terms_too_long": "Las condiciones de pago pueden tener hasta 120 caracteres."
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
@@ -51,7 +52,9 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 	created, err := s.store.Create(ctx, entity)
 	if err != nil {
 		if errors.Is(err, store.ErrDuplicate) {
-			return nil, ErrAlreadyExists
+			// Se envuelven los dos: quien llama ve ErrAlreadyExists, y la web
+			// todavía puede preguntar qué se repitió (nombre, CUIT...).
+			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
 		}
 		return nil, err
 	}
@@ -76,7 +79,9 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 			return nil, ErrNotFound
 		}
 		if errors.Is(err, store.ErrDuplicate) {
-			return nil, ErrAlreadyExists
+			// Se envuelven los dos: quien llama ve ErrAlreadyExists, y la web
+			// todavía puede preguntar qué se repitió (nombre, CUIT...).
+			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
 		}
 		return nil, err
 	}

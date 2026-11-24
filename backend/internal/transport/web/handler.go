@@ -10,6 +10,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/shopspring/decimal"
 )
@@ -79,8 +80,43 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	}
 }
 
+// errorKeys traduce errores conocidos a claves de i18n. Se revisan en orden,
+// así que los más específicos van primero: un CUIT repetido también es
+// ErrAlreadyExists, pero el mensaje útil es el del CUIT.
+var errorKeys = []struct {
+	err error
+	key string
+}{
+	{store.ErrDuplicateTaxID, "error.duplicate_tax_id"},
+	{store.ErrDuplicateName, "error.duplicate_name"},
+
+	{model.ErrEmptyBrandName, "error.name_required"},
+	{model.ErrBrandNameTooShort, "error.name_too_short"},
+	{model.ErrBrandNameTooLong, "error.name_too_long"},
+
+	{model.ErrEmptyTaxName, "error.name_required"},
+	{model.ErrTaxNameTooShort, "error.name_too_short"},
+	{model.ErrTaxNameTooLong, "error.name_too_long"},
+	{model.ErrInvalidRate, "error.invalid_rate"},
+
+	{model.ErrEmptySupplierName, "error.name_required"},
+	{model.ErrSupplierNameTooShort, "error.name_too_short"},
+	{model.ErrSupplierNameTooLong, "error.name_too_long"},
+	{model.ErrInvalidSupplierTaxID, "error.invalid_tax_id"},
+	{model.ErrInvalidSupplierPhone, "error.invalid_phone"},
+	{model.ErrInvalidSupplierEmail, "error.invalid_email"},
+	{model.ErrSupplierPaymentTermsTooLong, "error.payment_terms_too_long"},
+}
+
+// errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no
+// está en la lista (ej. la DB caída) se loguea y se muestra uno genérico.
 func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	lang := transport.GetLocale(r.Context())
+	for _, e := range errorKeys {
+		if errors.Is(err, e.err) {
+			return i18n.T(lang, e.key)
+		}
+	}
 	switch {
 	case errors.Is(err, service.ErrAlreadyExists):
 		return i18n.T(lang, "error.already_exists")
@@ -91,7 +127,8 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	case errors.Is(err, service.ErrInvalidID):
 		return i18n.T(lang, "error.invalid_id")
 	default:
-		return err.Error()
+		slog.Error("web request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		return i18n.T(lang, "error.unexpected")
 	}
 }
 

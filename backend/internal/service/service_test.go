@@ -550,6 +550,18 @@ func TestServiceWithSupplier(t *testing.T) {
 	})
 }
 
+func TestServiceWithCategory(t *testing.T) {
+	t.Parallel()
+
+	runServiceTests[model.Category](t, &ServiceTestSuite[model.Category]{
+		label: "category",
+		makeEntity: func() *model.Category {
+			return &model.Category{Name: "Limpieza", TaxID: 1}
+		},
+		validate: func(c *model.Category) error { return c.Validate() },
+	})
+}
+
 // Un CUIT repetido tiene que llegar como ErrAlreadyExists (409), igual que un
 // nombre repetido: store.ErrDuplicateTaxID envuelve a store.ErrDuplicate.
 func TestServiceSupplierDuplicateTaxID(t *testing.T) {
@@ -576,5 +588,37 @@ func TestServiceSupplierDuplicateTaxID(t *testing.T) {
 	}
 	if _, err := svc.Update(ctx, 1, &model.Supplier{Name: "Arcor"}); !errors.Is(err, service.ErrAlreadyExists) {
 		t.Errorf("Update: got %v, want ErrAlreadyExists", err)
+	}
+}
+
+// Los errores del árbol de categorías no son del genérico: el service los
+// deja pasar tal cual, y la web los reconoce con errors.Is para mostrar un
+// mensaje claro (ej. "desactivá primero las subcategorías").
+func TestServiceCategoryTreeErrorsPassThrough(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	mock := &MockStore[model.Category]{
+		updateFn: func(_ context.Context, _ int64, _ *model.Category) (*model.Category, error) {
+			return nil, store.ErrCategoryCycle
+		},
+		setActiveFn: func(_ context.Context, _ int64, active bool) error {
+			if active {
+				return store.ErrCategoryParentInactive
+			}
+			return store.ErrCategoryHasActiveChildren
+		},
+	}
+	svc := service.NewService[model.Category](mock, func(c *model.Category) error { return c.Validate() })
+
+	_, err := svc.Update(ctx, 1, &model.Category{Name: "Limpieza", TaxID: 1})
+	if !errors.Is(err, store.ErrCategoryCycle) {
+		t.Fatalf("update: got %v, want ErrCategoryCycle", err)
+	}
+	if err := svc.Deactivate(ctx, 1); !errors.Is(err, store.ErrCategoryHasActiveChildren) {
+		t.Fatalf("deactivate: got %v, want ErrCategoryHasActiveChildren", err)
+	}
+	if err := svc.Reactivate(ctx, 1); !errors.Is(err, store.ErrCategoryParentInactive) {
+		t.Fatalf("reactivate: got %v, want ErrCategoryParentInactive", err)
 	}
 }

@@ -22,6 +22,7 @@ var (
 	ErrDuplicate      = errors.New("already exists")
 	ErrDuplicateName  = fmt.Errorf("name %w", ErrDuplicate)
 	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
+	ErrDuplicateSKU   = fmt.Errorf("sku %w", ErrDuplicate)
 
 	// ErrConflict es la base de los errores de "choca con cómo están los
 	// datos ahora" (ej. desactivar una categoría con hijas activas). Igual

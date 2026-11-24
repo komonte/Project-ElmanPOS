@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/shopspring/decimal"
 )
@@ -27,6 +29,20 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		taxSvc:      taxSvc,
 		supplierSvc: supplierSvc,
 	}
+}
+
+// adminList es lo que muestran las tablas de admin: activos e inactivos,
+// filtrados por la búsqueda si hay una. La usan la carga de la página y las
+// acciones de la tabla (borrar, desactivar, reactivar), que mandan la búsqueda
+// actual con hx-include. Así, después de una acción la tabla no pierde el
+// filtro ni esconde lo que se acaba de desactivar.
+// FormValue lee tanto la query (GET, DELETE) como el cuerpo (PATCH).
+func adminList[T any](r *http.Request, svc *service.Service[T]) ([]*T, error) {
+	query := strings.TrimSpace(r.FormValue("search"))
+	if query == "" {
+		return svc.GetAllIncludingInactive(r.Context())
+	}
+	return svc.SearchAllByName(r.Context(), query)
 }
 
 func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
@@ -64,8 +80,43 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	}
 }
 
+// errorKeys traduce errores conocidos a claves de i18n. Se revisan en orden,
+// así que los más específicos van primero: un CUIT repetido también es
+// ErrAlreadyExists, pero el mensaje útil es el del CUIT.
+var errorKeys = []struct {
+	err error
+	key string
+}{
+	{store.ErrDuplicateTaxID, "error.duplicate_tax_id"},
+	{store.ErrDuplicateName, "error.duplicate_name"},
+
+	{model.ErrEmptyBrandName, "error.name_required"},
+	{model.ErrBrandNameTooShort, "error.name_too_short"},
+	{model.ErrBrandNameTooLong, "error.name_too_long"},
+
+	{model.ErrEmptyTaxName, "error.name_required"},
+	{model.ErrTaxNameTooShort, "error.name_too_short"},
+	{model.ErrTaxNameTooLong, "error.name_too_long"},
+	{model.ErrInvalidRate, "error.invalid_rate"},
+
+	{model.ErrEmptySupplierName, "error.name_required"},
+	{model.ErrSupplierNameTooShort, "error.name_too_short"},
+	{model.ErrSupplierNameTooLong, "error.name_too_long"},
+	{model.ErrInvalidSupplierTaxID, "error.invalid_tax_id"},
+	{model.ErrInvalidSupplierPhone, "error.invalid_phone"},
+	{model.ErrInvalidSupplierEmail, "error.invalid_email"},
+	{model.ErrSupplierPaymentTermsTooLong, "error.payment_terms_too_long"},
+}
+
+// errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no
+// está en la lista (ej. la DB caída) se loguea y se muestra uno genérico.
 func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	lang := transport.GetLocale(r.Context())
+	for _, e := range errorKeys {
+		if errors.Is(err, e.err) {
+			return i18n.T(lang, e.key)
+		}
+	}
 	switch {
 	case errors.Is(err, service.ErrAlreadyExists):
 		return i18n.T(lang, "error.already_exists")
@@ -73,19 +124,30 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 		return i18n.T(lang, "error.not_found")
 	case errors.Is(err, service.ErrInUse):
 		return i18n.T(lang, "error.in_use")
+	case errors.Is(err, service.ErrInvalidID):
+		return i18n.T(lang, "error.invalid_id")
 	default:
-		return err.Error()
+		slog.Error("web request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		return i18n.T(lang, "error.unexpected")
 	}
 }
 
-// setActiveError responde el error de Deactivate/Reactivate: 404 si la
-// entidad no existe, 400 para el resto (como antes).
-func (h *WebHandler) setActiveError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, service.ErrNotFound) {
+// actionError responde el error de una acción de tabla (borrar, desactivar,
+// reactivar). El layout muestra el texto de la respuesta en un aviso, así que
+// va traducido. Un error inesperado (ej. la DB caída) se loguea y el usuario
+// ve un mensaje genérico, no el detalle interno.
+func (h *WebHandler) actionError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrInUse):
+		http.Error(w, h.errMsg(r, err), http.StatusConflict)
+	case errors.Is(err, service.ErrNotFound):
 		http.Error(w, h.errMsg(r, err), http.StatusNotFound)
-		return
+	case errors.Is(err, service.ErrInvalidID):
+		http.Error(w, h.errMsg(r, err), http.StatusBadRequest)
+	default:
+		slog.Error("web action failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		http.Error(w, h.tr(r, "error.unexpected"), http.StatusInternalServerError)
 	}
-	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
 func (h *WebHandler) tr(r *http.Request, key string) string {
@@ -118,16 +180,7 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 // BrandsList handles GET /brands
 func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var brands []*model.Brand
-	var err error
-	if query != "" {
-		brands, err = h.brandSvc.SearchAllByName(ctx, query)
-	} else {
-		brands, err = h.brandSvc.GetAllIncludingInactive(ctx)
-	}
+	brands, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -143,7 +196,7 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "brands.gohtml", map[string]any{
 		"Brands":   brands,
-		"Section":  "brands.gohtml",
+		"Section":  "brands",
 		"TitleKey": "brand.title",
 	})
 }
@@ -237,11 +290,7 @@ func (h *WebHandler) BrandsDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Delete(ctx, id); err != nil {
-		if errors.Is(err, service.ErrInUse) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -258,7 +307,7 @@ func (h *WebHandler) BrandsDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -275,7 +324,7 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.brandSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -283,7 +332,7 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
-	brands, err := h.brandSvc.GetAll(r.Context())
+	brands, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -297,16 +346,7 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 
 // TaxesList handles GET /taxes
 func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var taxes []*model.Tax
-	var err error
-	if query != "" {
-		taxes, err = h.taxSvc.SearchAllByName(ctx, query)
-	} else {
-		taxes, err = h.taxSvc.GetAllIncludingInactive(ctx)
-	}
+	taxes, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -322,7 +362,7 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, r, "taxes.gohtml", map[string]any{
 		"Taxes":    taxes,
-		"Section":  "taxes.gohtml",
+		"Section":  "taxes",
 		"TitleKey": "tax.title",
 	})
 }
@@ -432,11 +472,7 @@ func (h *WebHandler) TaxesDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Delete(ctx, id); err != nil {
-		if errors.Is(err, service.ErrInUse) {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -453,7 +489,7 @@ func (h *WebHandler) TaxesDeactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -470,7 +506,7 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.taxSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -478,7 +514,7 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
-	taxes, err := h.taxSvc.GetAll(r.Context())
+	taxes, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -490,16 +526,7 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 
 // SuppliersList handles GET /suppliers
 func (h *WebHandler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var suppliers []*model.Supplier
-	var err error
-	if query != "" {
-		suppliers, err = h.supplierSvc.SearchAllByName(ctx, query)
-	} else {
-		suppliers, err = h.supplierSvc.GetAllIncludingInactive(ctx)
-	}
+	suppliers, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -620,14 +647,7 @@ func (h *WebHandler) SuppliersDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.supplierSvc.Delete(ctx, id); err != nil {
-		switch {
-		case errors.Is(err, service.ErrInUse):
-			http.Error(w, h.errMsg(r, err), http.StatusConflict)
-		case errors.Is(err, service.ErrNotFound):
-			http.Error(w, h.errMsg(r, err), http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		}
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -644,7 +664,7 @@ func (h *WebHandler) SuppliersDeactivate(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.supplierSvc.Deactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
@@ -661,18 +681,16 @@ func (h *WebHandler) SuppliersReactivate(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := h.supplierSvc.Reactivate(ctx, id); err != nil {
-		h.setActiveError(w, r, err)
+		h.actionError(w, r, err)
 		return
 	}
 
 	h.suppliersTable(w, r)
 }
 
-// suppliersTable redibuja la tabla después de una acción. Incluye los
-// inactivos, igual que SuppliersList: si no, al desactivar uno desaparecería
-// de la lista y no se podría reactivar sin recargar la página.
+// suppliersTable redibuja la tabla después de una acción (ver adminList).
 func (h *WebHandler) suppliersTable(w http.ResponseWriter, r *http.Request) {
-	suppliers, err := h.supplierSvc.GetAllIncludingInactive(r.Context())
+	suppliers, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

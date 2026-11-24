@@ -532,8 +532,13 @@ func TestServiceSupplierDuplicateTaxID(t *testing.T) {
 	}
 	svc := service.NewService[model.Supplier](mock, func(s *model.Supplier) error { return s.Validate() })
 
-	if _, err := svc.Create(ctx, &model.Supplier{Name: "Arcor"}); !errors.Is(err, service.ErrAlreadyExists) {
+	_, err := svc.Create(ctx, &model.Supplier{Name: "Arcor"})
+	if !errors.Is(err, service.ErrAlreadyExists) {
 		t.Errorf("Create: got %v, want ErrAlreadyExists", err)
+	}
+	// La web usa esto para decir "ese CUIT ya está cargado" y no solo "ya existe".
+	if !errors.Is(err, store.ErrDuplicateTaxID) {
+		t.Errorf("Create: got %v, want it to keep ErrDuplicateTaxID", err)
 	}
 	if _, err := svc.Update(ctx, 1, &model.Supplier{Name: "Arcor"}); !errors.Is(err, service.ErrAlreadyExists) {
 		t.Errorf("Update: got %v, want ErrAlreadyExists", err)

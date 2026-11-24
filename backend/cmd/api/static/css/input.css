@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+/* Foco visible para quien navega con teclado (botones y links de las tablas
+   no tenían ningún indicador). Solo con :focus-visible, así el click con
+   mouse no deja el contorno marcado. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-indigo-600);
+    outline-offset: 2px;
+  }
+}

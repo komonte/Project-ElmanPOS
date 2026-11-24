@@ -91,7 +91,18 @@
 
   "error.already_exists": "Already exists",
   "error.not_found": "Not found",
-  "error.in_use": "In use by other records",
+  "error.in_use": "Can't delete it because other records use it. You can deactivate it instead.",
   "error.invalid_id": "Invalid ID",
-  "error.invalid_rate": "Invalid rate"
+  "error.invalid_rate": "Invalid rate",
+  "error.unexpected": "Something went wrong on the server. Try again; if it keeps failing, check the server log.",
+  "error.network": "Could not reach the server. Check that it is running and try again.",
+  "error.duplicate_name": "There is already one with that name.",
+  "error.duplicate_tax_id": "That CUIT is already used by another supplier.",
+  "error.name_required": "Enter a name.",
+  "error.name_too_short": "The name must have at least 2 characters.",
+  "error.name_too_long": "The name is too long.",
+  "error.invalid_tax_id": "Check the CUIT: it must have 11 digits and a valid check digit (e.g. 20-12345678-6).",
+  "error.invalid_phone": "Check the phone: use at least 8 digits; spaces, dashes, parentheses and a leading + are allowed.",
+  "error.invalid_email": "Check the email: it must look like name@domain.com.",
+  "error.payment_terms_too_long": "Payment terms can have up to 120 characters."
 }

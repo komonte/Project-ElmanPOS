@@ -11,28 +11,46 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 )
 
-//go:embed templates/pages/*.gohtml templates/partials/*.gohtml
+//go:embed templates/layouts/*.gohtml templates/pages/*.gohtml templates/partials/*.gohtml
 var templateFS embed.FS
 
+const layoutFile = "templates/layouts/base.gohtml"
+
+// pageFiles son las páginas completas. Cada una define el bloque "content"
+// que base.gohtml dibuja dentro del layout.
+var pageFiles = []string{
+	"templates/pages/index.gohtml",
+	"templates/pages/brands.gohtml",
+	"templates/pages/taxes.gohtml",
+	"templates/pages/suppliers.gohtml",
+}
+
+// partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
+// y que las páginas también incluyen.
+var partialFiles = []string{
+	"templates/partials/nav.gohtml",
+	"templates/partials/brand_form.gohtml",
+	"templates/partials/brand_table.gohtml",
+	"templates/partials/tax_form.gohtml",
+	"templates/partials/tax_table.gohtml",
+	"templates/partials/supplier_form.gohtml",
+	"templates/partials/supplier_table.gohtml",
+}
+
 type TemplateEngine struct {
-	templates map[string]*template.Template
+	// pages[lang]["brands.gohtml"] = layout + parciales + esa página.
+	// Cada página tiene su propio conjunto porque todas definen "content":
+	// en un conjunto compartido la última pisaría a las demás.
+	pages map[string]map[string]*template.Template
+	// partials[lang] = solo los parciales, para las respuestas de htmx.
+	partials map[string]*template.Template
 }
 
 func NewTemplateEngine() *TemplateEngine {
 	langs := i18n.SupportedLanguages()
-	templates := make(map[string]*template.Template, len(langs))
-
-	fileNames := []string{
-		"templates/pages/index.gohtml",
-		"templates/pages/brands.gohtml",
-		"templates/pages/taxes.gohtml",
-		"templates/pages/suppliers.gohtml",
-		"templates/partials/brand_form.gohtml",
-		"templates/partials/tax_form.gohtml",
-		"templates/partials/brand_table.gohtml",
-		"templates/partials/tax_table.gohtml",
-		"templates/partials/supplier_form.gohtml",
-		"templates/partials/supplier_table.gohtml",
+	e := &TemplateEngine{
+		pages:    make(map[string]map[string]*template.Template, len(langs)),
+		partials: make(map[string]*template.Template, len(langs)),
 	}
 
 	for _, lang := range langs {
@@ -48,27 +66,40 @@ func NewTemplateEngine() *TemplateEngine {
 			},
 		}
 
-		tmpl := template.New("").Funcs(funcMap)
-		result, err := tmpl.ParseFS(templateFS, fileNames...)
+		base, err := template.New("").Funcs(funcMap).ParseFS(templateFS, partialFiles...)
 		if err != nil {
-			slog.Error("ParseFS failed", "error", err)
+			slog.Error("ParseFS partials failed", "lang", lang, "error", err)
 			continue
 		}
-		tmpl = result
+		e.partials[lang] = base
 
-		templates[lang] = tmpl
+		e.pages[lang] = make(map[string]*template.Template, len(pageFiles))
+		for _, page := range pageFiles {
+			set, err := template.Must(base.Clone()).ParseFS(templateFS, layoutFile, page)
+			if err != nil {
+				slog.Error("ParseFS page failed", "lang", lang, "page", page, "error", err)
+				continue
+			}
+			name := page[strings.LastIndex(page, "/")+1:]
+			e.pages[lang][name] = set
+		}
 	}
 
-	return &TemplateEngine{templates: templates}
+	return e
 }
 
+// Render dibuja una página completa (con layout) si name es una página,
+// o el parcial suelto si no.
 func (e *TemplateEngine) Render(w io.Writer, lang, name string, data map[string]any) error {
-	tmpl, ok := e.templates[lang]
-	if !ok {
-		tmpl, ok = e.templates["en"]
+	if _, ok := e.partials[lang]; !ok {
+		lang = "en"
 	}
-	if !ok {
-		return errors.New("no template engine for lang: " + lang)
+	if page, ok := e.pages[lang][name]; ok {
+		return page.ExecuteTemplate(w, "base.gohtml", data)
 	}
-	return tmpl.ExecuteTemplate(w, name, data)
+	partials, ok := e.partials[lang]
+	if !ok {
+		return errors.New("no templates for lang: " + lang)
+	}
+	return partials.ExecuteTemplate(w, name, data)
 }

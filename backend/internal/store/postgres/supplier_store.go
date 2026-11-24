@@ -9,6 +9,8 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
 
+var _ Store[model.Supplier] = (*SupplierStore)(nil)
+
 type SupplierStore struct {
 	db *sql.DB
 }

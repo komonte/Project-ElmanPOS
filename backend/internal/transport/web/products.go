@@ -113,7 +113,9 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	// La marca se elige con un buscador: brand_q es el texto escrito y
 	// brand_id la que se eligió de la lista. Si hay texto pero no se eligió
 	// ninguna, se avisa en vez de guardar el producto sin marca sin querer.
-	brandTyped := strings.TrimSpace(r.FormValue("brand_q")) != ""
+	// brand_new es una marca a crear (solo en el alta): también vale.
+	brandTyped := strings.TrimSpace(r.FormValue("brand_q")) != "" &&
+		strings.TrimSpace(r.FormValue("brand_new")) == ""
 	p.PreferredSupplierID = optionalID(r.FormValue("preferred_supplier_id"))
 	p.SaleType = model.SaleType(r.FormValue("sale_type"))
 	p.MeasureUnit = model.MeasureUnit(r.FormValue("measure_unit"))
@@ -157,6 +159,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	// Edición: los códigos van en su propia sección (product_codes.gohtml).
 	if p.ID == 0 {
 		data["Barcode"] = r.FormValue("barcode")
+		data["BrandNew"] = r.FormValue("brand_new")
 	} else {
 		codes, err := h.productCodes.List(ctx, p.ID)
 		if err != nil {
@@ -207,6 +210,9 @@ func (h *WebHandler) productsTableData(r *http.Request) (map[string]any, error) 
 // ProductsBrandOptions handles GET /products/brand-options: las marcas
 // activas que coinciden con lo escrito en el buscador del formulario (hasta
 // 20, ver SearchByName). Elegir una inactiva no se ofrece.
+//
+// En el alta (?new=1) también ofrece crear la marca escrita, si no está
+// exacta en la lista (ver newBrandOption).
 func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.FormValue("brand_q"))
 	brands, err := h.brandSvc.SearchByName(r.Context(), query)
@@ -214,7 +220,28 @@ func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request
 		h.actionError(w, r, err)
 		return
 	}
-	h.renderPartial(w, r, "product_brand_options.gohtml", map[string]any{"Brands": brands, "Query": query})
+	data := map[string]any{"Brands": brands, "Query": query}
+	if r.FormValue("new") == "1" {
+		data["NewBrand"] = newBrandOption(query, brands)
+	}
+	h.renderPartial(w, r, "product_brand_options.gohtml", data)
+}
+
+// newBrandOption es el nombre que se ofrece crear ("" si no se ofrece):
+// lo escrito, normalizado como se guarda una marca, si es un nombre válido y
+// no está exacto entre las encontradas. Las parecidas se muestran arriba, así
+// se ve "COCA-COLA" antes de crear "COCA COLA".
+func newBrandOption(query string, found []*model.Brand) string {
+	b := &model.Brand{Name: query}
+	if err := b.Validate(); err != nil {
+		return ""
+	}
+	for _, f := range found {
+		if f.Name == b.Name {
+			return ""
+		}
+	}
+	return b.Name
 }
 
 // ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
@@ -274,7 +301,11 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{Product: product, Barcode: r.FormValue("barcode")}); err != nil {
+	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{
+		Product:  product,
+		Barcode:  r.FormValue("barcode"),
+		NewBrand: r.FormValue("brand_new"),
+	}); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}

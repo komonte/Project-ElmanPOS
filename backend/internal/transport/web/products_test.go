@@ -15,6 +15,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -287,6 +288,69 @@ func TestProductFromFormBrandTypedButNotPicked(t *testing.T) {
 	if key, p := post("name=AB&category_id=3&brand_q=&brand_id="); key != "" || p.BrandID != nil {
 		t.Fatalf("empty: got %q %v", key, p.BrandID)
 	}
+	// Eligió "Crear marca": no hay id, pero hay marca nueva. Vale.
+	if key, p := post("name=AB&category_id=3&brand_q=NUEVA&brand_id=&brand_new=NUEVA"); key != "" || p.BrandID != nil {
+		t.Fatalf("new brand: got %q %v", key, p.BrandID)
+	}
+}
+
+func TestNewBrandOption(t *testing.T) {
+	found := []*model.Brand{{ID: 1, Name: "COCA-COLA"}, {ID: 2, Name: "ARCOR"}}
+	cases := []struct{ query, want string }{
+		{"  coca   cola ", "COCA COLA"}, // parecida a COCA-COLA, pero no igual: se ofrece
+		{"arcor", ""},                   // ya está en la lista: no se ofrece
+		{"a", ""},                       // nombre muy corto: no es una marca válida
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := newBrandOption(tc.query, found); got != tc.want {
+			t.Errorf("newBrandOption(%q) = %q, want %q", tc.query, got, tc.want)
+		}
+	}
+}
+
+func TestRenderBrandOptionsCreate(t *testing.T) {
+	e := NewTemplateEngine()
+	var buf bytes.Buffer
+	data := map[string]any{"Brands": []*model.Brand{{ID: 1, Name: "COCA-COLA"}}, "Query": "coca cola", "NewBrand": "COCA COLA"}
+	if err := e.Render(&buf, "es", "product_brand_options.gohtml", data); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	existing, create := strings.Index(html, "COCA-COLA"), strings.Index(html, "Crear marca «COCA COLA»")
+	if existing < 0 || create < 0 || create < existing {
+		t.Errorf("want the similar brand first and then the create option, got %s", html)
+	}
+	if strings.Contains(html, "No hay marcas") {
+		t.Error("not-found notice shown with results")
+	}
+}
+
+func TestRenderProductFormBrandNew(t *testing.T) {
+	e := NewTemplateEngine()
+	base := func(p *model.Product, brandNew string) string {
+		var buf bytes.Buffer
+		data := map[string]any{"Product": p, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits, "BrandNew": brandNew}
+		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	// Alta que vuelve con un error: la marca nueva sigue elegida y avisada.
+	html := base(&model.Product{}, "MARCA NUEVA")
+	for _, s := range []string{`name="brand_new" value="MARCA NUEVA"`, `name="brand_q"`, `value="MARCA NUEVA"`,
+		`hx-get="/products/brand-options?new=1"`, `id="product-brand-new" class="mt-1 text-sm font-bold text-tag" >`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("new form: missing %q", s)
+		}
+	}
+
+	// Edición: no se ofrece crear marcas, y el aviso está oculto.
+	html = base(&model.Product{ID: 7, Name: "X"}, "")
+	if strings.Contains(html, "?new=1") || !strings.Contains(html, `text-tag" hidden>`) {
+		t.Error("edit form: offers to create brands or shows the new-brand note")
+	}
 }
 
 func TestRenderBrandOptions(t *testing.T) {
@@ -324,6 +388,9 @@ func TestErrMsgBarcode(t *testing.T) {
 		{"taken without owner (race)",
 			fmt.Errorf("%w: %w", service.ErrAlreadyExists, store.ErrDuplicateCode),
 			"Another product already has that barcode."},
+		{"new brand that exists inactive",
+			&createproduct.BrandInactiveError{Name: "ARCOR"},
+			"Brand ARCOR already exists, but it is inactive. Activate it in Brands or choose another one."},
 		{"invalid characters",
 			fmt.Errorf("%w: %w", service.ErrValidation, model.ErrBarcodeNotDigits),
 			"A barcode can only contain digits."},

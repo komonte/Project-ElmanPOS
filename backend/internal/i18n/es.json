@@ -214,6 +214,7 @@
   "error.product_max_stock": "El stock máximo tiene que ser un número mayor que el mínimo, con hasta 3 decimales. Dejalo vacío si no hay tope.",
   "error.product_margin": "El margen tiene que ser un número desde 0 y menor que 100, con hasta 2 decimales.",
   "error.product_brand_inactive": "La marca elegida está desactivada. Elegí otra o activala primero.",
+  "error.brand_exists_inactive": "Ya existe la marca %s, pero está desactivada. Activala en Marcas o elegí otra.",
   "error.product_category_inactive": "La categoría elegida está desactivada. Elegí otra o activala primero.",
   "error.product_supplier_inactive": "El proveedor elegido está desactivado. Elegí otro o activalo primero.",
   "error.product_has_history": "Este producto ya tiene movimientos de stock, ventas o compras: no se puede cambiar cómo se vende, su unidad ni el control de lotes.",
@@ -221,5 +222,7 @@
   "product.brand_hint": "Escribí parte del nombre y elegila de la lista. Dejalo vacío si no tiene marca.",
   "product.brand_inactive_hint": "Esta marca está desactivada. Podés dejarla o buscar otra.",
   "product.brand_not_found": "No hay marcas activas con ese nombre.",
+  "product.brand_create": "Crear marca «%s»",
+  "product.brand_new_note": "Marca nueva: se va a crear al guardar el producto.",
   "error.product_brand_pick": "Elegí la marca de la lista que aparece al escribir, o borrá el texto si no tiene marca."
 }

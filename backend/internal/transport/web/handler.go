@@ -168,6 +168,10 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	if errors.As(err, &taken) {
 		return fmt.Sprintf(i18n.T(lang, "error.barcode_taken"), taken.ProductSKU, taken.ProductName)
 	}
+	var brandInactive *createproduct.BrandInactiveError
+	if errors.As(err, &brandInactive) {
+		return fmt.Sprintf(i18n.T(lang, "error.brand_exists_inactive"), brandInactive.Name)
+	}
 	for _, e := range errorKeys {
 		if errors.Is(err, e.err) {
 			return i18n.T(lang, e.key)

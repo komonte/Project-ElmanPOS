@@ -104,14 +104,17 @@ Semantics:
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
-| parent_id | BIGINT | FK → categories.id, NULL | Tree hierarchy (self-reference). NULL = root. |
+| parent_id | BIGINT | FK → categories.id, NULL, CHECK (parent_id <> id) | Tree hierarchy (self-reference). NULL = root. |
 | name | VARCHAR(120) | NOT NULL | e.g. `Almacén` → `Galletitas` |
-| tax_id | BIGINT | FK → taxes.id, NOT NULL | Default IVA rate inherited by products in this category. |
+| tax_id | BIGINT | FK → taxes.id, NOT NULL | IVA rate inherited by products in this category (its own, not the parent's). When creating a subcategory, the UI pre-fills the parent's rate. |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| (index) | | UNIQUE INDEX `idx_categories_parent_name_unique_lower` on `(parent_id, LOWER(name)) NULLS NOT DISTINCT` | Case-insensitive name, unique among siblings (root categories included). |
 
 Index: `(parent_id)`.
+
+> **Tree integrity:** longer cycles (A → B → A) cannot be expressed as a `CHECK`; the application rejects them on update. A category cannot be deactivated while it has active children, nor reactivated while its parent is inactive.
 
 ### 4.3 `brands`
 

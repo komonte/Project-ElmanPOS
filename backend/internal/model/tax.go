@@ -38,7 +38,8 @@ func (t *Tax) Validate() error {
 	if t == nil {
 		return ErrNilTax
 	}
-	t.Name = strings.TrimSpace(t.Name)
+	// "  IVA   21% " -> "IVA 21%"
+	t.Name = strings.Join(strings.Fields(t.Name), " ")
 	if t.Name == "" {
 		return ErrEmptyTaxName
 	}

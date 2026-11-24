@@ -35,7 +35,9 @@ func (b *Brand) Validate() error {
 	}
 
 
-	b.Name = strings.ToUpper(strings.TrimSpace(b.Name))
+	// "  coca   cola " -> "COCA COLA": sin espacios de más, así no se cuela
+	// la misma marca escrita con dos espacios.
+	b.Name = strings.ToUpper(strings.Join(strings.Fields(b.Name), " "))
 	if b.Name == "" {
 		return ErrEmptyBrandName
 	}

@@ -21,7 +21,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
 )
 
-//go:embed static/css/* static/js/*
+//go:embed static/css/* static/js/* static/fonts/*
 var staticFS embed.FS
 
 func getEnv(key, fallback string) string {

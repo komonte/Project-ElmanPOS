@@ -141,7 +141,7 @@
   "product.search": "Buscar por nombre o código",
   "product.list_truncated": "Se muestran los primeros %d de %d productos. Buscá por nombre o código para encontrar el resto.",
   "product.sku": "Código interno",
-  "product.sku_hint": "El código propio del almacén (no el de barras). No se puede repetir. Se guarda en mayúsculas.",
+  "product.sku_hint": "Lo pone el sistema al dar de alta el producto. No es el código de barras.",
   "product.name": "Nombre del producto",
   "product.name_col": "Producto",
   "product.group_identity": "Qué es",

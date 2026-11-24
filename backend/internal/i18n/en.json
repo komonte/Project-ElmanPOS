@@ -141,7 +141,7 @@
   "product.search": "Search by name or code",
   "product.list_truncated": "Showing the first %d of %d products. Search by name or code to find the rest.",
   "product.sku": "Internal code",
-  "product.sku_hint": "The store's own code (not the barcode). Must be unique. Saved in uppercase.",
+  "product.sku_hint": "Set by the system when the product is created. It is not the barcode.",
   "product.name": "Product name",
   "product.name_col": "Product",
   "product.group_identity": "What it is",

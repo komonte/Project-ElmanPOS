@@ -219,7 +219,7 @@ func TestRenderProductPartials(t *testing.T) {
 		}
 		html := buf.String()
 		for _, s := range []string{
-			`hx-post="/products/7/edit"`, `value="MORTA-KG"`, `value="2.5"`, `value="10"`,
+			`hx-post="/products/7/edit"`, `>MORTA-KG</p>`, `value="2.5"`, `value="10"`,
 			`<option value="WEIGHT" selected>`, `<option value="KILOGRAM" selected>`,
 		} {
 			if !strings.Contains(html, s) {
@@ -237,6 +237,10 @@ func TestRenderProductPartials(t *testing.T) {
 		html := buf.String()
 		if !strings.Contains(html, `hx-post="/products/new"`) || strings.Contains(html, "COMPOSITE") {
 			t.Error("new form: wrong action or offers COMPOSITE")
+		}
+		// El código interno lo genera la DB: el alta no tiene ese campo.
+		if strings.Contains(html, `name="sku"`) {
+			t.Error("new form: has an sku field")
 		}
 		// Sin stock máximo el campo queda vacío, no "<nil>".
 		if !strings.Contains(html, `name="max_stock" inputmode="decimal" aria-describedby="product-max-stock-hint"

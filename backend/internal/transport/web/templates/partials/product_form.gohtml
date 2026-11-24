@@ -19,15 +19,19 @@
 
         <fieldset class="space-y-5">
           <legend class="font-display font-bold text-2xl mb-3">{{t "product.group_identity"}}</legend>
+          {{/* El código interno lo genera la DB al crear (no hay campo). Al
+               editar se muestra como texto: el formulario no lo manda y el
+               store conserva el que tiene. */}}
+          {{if .Product.ID}}
           <div>
-            <label for="product-sku" class="field-label">{{t "product.sku"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <input type="text" id="product-sku" name="sku" autofocus required maxlength="40" aria-describedby="product-sku-hint"
-                   value="{{.Product.SKU}}" class="field max-w-60 uppercase">
-            <span id="product-sku-hint" class="field-hint">{{t "product.sku_hint"}}</span>
+            <span class="field-label">{{t "product.sku"}}</span>
+            <p class="font-display font-bold text-2xl leading-none tabular">{{.Product.SKU}}</p>
+            <span class="field-hint">{{t "product.sku_hint"}}</span>
           </div>
+          {{end}}
           <div>
             <label for="product-name" class="field-label">{{t "product.name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <input type="text" id="product-name" name="name" required maxlength="200"
+            <input type="text" id="product-name" name="name" autofocus required maxlength="200"
                    value="{{.Product.Name}}" class="field uppercase">
           </div>
           <div>

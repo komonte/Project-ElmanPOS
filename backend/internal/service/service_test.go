@@ -158,6 +158,23 @@ func runServiceTests[T any](t *testing.T, ts *ServiceTestSuite[T]) {
 		}
 	})
 
+	t.Run("Create invalid reference", func(t *testing.T) {
+		mock := &MockStore[T]{
+			createFn: func(_ context.Context, _ *T) (*T, error) {
+				return nil, store.ErrInvalidReference
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		_, err := svc.Create(ctx, ts.makeEntity())
+		if !errors.Is(err, service.ErrInvalidReference) {
+			t.Fatalf("error: got %v, want ErrInvalidReference", err)
+		}
+		// El error del store sigue adentro, para quien necesite el detalle.
+		if !errors.Is(err, store.ErrInvalidReference) {
+			t.Fatalf("error: got %v, want it to wrap store.ErrInvalidReference", err)
+		}
+	})
+
 	t.Run("Create store failure", func(t *testing.T) {
 		mock := &MockStore[T]{
 			createFn: func(_ context.Context, _ *T) (*T, error) {
@@ -219,6 +236,23 @@ func runServiceTests[T any](t *testing.T, ts *ServiceTestSuite[T]) {
 		_, err := svc.Update(ctx, 1, ts.makeEntity())
 		if !errors.Is(err, service.ErrAlreadyExists) {
 			t.Fatalf("error: got %v, want ErrAlreadyExists", err)
+		}
+	})
+
+	t.Run("Update invalid reference", func(t *testing.T) {
+		mock := &MockStore[T]{
+			updateFn: func(_ context.Context, _ int64, _ *T) (*T, error) {
+				return nil, store.ErrInvalidReference
+			},
+		}
+		svc := service.NewService[T](mock, nil)
+		_, err := svc.Update(ctx, 1, ts.makeEntity())
+		if !errors.Is(err, service.ErrInvalidReference) {
+			t.Fatalf("error: got %v, want ErrInvalidReference", err)
+		}
+		// El error del store sigue adentro, para quien necesite el detalle.
+		if !errors.Is(err, store.ErrInvalidReference) {
+			t.Fatalf("error: got %v, want it to wrap store.ErrInvalidReference", err)
 		}
 	})
 

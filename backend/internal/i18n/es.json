@@ -92,6 +92,7 @@
   "error.already_exists": "Ya existe",
   "error.not_found": "No encontrado",
   "error.in_use": "No se puede eliminar porque otros registros lo usan. Podés desactivarlo.",
+  "error.invalid_reference": "Uno de los datos elegidos ya no existe (quizás lo borraron). Recargá la página y elegilo de nuevo.",
   "error.invalid_id": "ID inválido",
   "error.invalid_rate": "Alícuota inválida",
   "error.unexpected": "Algo falló en el servidor. Probá de nuevo; si sigue fallando, revisá el log del servidor.",

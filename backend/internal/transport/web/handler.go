@@ -124,6 +124,8 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 		return i18n.T(lang, "error.not_found")
 	case errors.Is(err, service.ErrInUse):
 		return i18n.T(lang, "error.in_use")
+	case errors.Is(err, service.ErrInvalidReference):
+		return i18n.T(lang, "error.invalid_reference")
 	case errors.Is(err, service.ErrInvalidID):
 		return i18n.T(lang, "error.invalid_id")
 	default:

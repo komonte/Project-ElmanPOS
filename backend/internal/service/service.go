@@ -56,6 +56,11 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 			// todavía puede preguntar qué se repitió (nombre, CUIT...).
 			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
 		}
+		if errors.Is(err, store.ErrInvalidReference) {
+			// Igual que el duplicado: se conserva el error del store por si
+			// algún día dice cuál referencia falló (padre, impuesto...).
+			return nil, fmt.Errorf("%w: %w", ErrInvalidReference, err)
+		}
 		return nil, err
 	}
 	return created, nil
@@ -82,6 +87,11 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 			// Se envuelven los dos: quien llama ve ErrAlreadyExists, y la web
 			// todavía puede preguntar qué se repitió (nombre, CUIT...).
 			return nil, fmt.Errorf("%w: %w", ErrAlreadyExists, err)
+		}
+		if errors.Is(err, store.ErrInvalidReference) {
+			// Igual que el duplicado: se conserva el error del store por si
+			// algún día dice cuál referencia falló (padre, impuesto...).
+			return nil, fmt.Errorf("%w: %w", ErrInvalidReference, err)
 		}
 		return nil, err
 	}

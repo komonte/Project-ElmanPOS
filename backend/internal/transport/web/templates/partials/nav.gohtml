@@ -1,28 +1,36 @@
-<nav class="bg-white border-b border-gray-200 shadow-sm">
-  {{/* En pantallas chicas los links bajan a su propia fila y se pueden
-       deslizar de costado; desde md quedan en línea con el logo. */}}
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 md:py-0 md:h-16 flex flex-wrap md:flex-nowrap items-center justify-between gap-x-8 gap-y-2">
-    <a href="/" class="text-xl font-bold text-indigo-600 tracking-tight">{{t "app.title"}}</a>
-
-    <div class="order-last md:order-none w-full md:w-auto md:flex-1 flex items-center gap-1 overflow-x-auto">
-      <a href="/" {{if eq .Section "dashboard"}}aria-current="page"{{end}}
-         class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap {{if eq .Section "dashboard"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.dashboard"}}</a>
-      <a href="/brands" {{if eq .Section "brands"}}aria-current="page"{{end}}
-         class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap {{if eq .Section "brands"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.brands"}}</a>
-      <a href="/taxes" {{if eq .Section "taxes"}}aria-current="page"{{end}}
-         class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap {{if eq .Section "taxes"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.taxes"}}</a>
-      <a href="/suppliers" {{if eq .Section "suppliers"}}aria-current="page"{{end}}
-         class="px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap {{if eq .Section "suppliers"}}bg-indigo-50 text-indigo-700{{else}}text-gray-600 hover:text-gray-900 hover:bg-gray-100{{end}}">{{t "nav.suppliers"}}</a>
-    </div>
-
-    <div class="flex items-center gap-2">
-      <label for="lang-select" class="text-xs text-gray-500">{{t "language.select"}}</label>
-      <select id="lang-select" name="lang"
-              hx-post="/settings/language" hx-trigger="change" hx-swap="none"
-              class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
-        <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
-        <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
-      </select>
-    </div>
+{{/* Menú lateral oscuro (tinta). En celular pasa a ser una barra arriba con
+     los links en una fila que se desliza de costado. Los grupos (Catálogo,
+     y más adelante Inventario y Caja) ordenan el menú a medida que crece. */}}
+<nav class="bg-ink text-white md:w-60 md:shrink-0 md:min-h-screen md:sticky md:top-0 md:self-start md:h-screen flex flex-col">
+  <div class="flex items-center justify-between gap-4 px-4 pt-4 pb-3 md:px-5 md:pt-6 md:pb-6">
+    <a href="/" class="font-display font-bold text-3xl leading-none tracking-wide">Elman<span class="text-tag">POS</span></a>
+    <div class="md:hidden">{{template "lang-select" .}}</div>
   </div>
+
+  <div class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
+      <a href="/" {{if eq .Section "dashboard"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "dashboard"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.dashboard"}}</a>
+    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_catalog"}}</p>
+      <a href="/brands" {{if eq .Section "brands"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "brands"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.brands"}}</a>
+      <a href="/taxes" {{if eq .Section "taxes"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "taxes"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.taxes"}}</a>
+      <a href="/suppliers" {{if eq .Section "suppliers"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "suppliers"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.suppliers"}}</a>
+  </div>
+
+  <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>
 </nav>
+
+{{define "lang-select"}}
+{{/* Aparece dos veces (barra de celular y pie del menú); por eso no usa id
+     y se nombra con aria-label. */}}
+<div class="flex items-center gap-2">
+  <select name="lang" aria-label="{{t "language.select"}}"
+          hx-post="/settings/language" hx-trigger="change" hx-swap="none"
+          class="bg-ink text-white border-2 border-white/30 rounded-md px-2 py-1 hover:border-white">
+    <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+    <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+  </select>
+</div>
+{{end}}

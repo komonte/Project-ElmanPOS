@@ -170,11 +170,18 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 		taxCount = len(taxes)
 	}
 
+	suppliers, err := h.supplierSvc.GetAll(ctx)
+	supplierCount := 0
+	if err == nil {
+		supplierCount = len(suppliers)
+	}
+
 	h.render(w, r, "index.gohtml", map[string]any{
-		"Section":    "dashboard",
-		"TitleKey":   "nav.dashboard",
-		"BrandCount": brandCount,
-		"TaxCount":   taxCount,
+		"Section":       "dashboard",
+		"TitleKey":      "nav.dashboard",
+		"BrandCount":    brandCount,
+		"TaxCount":      taxCount,
+		"SupplierCount": supplierCount,
 	})
 }
 

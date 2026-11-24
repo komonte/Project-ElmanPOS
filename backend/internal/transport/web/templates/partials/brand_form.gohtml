@@ -1,31 +1,30 @@
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onclick="if (event.target === this) closeModal()">
-  <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
-    <div class="flex items-center justify-between mb-4">
-      <h2 id="form-title" class="text-lg font-semibold text-gray-900">{{if .Brand.ID}}{{t "brand.edit"}}{{else}}{{t "brand.create"}}{{end}}</h2>
+{{/* Panel lateral: el formulario entra desde la derecha y la tabla queda
+     visible atrás. En celular ocupa toda la pantalla. */}}
+<div class="fixed inset-0 z-50 flex justify-end bg-ink/40" onclick="if (event.target === this) closeModal()">
+  <div class="h-full w-full sm:max-w-lg bg-surface border-l-8 border-tag overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
+    <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b-2 border-line">
+      <h2 id="form-title" class="font-display font-bold text-3xl leading-tight">{{if .Brand.ID}}{{t "brand.edit"}}{{else}}{{t "brand.create"}}{{end}}</h2>
       <button type="button" onclick="closeModal()" aria-label="{{t "common.close"}}"
-              class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+              class="-mr-2 px-2 text-3xl leading-none text-muted hover:text-ink">&times;</button>
     </div>
-    {{if .Error}}
-    <div role="alert" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{.Error}}</div>
-    {{end}}
-    <form hx-post="{{if .Brand.ID}}/brands/{{.Brand.ID}}/edit{{else}}/brands/new{{end}}"
-          hx-target="#form-modal" hx-swap="innerHTML"
-          class="space-y-4">
-      <div>
-        <label for="brand-name" class="block text-sm font-medium text-gray-700 mb-1">{{t "brand.name"}}</label>
-        <input type="text" id="brand-name" name="name" autofocus value="{{if .Brand}}{{.Brand.Name}}{{end}}" required
-               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
-      </div>
-      <div class="flex justify-end gap-3 pt-2">
-        <button type="button" onclick="closeModal()"
-                class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-          {{t "common.cancel"}}
-        </button>
-        <button type="submit"
-                class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
-          {{t "common.save"}}
-        </button>
-      </div>
-    </form>
-  </div>
+    <div class="px-6 py-6">
+      {{if .Error}}
+      <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+      {{end}}
+      <form hx-post="{{if .Brand.ID}}/brands/{{.Brand.ID}}/edit{{else}}/brands/new{{end}}"
+            hx-target="#form-modal" hx-swap="innerHTML"
+            class="space-y-5">
+        <div>
+          <label for="brand-name" class="field-label">{{t "brand.name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+          <input type="text" id="brand-name" name="name" autofocus required maxlength="120" autocapitalize="characters" aria-describedby="brand-name-hint"
+                 value="{{if .Brand}}{{.Brand.Name}}{{end}}" class="field uppercase">
+          <span id="brand-name-hint" class="field-hint">{{t "brand.name_hint"}}</span>
+        </div>
+        <div class="flex flex-wrap gap-3 pt-4">
+          <button type="submit" class="btn-primary">{{t "common.save"}}</button>
+          <button type="button" onclick="closeModal()" class="btn-secondary">{{t "common.cancel"}}</button>
+        </div>
+      </form>
+    </div>
+        </div>
 </div>

@@ -12,7 +12,7 @@
   "nav.suppliers": "Suppliers",
   "nav.settings": "Settings",
 
-  "common.search": "Search...",
+  "common.search": "Search by name",
   "common.save": "Save",
   "common.cancel": "Cancel",
   "common.delete": "Delete",
@@ -22,7 +22,7 @@
   "common.confirm": "Confirm",
   "common.close": "Close",
   "common.loading": "Loading...",
-  "common.no_results": "No results found",
+  "common.no_results": "Nothing here. Try another search, or add a new one with the button above.",
   "common.actions": "Actions",
   "common.name": "Name",
   "common.description": "Description",
@@ -104,5 +104,12 @@
   "error.invalid_tax_id": "Check the CUIT: it must have 11 digits and a valid check digit (e.g. 20-12345678-6).",
   "error.invalid_phone": "Check the phone: use at least 8 digits; spaces, dashes, parentheses and a leading + are allowed.",
   "error.invalid_email": "Check the email: it must look like name@domain.com.",
-  "error.payment_terms_too_long": "Payment terms can have up to 120 characters."
+  "error.payment_terms_too_long": "Payment terms can have up to 120 characters.",
+  "nav.group_catalog": "Catalog",
+  "common.required": "(required)",
+  "dashboard.active_counts": "Active records in each list.",
+  "brand.name_hint": "Saved in capital letters.",
+  "supplier.tax_id_hint": "11 digits, with or without dashes.",
+  "supplier.payment_terms_short": "Payment",
+  "supplier.contact": "Contact"
 }

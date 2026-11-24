@@ -34,6 +34,19 @@
             <input type="text" id="product-name" name="name" autofocus required maxlength="200"
                    value="{{.Product.Name}}" class="field uppercase">
           </div>
+          {{/* Código de barras: solo en el alta (al editar, los códigos tienen
+               su propia sección). El escáner escribe el código y manda un
+               Enter: se frena para que no guarde el formulario a medio llenar. */}}
+          {{if not .Product.ID}}
+          <div>
+            <label for="product-barcode" class="field-label">{{t "product.barcode"}}</label>
+            <input type="text" id="product-barcode" name="barcode" inputmode="numeric" autocomplete="off" maxlength="20"
+                   aria-describedby="product-barcode-hint" value="{{.Barcode}}"
+                   onkeydown="if (event.key === 'Enter') event.preventDefault();"
+                   class="field max-w-60 tabular">
+            <span id="product-barcode-hint" class="field-hint">{{t "product.barcode_hint"}}</span>
+          </div>
+          {{end}}
           <div>
             <label for="product-description" class="field-label">{{t "common.description"}}</label>
             <input type="text" id="product-description" name="description" maxlength="500"

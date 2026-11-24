@@ -19,6 +19,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 )
 
@@ -93,10 +94,12 @@ func main() {
 	productCodeStore := postgres.NewProductCodeStore(db)
 	productCodes := productcodes.New(productStore, productCodeStore)
 	productCodesH := transport.NewProductCodesHandler(productCodes)
+	// Alta de producto con código de barras opcional, en una transacción.
+	createProduct := createproduct.New(postgres.NewTxRunner(db))
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct)
 
 	// Configurar rutas
 	mux := http.NewServeMux()

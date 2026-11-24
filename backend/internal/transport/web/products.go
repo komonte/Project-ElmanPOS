@@ -148,6 +148,11 @@ func productFromForm(r *http.Request, p *model.Product) string {
 func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p *model.Product, errMsg string) {
 	ctx := r.Context()
 	data := map[string]any{"Product": p, "Error": errMsg}
+	// Alta: si vuelve con un error, conserva el código de barras escrito.
+	// (Al editar, los códigos se manejan aparte, no en este formulario.)
+	if p.ID == 0 {
+		data["Barcode"] = r.FormValue("barcode")
+	}
 
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
 	if err != nil {
@@ -222,7 +227,9 @@ func (h *WebHandler) ProductsNewForm(w http.ResponseWriter, r *http.Request) {
 	h.renderProductForm(w, r, &model.Product{}, "")
 }
 
-// ProductsCreate handles POST /products/new
+// ProductsCreate handles POST /products/new. El código de barras es
+// opcional: si viene, se guarda junto con el producto en una sola
+// transacción (caso de uso createproduct).
 func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 	product := &model.Product{}
 	if err := r.ParseForm(); err != nil {
@@ -234,7 +241,7 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.productSvc.Create(r.Context(), product); err != nil {
+	if _, err := h.createProduct.Create(r.Context(), product, r.FormValue("barcode")); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}

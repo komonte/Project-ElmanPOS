@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
@@ -9,6 +11,9 @@ import (
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -211,11 +216,16 @@ func TestRenderProductPartials(t *testing.T) {
 				t.Errorf("missing %q", s)
 			}
 		}
+		// Al editar, los códigos de barra tienen su propia sección.
+		if strings.Contains(html, `name="barcode"`) {
+			t.Error("edit form: has a barcode field")
+		}
 	})
 
 	t.Run("new form", func(t *testing.T) {
 		var buf bytes.Buffer
-		data := map[string]any{"Product": &model.Product{}, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits}
+		data := map[string]any{"Product": &model.Product{}, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits,
+			"Barcode": "7790070991232"}
 		if err := e.Render(&buf, "en", "product_form.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
@@ -226,6 +236,10 @@ func TestRenderProductPartials(t *testing.T) {
 		// El código interno lo genera la DB: el alta no tiene ese campo.
 		if strings.Contains(html, `name="sku"`) {
 			t.Error("new form: has an sku field")
+		}
+		// El código de barras sí, y vuelve con lo escrito si hubo un error.
+		if !strings.Contains(html, `name="barcode"`) || !strings.Contains(html, `value="7790070991232"`) {
+			t.Error("new form: missing barcode field or its value")
 		}
 		// Sin stock máximo el campo queda vacío, no "<nil>".
 		if !strings.Contains(html, `name="max_stock" inputmode="decimal" aria-describedby="product-max-stock-hint"
@@ -274,5 +288,33 @@ func TestRenderBrandOptions(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "No hay marcas") {
 		t.Fatalf("no results: got %s", buf.String())
+	}
+}
+
+func TestErrMsgBarcode(t *testing.T) {
+	h := &WebHandler{}
+	r := httptest.NewRequest(http.MethodPost, "/products/new", nil) // sin idioma: "en"
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"taken names the owner",
+			&productcodes.CodeTakenError{Code: "7790070991232", ProductSKU: "000123", ProductName: "SODA COLA 1.5L"},
+			"That barcode already belongs to product 000123 SODA COLA 1.5L."},
+		{"taken without owner (race)",
+			fmt.Errorf("%w: %w", service.ErrAlreadyExists, store.ErrDuplicateCode),
+			"Another product already has that barcode."},
+		{"invalid characters",
+			fmt.Errorf("%w: %w", service.ErrValidation, model.ErrBarcodeNotDigits),
+			"A barcode can only contain digits."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := h.errMsg(r, tc.err); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

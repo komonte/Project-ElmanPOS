@@ -184,7 +184,6 @@
   "product.activate": "Activar",
   "product.deactivate_confirm": "¿Desactivar este producto? Deja de aparecer en la caja, pero queda en los reportes.",
   "error.duplicate_sku": "Ese código interno ya lo tiene otro producto.",
-  "error.product_sku_required": "Ingresá el código interno.",
   "error.product_sku_too_long": "El código interno puede tener hasta 40 caracteres.",
   "error.product_description_too_long": "La descripción puede tener hasta 500 caracteres.",
   "error.product_category_required": "Elegí la categoría del producto.",

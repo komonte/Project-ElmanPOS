@@ -184,7 +184,6 @@
   "product.activate": "Activate",
   "product.deactivate_confirm": "Deactivate this product? It stops showing at the register, but stays in reports.",
   "error.duplicate_sku": "Another product already has that internal code.",
-  "error.product_sku_required": "Enter the internal code.",
   "error.product_sku_too_long": "The internal code can have up to 40 characters.",
   "error.product_description_too_long": "The description can have up to 500 characters.",
   "error.product_category_required": "Choose the product's category.",

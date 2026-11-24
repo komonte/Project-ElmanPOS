@@ -121,7 +121,6 @@ var errorKeys = []struct {
 	{store.ErrCategoryHasActiveChildren, "error.category_has_active_children"},
 	{store.ErrCategoryParentInactive, "error.category_parent_inactive"},
 
-	{model.ErrEmptyProductSKU, "error.product_sku_required"},
 	{model.ErrProductSKUTooLong, "error.product_sku_too_long"},
 	{model.ErrEmptyProductName, "error.name_required"},
 	{model.ErrProductNameTooShort, "error.name_too_short"},

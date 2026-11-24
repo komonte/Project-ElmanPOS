@@ -106,7 +106,15 @@ func TestProductValidate(t *testing.T) {
 		},
 
 		// SKU
-		{name: "empty sku", modify: func(p *model.Product) { p.SKU = "  " }, wantErr: model.ErrEmptyProductSKU},
+		{
+			name:   "empty sku is left for the DB to generate",
+			modify: func(p *model.Product) { p.SKU = "  " },
+			check: func(t *testing.T, p model.Product) {
+				if p.SKU != "" {
+					t.Errorf("sku: got %q, want empty", p.SKU)
+				}
+			},
+		},
 		{
 			name:    "sku too long",
 			modify:  func(p *model.Product) { p.SKU = strings.Repeat("A", model.ProductSKUMaxLen+1) },

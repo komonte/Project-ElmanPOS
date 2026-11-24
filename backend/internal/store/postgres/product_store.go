@@ -87,12 +87,14 @@ func (s *ProductStore) Create(ctx context.Context, product *model.Product) (*mod
 	}
 
 	// is_active y las fechas las pone la DB. Los punteros nil se guardan
-	// como NULL, y una description vacía también (NULLIF).
+	// como NULL, y una description vacía también (NULLIF). Un sku vacío lo
+	// genera la DB con next_product_sku() (migración 0010): COALESCE solo la
+	// llama si hace falta, así un sku escrito a mano no gasta un número.
 	q := `INSERT INTO products (sku, name, description, brand_id, category_id,
 	                            measure_unit, sale_type, controls_batches,
 	                            reorder_point, max_stock, margin_percent,
 	                            preferred_supplier_id, is_consignment)
-	      VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	      VALUES (COALESCE(NULLIF($1, ''), next_product_sku()), $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	      RETURNING id;`
 
 	var id int64
@@ -156,6 +158,7 @@ func (s *ProductStore) SearchAllByName(ctx context.Context, query string) ([]*mo
 
 // Update cambia todos los campos salvo is_active: activar y desactivar pasan
 // solo por SetActive. Así un PUT por la API sin "is_active" no desactiva.
+// Un sku vacío deja el que tenía (la pantalla de edición no lo manda).
 //
 // measure_unit, sale_type y controls_batches no cambian si el producto ya
 // tiene historial (F-01): movimientos de stock, ventas, compras o lotes.
@@ -170,7 +173,7 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 	}
 
 	q := `UPDATE products
-	      SET sku = $1, name = $2, description = NULLIF($3, ''), brand_id = $4,
+	      SET sku = COALESCE(NULLIF($1, ''), sku), name = $2, description = NULLIF($3, ''), brand_id = $4,
 	          category_id = $5, measure_unit = $6, sale_type = $7,
 	          controls_batches = $8, reorder_point = $9, max_stock = $10,
 	          margin_percent = $11, preferred_supplier_id = $12, is_consignment = $13

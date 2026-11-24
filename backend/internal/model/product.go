@@ -50,7 +50,6 @@ var (
 var (
 	ErrNilProduct = errors.New("product cannot be nil")
 
-	ErrEmptyProductSKU   = errors.New("product sku is required")
 	ErrProductSKUTooLong = errors.New("product sku cannot exceed 40 characters")
 
 	ErrEmptyProductName    = errors.New("product name is required")
@@ -120,10 +119,9 @@ func (p *Product) Validate() error {
 
 	// SKU: " abc-01 " -> "ABC-01". El UNIQUE de la DB distingue mayúsculas,
 	// así que se guarda siempre igual para que "abc-01" no entre como otro.
+	// Vacío vale: al crear, la DB genera uno ("000123"); al editar, queda el
+	// que tenía. Lo resuelve el store.
 	p.SKU = strings.ToUpper(strings.Join(strings.Fields(p.SKU), " "))
-	if p.SKU == "" {
-		return ErrEmptyProductSKU
-	}
 	if utf8.RuneCountInString(p.SKU) > ProductSKUMaxLen {
 		return ErrProductSKUTooLong
 	}

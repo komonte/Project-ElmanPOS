@@ -3,6 +3,8 @@ package postgres_test
 import (
 	"context"
 	"database/sql"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
@@ -533,5 +535,71 @@ func TestProductStore_LockedFieldsWithoutHistory(t *testing.T) {
 	}
 	if got.SaleType != model.SaleTypeWeight || got.MeasureUnit != model.MeasureUnitKilogram || !got.ControlsBatches {
 		t.Fatalf("got %q %q %v", got.SaleType, got.MeasureUnit, got.ControlsBatches)
+	}
+}
+
+// Ojo: la secuencia no se deshace con el ROLLBACK del test. Cada test que
+// genera un sku gasta números de la DB de desarrollo (deja huecos, nada más).
+func TestProductStore_GeneratedSKU(t *testing.T) {
+	f := newProductFixture(t)
+
+	first, err := f.store.Create(f.ctx, f.product("", "SKU GENERADO UNO TEST"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	second, err := f.store.Create(f.ctx, f.product("", "SKU GENERADO DOS TEST"))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	for _, p := range []*model.Product{first, second} {
+		if len(p.SKU) < 6 || strings.Trim(p.SKU, "0123456789") != "" {
+			t.Fatalf("sku: got %q, want 6+ digits", p.SKU)
+		}
+	}
+	a, _ := strconv.ParseInt(first.SKU, 10, 64)
+	b, _ := strconv.ParseInt(second.SKU, 10, 64)
+	if b != a+1 {
+		t.Fatalf("skus: got %q then %q, want consecutive", first.SKU, second.SKU)
+	}
+}
+
+func TestProductStore_ManualSKUDoesNotUseSequence(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "MANUAL-1", "SKU MANUAL TEST")
+	if p.SKU != "MANUAL-1" {
+		t.Fatalf("sku: got %q, want MANUAL-1", p.SKU)
+	}
+}
+
+func TestProductStore_UpdateEmptySKUKeepsIt(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-KEEPSKU", "CONSERVA SKU TEST")
+
+	p.SKU = ""
+	p.Name = "OTRO NOMBRE TEST"
+	got, err := f.store.Update(f.ctx, p.ID, p)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.SKU != "TEST-KEEPSKU" {
+		t.Fatalf("sku: got %q, want TEST-KEEPSKU", got.SKU)
+	}
+}
+
+// next_product_sku no recorta al pasar de 6 dígitos (lpad solo lo haría).
+// Se prueba la cuenta de la función, sin tocar la secuencia real.
+func TestProductStore_SKUFormatGrowsPastSixDigits(t *testing.T) {
+	f := newProductFixture(t)
+	for n, want := range map[int64]string{7: "000007", 123456: "123456", 1234567: "1234567"} {
+		var got string
+		err := f.tx.QueryRowContext(f.ctx,
+			`SELECT lpad(n::text, greatest(6, length(n::text)), '0') FROM (SELECT $1::bigint AS n) x;`, n).Scan(&got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("%d: got %q, want %q", n, got, want)
+		}
 	}
 }

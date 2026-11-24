@@ -46,7 +46,7 @@ func (s *Service[T]) Create(ctx context.Context, entity *T) (*T, error) {
 	}
 	if s.validate != nil {
 		if err := s.validate(entity); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrValidation, err)
 		}
 	}
 	created, err := s.store.Create(ctx, entity)
@@ -75,7 +75,7 @@ func (s *Service[T]) Update(ctx context.Context, id int64, entity *T) (*T, error
 	}
 	if s.validate != nil {
 		if err := s.validate(entity); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrValidation, err)
 		}
 	}
 	updated, err := s.store.Update(ctx, id, entity)

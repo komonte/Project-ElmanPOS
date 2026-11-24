@@ -139,10 +139,25 @@ func runServiceTests[T any](t *testing.T, ts *ServiceTestSuite[T]) {
 		}
 	})
 
+	// Un error de Validate() sale envuelto en ErrValidation, con el error
+	// puntual todavía adentro, y no llega al store.
+	errBadData := errors.New("bad data")
+	failValidate := func(*T) error { return errBadData }
+
 	t.Run("Create validation error", func(t *testing.T) {
-		svc := service.NewService[T](&MockStore[T]{}, ts.validate)
-		_, err := svc.Create(ctx, nil)
-		_ = err // validation returns nil error for nil
+		svc := service.NewService[T](&MockStore[T]{}, failValidate)
+		_, err := svc.Create(ctx, ts.makeEntity())
+		if !errors.Is(err, service.ErrValidation) || !errors.Is(err, errBadData) {
+			t.Fatalf("error: got %v, want ErrValidation wrapping errBadData", err)
+		}
+	})
+
+	t.Run("Update validation error", func(t *testing.T) {
+		svc := service.NewService[T](&MockStore[T]{}, failValidate)
+		_, err := svc.Update(ctx, 1, ts.makeEntity())
+		if !errors.Is(err, service.ErrValidation) || !errors.Is(err, errBadData) {
+			t.Fatalf("error: got %v, want ErrValidation wrapping errBadData", err)
+		}
 	})
 
 	t.Run("Create duplicate name", func(t *testing.T) {

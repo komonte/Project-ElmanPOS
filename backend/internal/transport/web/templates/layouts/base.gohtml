@@ -29,9 +29,13 @@
             class="absolute top-2 right-3 text-2xl leading-none text-danger hover:text-ink">&times;</button>
   </div>
   <script>
-    // Los formularios se abren en #form-modal; vaciarlo lo cierra.
+    // Los formularios se abren en #form-modal; vaciarlo lo cierra. El cursor
+    // vuelve al buscador de la pantalla (si tiene): se sigue buscando o
+    // escaneando sin tocar el mouse.
     function closeModal() {
       document.getElementById('form-modal').innerHTML = '';
+      var search = document.getElementById('search');
+      if (search) search.focus();
     }
     document.addEventListener('keydown', function (e) {
       var modal = document.getElementById('form-modal');

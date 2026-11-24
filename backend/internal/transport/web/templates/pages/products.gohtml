@@ -8,10 +8,14 @@
 
 <div id="form-modal"></div>
 
+{{/* El buscador arranca con el foco: se puede escanear directo (el escáner
+     manda el código y un Enter, que dispara la búsqueda). Después del Enter
+     el texto queda seleccionado: el próximo escaneo lo reemplaza. */}}
 <div class="mb-4">
   <label for="search" class="sr-only">{{t "product.search"}}</label>
-  <input id="search" type="search" name="search" placeholder="{{t "product.search"}}"
+  <input id="search" type="search" name="search" autofocus placeholder="{{t "product.search"}}"
          hx-get="/products" hx-trigger="input changed delay:300ms, search" hx-target="#products-table" hx-swap="innerHTML"
+         onkeyup="if (event.key === 'Enter') this.select();"
          class="field max-w-sm">
 </div>
 

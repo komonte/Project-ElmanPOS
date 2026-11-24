@@ -10,7 +10,7 @@
 
 <div class="mb-4">
   <label for="search" class="sr-only">{{t "common.search"}}</label>
-  <input id="search" type="search" name="search" placeholder="{{t "common.search"}}"
+  <input id="search" type="search" name="search" autofocus placeholder="{{t "common.search"}}"
          hx-get="/categories" hx-trigger="input changed delay:300ms, search" hx-target="#categories-table" hx-swap="innerHTML"
          class="field max-w-sm">
 </div>

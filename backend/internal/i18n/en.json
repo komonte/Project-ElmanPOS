@@ -139,7 +139,7 @@
   "product.create": "New Product",
   "product.edit": "Edit Product",
   "product.search": "Search by name or code",
-  "product.list_truncated": "Showing the first %d of %d products. Search by name or code to find the rest.",
+  "common.list_truncated": "Showing the first %d of %d. Use the search to find the rest.",
   "product.sku": "Internal code",
   "product.sku_hint": "Set by the system when the product is created. It is not the barcode.",
   "product.name": "Product name",

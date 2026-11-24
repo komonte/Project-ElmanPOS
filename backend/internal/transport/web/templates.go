@@ -31,6 +31,7 @@ var pageFiles = []string{
 // y que las páginas también incluyen.
 var partialFiles = []string{
 	"templates/partials/nav.gohtml",
+	"templates/partials/list_notice.gohtml",
 	"templates/partials/brand_form.gohtml",
 	"templates/partials/brand_table.gohtml",
 	"templates/partials/tax_form.gohtml",

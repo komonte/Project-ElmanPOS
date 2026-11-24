@@ -1,9 +1,7 @@
 {{/* El nombre va en negrita con la marca abajo en gris. Sin búsqueda se
      muestran solo los primeros productos: el aviso de arriba dice cuántos
      hay en total. Filas inactivas en gris. */}}
-{{if and .Total (lt .Shown .Total)}}
-<p role="status" class="px-4 py-3 border-b-2 border-line bg-paper text-muted">{{printf (t "product.list_truncated") .Shown .Total}}</p>
-{{end}}
+{{template "list-notice" .}}
 <table class="min-w-full text-left">
   <thead class="border-b-2 border-line text-muted">
     <tr>

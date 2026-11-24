@@ -139,7 +139,7 @@
   "product.create": "Nuevo Producto",
   "product.edit": "Editar Producto",
   "product.search": "Buscar por nombre o código",
-  "product.list_truncated": "Se muestran los primeros %d de %d productos. Buscá por nombre o código para encontrar el resto.",
+  "common.list_truncated": "Se muestran los primeros %d de %d. Usá la búsqueda para encontrar el resto.",
   "product.sku": "Código interno",
   "product.sku_hint": "Lo pone el sistema al dar de alta el producto. No es el código de barras.",
   "product.name": "Nombre del producto",

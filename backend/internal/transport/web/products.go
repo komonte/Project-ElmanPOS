@@ -11,14 +11,8 @@ import (
 )
 
 // Pantalla de productos. Igual que categorías (lista, búsqueda, panel con
-// formulario, desactivar / reactivar, borrar), con dos diferencias:
-//   - el catálogo puede tener miles de productos: sin búsqueda, la tabla
-//     muestra solo los primeros productListLimit y avisa cuántos hay;
-//   - el formulario tiene tres <select> de otras tablas (categoría, marca,
-//     proveedor), con las activas más la actual aunque esté inactiva.
-
-// productListLimit es cuántos productos muestra la tabla sin búsqueda.
-const productListLimit = 50
+// formulario, desactivar / reactivar, borrar). El formulario elige categoría,
+// marca y proveedor entre los activos, más el actual aunque esté inactivo.
 
 // productOption es una opción de un <select> del formulario.
 type productOption struct {
@@ -181,17 +175,11 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	h.renderPartial(w, r, "product_form.gohtml", data)
 }
 
-// productsTableData arma los datos de la tabla. Con búsqueda usa adminList
-// (el store ya corta en 20 resultados). Sin búsqueda trae todos y muestra los
-// primeros productListLimit; Total dice cuántos hay para avisar que faltan.
+// productsTableData arma los datos de la tabla (ver adminList).
 func (h *WebHandler) productsTableData(r *http.Request) (map[string]any, error) {
-	list, err := adminList(r, h.productSvc)
+	list, total, err := adminList(r, h.productSvc)
 	if err != nil {
 		return nil, err
-	}
-	total := len(list)
-	if strings.TrimSpace(r.FormValue("search")) == "" && len(list) > productListLimit {
-		list = list[:productListLimit]
 	}
 	return map[string]any{"Products": list, "Shown": len(list), "Total": total}, nil
 }

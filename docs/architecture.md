@@ -38,8 +38,13 @@ The generic layer covers flat CRUD only.
 
 **Implementation** (first use cases: barcodes, F-02):
 - One package per use case: `usecase/productcodes` (list/add/remove a
-  product's barcodes) and `usecase/createproduct` (product + optional barcode
-  in one transaction).
+  product's barcodes) and `usecase/createproduct` (product + optional
+  barcode, new brand and new category in one transaction, F-01). When a use
+  case takes several optional parts, it takes them in a request struct
+  (`createproduct.Request`).
+- A use case works on a **copy** of the entity it receives: if the
+  transaction fails, the caller's data does not point to rows that were
+  rolled back (the form comes back with what the user typed).
 - A use case declares the small interfaces it needs (`ProductGetter`,
   `CodeStore`...) instead of taking whole stores; the postgres stores satisfy
   them, and tests can pass a fake.

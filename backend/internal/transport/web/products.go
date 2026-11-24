@@ -10,6 +10,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -24,6 +25,7 @@ type productOption struct {
 	Label    string
 	Selected bool
 	Inactive bool
+	TaxID    int64 // solo en las categorías padre de una categoría nueva
 }
 
 // activeOptions arma las opciones de un <select> de una tabla maestra: las
@@ -60,6 +62,41 @@ func productCategoryOptions(all []*model.Category, current int64) []productOptio
 		return strings.ToLower(opts[i].Label) < strings.ToLower(opts[j].Label)
 	})
 	return opts
+}
+
+// newCategoryParentOptions son las categorías que pueden ser padre de una
+// categoría nueva: solo las activas (el store rechaza un padre inactivo), con
+// su camino y su impuesto, para precargar el de la nueva.
+func newCategoryParentOptions(all []*model.Category, selected *int64) []productOption {
+	opts := productCategoryOptions(all, 0)
+	taxes := make(map[int64]int64, len(all))
+	for _, c := range all {
+		taxes[c.ID] = c.TaxID
+	}
+	active := opts[:0]
+	for _, o := range opts {
+		if o.Inactive {
+			continue
+		}
+		o.TaxID = taxes[o.ID]
+		o.Selected = selected != nil && *selected == o.ID
+		active = append(active, o)
+	}
+	return active
+}
+
+// newCategoryFromForm lee la categoría nueva del alta (nil si no se pidió).
+// Un número mal escrito queda en 0 y Validate lo rechaza.
+func newCategoryFromForm(r *http.Request) *model.Category {
+	if r.FormValue("category_new") != "1" {
+		return nil
+	}
+	taxID, _ := strconv.ParseInt(r.FormValue("new_category_tax_id"), 10, 64)
+	return &model.Category{
+		Name:     r.FormValue("new_category_name"),
+		ParentID: optionalID(r.FormValue("new_category_parent_id")),
+		TaxID:    taxID,
+	}
 }
 
 // saleTypeOptions son los tipos de venta que ofrece el formulario. COMPOSITE
@@ -112,7 +149,9 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	// La marca se elige con un buscador: brand_q es el texto escrito y
 	// brand_id la que se eligió de la lista. Si hay texto pero no se eligió
 	// ninguna, se avisa en vez de guardar el producto sin marca sin querer.
-	brandTyped := strings.TrimSpace(r.FormValue("brand_q")) != ""
+	// brand_new es una marca a crear (solo en el alta): también vale.
+	brandTyped := strings.TrimSpace(r.FormValue("brand_q")) != "" &&
+		strings.TrimSpace(r.FormValue("brand_new")) == ""
 	p.PreferredSupplierID = optionalID(r.FormValue("preferred_supplier_id"))
 	p.SaleType = model.SaleType(r.FormValue("sale_type"))
 	p.MeasureUnit = model.MeasureUnit(r.FormValue("measure_unit"))
@@ -156,6 +195,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	// Edición: los códigos van en su propia sección (product_codes.gohtml).
 	if p.ID == 0 {
 		data["Barcode"] = r.FormValue("barcode")
+		data["BrandNew"] = r.FormValue("brand_new")
 	} else {
 		codes, err := h.productCodes.List(ctx, p.ID)
 		if err != nil {
@@ -188,6 +228,26 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	}
 
 	data["Categories"] = productCategoryOptions(categories, p.CategoryID)
+	if p.ID == 0 {
+		// Alta: la categoría se puede crear ahí mismo (nombre, padre e IVA).
+		// Si vuelve con un error, el subformulario sigue abierto con lo escrito.
+		nc := newCategoryFromForm(r)
+		taxes, err := h.taxSvc.GetAllIncludingInactive(ctx)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		var parentID, taxID *int64
+		if nc != nil {
+			parentID, taxID = nc.ParentID, &nc.TaxID
+			data["NewCategory"] = nc
+		}
+		data["CategoryParents"] = newCategoryParentOptions(categories, parentID)
+		data["Taxes"] = activeOptions(taxes, taxID, func(t *model.Tax) (int64, string, bool) {
+			return t.ID, t.Name, t.IsActive
+		})
+	}
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
 	data["SaleTypes"] = saleTypeOptions(p.SaleType)
 	data["MeasureUnits"] = model.MeasureUnits
@@ -206,6 +266,9 @@ func (h *WebHandler) productsTableData(r *http.Request) (map[string]any, error) 
 // ProductsBrandOptions handles GET /products/brand-options: las marcas
 // activas que coinciden con lo escrito en el buscador del formulario (hasta
 // 20, ver SearchByName). Elegir una inactiva no se ofrece.
+//
+// En el alta (?new=1) también ofrece crear la marca escrita, si no está
+// exacta en la lista (ver newBrandOption).
 func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.FormValue("brand_q"))
 	brands, err := h.brandSvc.SearchByName(r.Context(), query)
@@ -213,7 +276,28 @@ func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request
 		h.actionError(w, r, err)
 		return
 	}
-	h.renderPartial(w, r, "product_brand_options.gohtml", map[string]any{"Brands": brands, "Query": query})
+	data := map[string]any{"Brands": brands, "Query": query}
+	if r.FormValue("new") == "1" {
+		data["NewBrand"] = newBrandOption(query, brands)
+	}
+	h.renderPartial(w, r, "product_brand_options.gohtml", data)
+}
+
+// newBrandOption es el nombre que se ofrece crear ("" si no se ofrece):
+// lo escrito, normalizado como se guarda una marca, si es un nombre válido y
+// no está exacto entre las encontradas. Las parecidas se muestran arriba, así
+// se ve "COCA-COLA" antes de crear "COCA COLA".
+func newBrandOption(query string, found []*model.Brand) string {
+	b := &model.Brand{Name: query}
+	if err := b.Validate(); err != nil {
+		return ""
+	}
+	for _, f := range found {
+		if f.Name == b.Name {
+			return ""
+		}
+	}
+	return b.Name
 }
 
 // ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
@@ -273,7 +357,12 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.createProduct.Create(r.Context(), product, r.FormValue("barcode")); err != nil {
+	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{
+		Product:     product,
+		Barcode:     r.FormValue("barcode"),
+		NewBrand:    r.FormValue("brand_new"),
+		NewCategory: newCategoryFromForm(r),
+	}); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}

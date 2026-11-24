@@ -1,13 +1,23 @@
 {{- /* Resultados del buscador de marcas (ProductsBrandOptions). Elegir una
      copia su id al campo oculto brand_id y su nombre al buscador, y cierra la
      lista. Sin espacios sueltos (los {{- -}}): si no hay nada que mostrar, la
-     lista queda vacía de verdad y :empty la oculta. */ -}}
+     lista queda vacía de verdad y :empty la oculta.
+
+     En el alta, si lo escrito no es exactamente una marca de la lista, al
+     final se ofrece crearla (.NewBrand): queda en el campo oculto brand_new
+     y se crea al guardar el producto, en la misma transacción. */ -}}
 {{- range .Brands}}
 <li role="option">
   <button type="button" data-id="{{.ID}}" data-name="{{.Name}}"
-          onclick="const f = this.closest('form'); f.elements.brand_id.value = this.dataset.id; f.elements.brand_q.value = this.dataset.name; this.closest('ul').replaceChildren();"
+          onclick="const f = this.closest('form'); f.elements.brand_id.value = this.dataset.id; f.elements.brand_new.value = ''; f.elements.brand_q.value = this.dataset.name; document.getElementById('product-brand-new').hidden = true; this.closest('ul').replaceChildren();"
           class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">{{.Name}}</button>
 </li>
-{{- else}}
-{{- if .Query}}<li class="px-3 py-2 text-muted">{{t "product.brand_not_found"}}</li>{{end -}}
+{{- end}}
+{{- if and .Query (not .Brands)}}<li class="px-3 py-2 text-muted">{{t "product.brand_not_found"}}</li>{{end -}}
+{{- if .NewBrand}}
+<li role="option">
+  <button type="button" data-name="{{.NewBrand}}"
+          onclick="const f = this.closest('form'); f.elements.brand_id.value = ''; f.elements.brand_new.value = this.dataset.name; f.elements.brand_q.value = this.dataset.name; document.getElementById('product-brand-new').hidden = false; this.closest('ul').replaceChildren();"
+          class="block w-full text-left px-3 py-2 font-bold hover:bg-paper focus:bg-paper">+ {{printf (t "product.brand_create") .NewBrand}}</button>
+</li>
 {{- end -}}

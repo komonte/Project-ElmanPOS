@@ -37,6 +37,28 @@
       var search = document.getElementById('search');
       if (search) search.focus();
     }
+    // Alta de producto: abre o cierra el subformulario de categoría nueva.
+    // Abierto, el select de categoría se deshabilita (no se manda ni se
+    // exige) y los campos de la nueva se habilitan; cerrado, al revés. Al
+    // abrirlo, si ya había una categoría elegida, se propone como padre.
+    function toggleNewCategory(form, open) {
+      var box = document.getElementById('product-category-new');
+      box.hidden = !open;
+      box.querySelectorAll('input, select').forEach(function (el) { el.disabled = !open; });
+      document.getElementById('product-category-new-open').hidden = open;
+      var current = form.elements.category_id;
+      current.disabled = open;
+      if (!open) {
+        current.focus();
+        return;
+      }
+      var parent = form.elements.new_category_parent_id;
+      if (current.value && !parent.value) {
+        parent.value = current.value;
+        parent.dispatchEvent(new Event('change'));
+      }
+      form.elements.new_category_name.focus();
+    }
     document.addEventListener('keydown', function (e) {
       var modal = document.getElementById('form-modal');
       if (e.key === 'Escape' && modal && modal.firstElementChild) {

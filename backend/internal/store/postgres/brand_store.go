@@ -102,6 +102,26 @@ func (s *BrandStore) GetByID(ctx context.Context, id int64) (*model.Brand, error
 	return &b, nil
 }
 
+// GetByName busca una marca por su nombre exacto, activa o no. El nombre
+// tiene que venir normalizado (model.Brand.Validate: mayúsculas, sin espacios
+// de más), que es como se guarda. ErrNotFound si no existe.
+//
+// La usa el alta de producto con marca nueva: antes de crearla, para usar la
+// que ya existe o avisar que está desactivada.
+func (s *BrandStore) GetByName(ctx context.Context, name string) (*model.Brand, error) {
+	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE name = $1;`
+
+	var b model.Brand
+	err := s.db.QueryRowContext(ctx, q, name).Scan(&b.ID, &b.Name, &b.IsActive, &b.CreatedAt, &b.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
+		return nil, err
+	}
+	return &b, nil
+}
+
 func (s *BrandStore) SearchByName(ctx context.Context, query string) ([]*model.Brand, error) {
 	q := `SELECT id, name, is_active, created_at, updated_at FROM brands WHERE is_active = TRUE AND name ILIKE '%' || $1 || '%' ORDER BY name ASC LIMIT 20;`
 	rows, err := s.db.QueryContext(ctx, q, query)

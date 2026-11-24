@@ -126,6 +126,8 @@ Index: `(parent_id)`.
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
+> Names are stored uppercased and tidied (`model.Brand.Validate`), so `UNIQUE(name)` also catches "coca  cola" vs "COCA COLA". `BrandStore.GetByName` looks one up by exact name (the product create uses it before creating a new brand, F-01).
+
 ### 4.4 `products`
 
 | Column | Type | Constraints | Description |

@@ -163,10 +163,25 @@ var errorKeys = []struct {
 // está en la lista (ej. la DB caída) se loguea y se muestra uno genérico.
 func (h *WebHandler) errMsg(r *http.Request, err error) string {
 	lang := transport.GetLocale(r.Context())
+	msg := h.errText(r, lang, err)
+	// Un error de la categoría nueva del alta se aclara: el producto también
+	// tiene "nombre", y "Ya hay uno con ese nombre" sería ambiguo.
+	if errors.Is(err, createproduct.ErrNewCategory) {
+		msg = fmt.Sprintf(i18n.T(lang, "error.new_category"), msg)
+	}
+	return msg
+}
+
+// errText es el mensaje de un error, sin aclarar de qué parte del formulario es.
+func (h *WebHandler) errText(r *http.Request, lang string, err error) string {
 	// El código repetido dice de qué producto es: el mensaje lleva datos.
 	var taken *productcodes.CodeTakenError
 	if errors.As(err, &taken) {
 		return fmt.Sprintf(i18n.T(lang, "error.barcode_taken"), taken.ProductSKU, taken.ProductName)
+	}
+	var brandInactive *createproduct.BrandInactiveError
+	if errors.As(err, &brandInactive) {
+		return fmt.Sprintf(i18n.T(lang, "error.brand_exists_inactive"), brandInactive.Name)
 	}
 	for _, e := range errorKeys {
 		if errors.Is(err, e.err) {

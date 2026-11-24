@@ -15,6 +15,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -287,6 +288,69 @@ func TestProductFromFormBrandTypedButNotPicked(t *testing.T) {
 	if key, p := post("name=AB&category_id=3&brand_q=&brand_id="); key != "" || p.BrandID != nil {
 		t.Fatalf("empty: got %q %v", key, p.BrandID)
 	}
+	// Eligió "Crear marca": no hay id, pero hay marca nueva. Vale.
+	if key, p := post("name=AB&category_id=3&brand_q=NUEVA&brand_id=&brand_new=NUEVA"); key != "" || p.BrandID != nil {
+		t.Fatalf("new brand: got %q %v", key, p.BrandID)
+	}
+}
+
+func TestNewBrandOption(t *testing.T) {
+	found := []*model.Brand{{ID: 1, Name: "COCA-COLA"}, {ID: 2, Name: "ARCOR"}}
+	cases := []struct{ query, want string }{
+		{"  coca   cola ", "COCA COLA"}, // parecida a COCA-COLA, pero no igual: se ofrece
+		{"arcor", ""},                   // ya está en la lista: no se ofrece
+		{"a", ""},                       // nombre muy corto: no es una marca válida
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := newBrandOption(tc.query, found); got != tc.want {
+			t.Errorf("newBrandOption(%q) = %q, want %q", tc.query, got, tc.want)
+		}
+	}
+}
+
+func TestRenderBrandOptionsCreate(t *testing.T) {
+	e := NewTemplateEngine()
+	var buf bytes.Buffer
+	data := map[string]any{"Brands": []*model.Brand{{ID: 1, Name: "COCA-COLA"}}, "Query": "coca cola", "NewBrand": "COCA COLA"}
+	if err := e.Render(&buf, "es", "product_brand_options.gohtml", data); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	existing, create := strings.Index(html, "COCA-COLA"), strings.Index(html, "Crear marca «COCA COLA»")
+	if existing < 0 || create < 0 || create < existing {
+		t.Errorf("want the similar brand first and then the create option, got %s", html)
+	}
+	if strings.Contains(html, "No hay marcas") {
+		t.Error("not-found notice shown with results")
+	}
+}
+
+func TestRenderProductFormBrandNew(t *testing.T) {
+	e := NewTemplateEngine()
+	base := func(p *model.Product, brandNew string) string {
+		var buf bytes.Buffer
+		data := map[string]any{"Product": p, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits, "BrandNew": brandNew}
+		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	// Alta que vuelve con un error: la marca nueva sigue elegida y avisada.
+	html := base(&model.Product{}, "MARCA NUEVA")
+	for _, s := range []string{`name="brand_new" value="MARCA NUEVA"`, `name="brand_q"`, `value="MARCA NUEVA"`,
+		`hx-get="/products/brand-options?new=1"`, `id="product-brand-new" class="mt-1 text-sm font-bold text-tag" >`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("new form: missing %q", s)
+		}
+	}
+
+	// Edición: no se ofrece crear marcas, y el aviso está oculto.
+	html = base(&model.Product{ID: 7, Name: "X"}, "")
+	if strings.Contains(html, "?new=1") || !strings.Contains(html, `text-tag" hidden>`) {
+		t.Error("edit form: offers to create brands or shows the new-brand note")
+	}
 }
 
 func TestRenderBrandOptions(t *testing.T) {
@@ -324,6 +388,12 @@ func TestErrMsgBarcode(t *testing.T) {
 		{"taken without owner (race)",
 			fmt.Errorf("%w: %w", service.ErrAlreadyExists, store.ErrDuplicateCode),
 			"Another product already has that barcode."},
+		{"new brand that exists inactive",
+			&createproduct.BrandInactiveError{Name: "ARCOR"},
+			"Brand ARCOR already exists, but it is inactive. Activate it in Brands or choose another one."},
+		{"new category error says so",
+			fmt.Errorf("%w: %w: %w", createproduct.ErrNewCategory, service.ErrValidation, model.ErrCategoryTaxRequired),
+			"New category: Choose the category's VAT rate."},
 		{"invalid characters",
 			fmt.Errorf("%w: %w", service.ErrValidation, model.ErrBarcodeNotDigits),
 			"A barcode can only contain digits."},
@@ -432,5 +502,91 @@ func TestProductsBarcodeCheck(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewCategoryParentOptions(t *testing.T) {
+	root := int64(1)
+	all := []*model.Category{
+		{ID: 1, Name: "Almacen", TaxID: 10, IsActive: true},
+		{ID: 2, Name: "Galletitas", ParentID: &root, TaxID: 11, IsActive: true},
+		{ID: 3, Name: "Vieja", TaxID: 10, IsActive: false},
+	}
+	selected := int64(2)
+	got := newCategoryParentOptions(all, &selected)
+
+	// Solo activas (un padre inactivo lo rechaza el store), con camino e IVA.
+	if len(got) != 2 {
+		t.Fatalf("got %d options, want 2: %+v", len(got), got)
+	}
+	if got[1].Label != "Almacen › Galletitas" || got[1].TaxID != 11 || !got[1].Selected || got[0].Selected {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestNewCategoryFromForm(t *testing.T) {
+	form := func(body string) *model.Category {
+		r := httptest.NewRequest("POST", "/products/new", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return newCategoryFromForm(r)
+	}
+
+	// Sin abrir el subformulario: nada que crear.
+	if c := form("category_id=3&new_category_name=X"); c != nil {
+		t.Errorf("closed: got %+v", c)
+	}
+	c := form("category_new=1&new_category_name=Galletitas&new_category_parent_id=1&new_category_tax_id=10")
+	if c == nil || c.Name != "Galletitas" || c.ParentID == nil || *c.ParentID != 1 || c.TaxID != 10 {
+		t.Errorf("open: got %+v", c)
+	}
+	// Sin padre: categoría principal.
+	if c := form("category_new=1&new_category_name=Bebidas&new_category_parent_id=&new_category_tax_id=10"); c == nil || c.ParentID != nil {
+		t.Errorf("no parent: got %+v", c)
+	}
+}
+
+func TestRenderProductFormNewCategory(t *testing.T) {
+	e := NewTemplateEngine()
+	render := func(data map[string]any) string {
+		data["SaleTypes"] = saleTypeOptions("")
+		data["MeasureUnits"] = model.MeasureUnits
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	parents := []productOption{{ID: 1, Label: "Almacen", TaxID: 10}}
+	taxes := []productOption{{ID: 10, Label: "IVA 21%"}}
+
+	// Cerrado: el link para abrirlo, y los campos deshabilitados (no se mandan).
+	html := render(map[string]any{"Product": &model.Product{}, "CategoryParents": parents, "Taxes": taxes})
+	for _, s := range []string{`+ Nueva categoría`, `name="category_new" value="1" disabled`,
+		`name="new_category_name" required maxlength="100"
+                       value="" disabled`, `data-tax="10"`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("closed: missing %q", s)
+		}
+	}
+	if strings.Contains(html, `name="category_id" required aria-describedby="product-category-hint" class="field" disabled`) {
+		t.Error("closed: category select is disabled")
+	}
+
+	// Vuelve con un error: abierto, con lo escrito, y el select deshabilitado.
+	parent := int64(1)
+	taxes[0].Selected = true
+	html = render(map[string]any{"Product": &model.Product{}, "CategoryParents": parents, "Taxes": taxes,
+		"NewCategory": &model.Category{Name: "Galletitas", ParentID: &parent, TaxID: 10}})
+	for _, s := range []string{`name="category_new" value="1" >`, `value="Galletitas"`, `<option value="10" selected>IVA 21%`,
+		`class="field" disabled>`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("open: missing %q", s)
+		}
+	}
+
+	// Edición: no se crean categorías.
+	html = render(map[string]any{"Product": &model.Product{ID: 7, Name: "X"}})
+	if strings.Contains(html, "category_new") {
+		t.Error("edit form: offers a new category")
 	}
 }

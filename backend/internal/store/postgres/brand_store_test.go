@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 )
 
@@ -81,4 +82,22 @@ func TestMasterStores_ListAll(t *testing.T) {
 	check("suppliers", len(s), n, err)
 	c, n, err := postgres.NewCategoryStore(tx).ListAll(ctx, "zzlist", 1)
 	check("categories", len(c), n, err)
+}
+
+func TestBrandStore_GetByName(t *testing.T) {
+	ctx := context.Background()
+	s := postgres.NewBrandStore(testTx(t))
+	created, err := s.Create(ctx, &model.Brand{Name: "MARCA TEST GETBYNAME"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := s.GetByName(ctx, "MARCA TEST GETBYNAME")
+	if err != nil || got.ID != created.ID {
+		t.Fatalf("exact name: got %+v, %v", got, err)
+	}
+
+	// Exacto, no "contiene".
+	_, err = s.GetByName(ctx, "MARCA TEST")
+	wantErr(t, err, store.ErrNotFound)
 }

@@ -21,15 +21,17 @@ type WebHandler struct {
 	taxSvc      *service.Service[model.Tax]
 	supplierSvc *service.Service[model.Supplier]
 	categorySvc *service.Service[model.Category]
+	productSvc  *service.Service[model.Product]
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product]) *WebHandler {
 	return &WebHandler{
 		engine:      engine,
 		brandSvc:    brandSvc,
 		taxSvc:      taxSvc,
 		supplierSvc: supplierSvc,
 		categorySvc: categorySvc,
+		productSvc:  productSvc,
 	}
 }
 
@@ -90,6 +92,7 @@ var errorKeys = []struct {
 	key string
 }{
 	{store.ErrDuplicateTaxID, "error.duplicate_tax_id"},
+	{store.ErrDuplicateSKU, "error.duplicate_sku"},
 	{store.ErrDuplicateName, "error.duplicate_name"},
 
 	{model.ErrEmptyBrandName, "error.name_required"},
@@ -117,6 +120,28 @@ var errorKeys = []struct {
 	{store.ErrCategoryCycle, "error.category_cycle"},
 	{store.ErrCategoryHasActiveChildren, "error.category_has_active_children"},
 	{store.ErrCategoryParentInactive, "error.category_parent_inactive"},
+
+	{model.ErrEmptyProductSKU, "error.product_sku_required"},
+	{model.ErrProductSKUTooLong, "error.product_sku_too_long"},
+	{model.ErrEmptyProductName, "error.name_required"},
+	{model.ErrProductNameTooShort, "error.name_too_short"},
+	{model.ErrProductNameTooLong, "error.name_too_long"},
+	{model.ErrProductDescriptionTooLong, "error.product_description_too_long"},
+	{model.ErrProductCategoryRequired, "error.product_category_required"},
+	// Solo pasan si alguien arma el formulario a mano: los <select> no los permiten.
+	{model.ErrInvalidProductBrand, "error.product_choice_invalid"},
+	{model.ErrInvalidProductSupplier, "error.product_choice_invalid"},
+	{model.ErrInvalidSaleType, "error.product_choice_invalid"},
+	{model.ErrInvalidMeasureUnit, "error.product_choice_invalid"},
+	{model.ErrWeightNeedsKilogram, "error.product_weight_needs_kg"},
+	{model.ErrCompositeBatches, "error.product_composite_batches"},
+	{model.ErrInvalidReorderPoint, "error.product_reorder_point"},
+	{model.ErrInvalidMaxStock, "error.product_max_stock"},
+	{model.ErrInvalidMargin, "error.product_margin"},
+	{store.ErrProductBrandInactive, "error.product_brand_inactive"},
+	{store.ErrProductCategoryInactive, "error.product_category_inactive"},
+	{store.ErrProductSupplierInactive, "error.product_supplier_inactive"},
+	{store.ErrProductHasHistory, "error.product_has_history"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no

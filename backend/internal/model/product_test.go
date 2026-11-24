@@ -149,6 +149,20 @@ func TestProductValidate(t *testing.T) {
 			},
 			wantErr: model.ErrWeightNeedsKilogram,
 		},
+		{
+			name: "composite with batches",
+			modify: func(p *model.Product) {
+				p.SaleType = model.SaleTypeComposite
+				p.ControlsBatches = true
+			},
+			wantErr: model.ErrCompositeBatches,
+		},
+		{
+			name: "unit product with batches",
+			modify: func(p *model.Product) {
+				p.ControlsBatches = true
+			},
+		},
 
 		// Reorder point y max stock
 		{name: "negative reorder point", modify: func(p *model.Product) { p.ReorderPoint = dec("-1") }, wantErr: model.ErrInvalidReorderPoint},

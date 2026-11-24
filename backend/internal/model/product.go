@@ -66,6 +66,7 @@ var (
 	ErrInvalidSaleType     = errors.New("product sale type must be UNIT, WEIGHT or COMPOSITE")
 	ErrInvalidMeasureUnit  = errors.New("product measure unit must be UNIT, GRAM, KILOGRAM, LITER, MILLILITER or METER")
 	ErrWeightNeedsKilogram = errors.New("products sold by weight must be measured in KILOGRAM")
+	ErrCompositeBatches    = errors.New("composite products cannot control batches")
 
 	ErrInvalidReorderPoint = errors.New("product reorder point must be between 0 and 999999999.999, with up to 3 decimals")
 	ErrInvalidMaxStock     = errors.New("product max stock must be greater than the reorder point, up to 999999999.999, with up to 3 decimals")
@@ -177,6 +178,11 @@ func (p *Product) Validate() error {
 	// A granel el precio es por kg y la cantidad vendida está en kg (F-10).
 	if p.SaleType == SaleTypeWeight && p.MeasureUnit != MeasureUnitKilogram {
 		return ErrWeightNeedsKilogram
+	}
+	// Un combo no tiene stock propio: vender uno descuenta el de sus
+	// componentes (02 4.6). Los lotes, si hay, son de cada componente.
+	if p.SaleType == SaleTypeComposite && p.ControlsBatches {
+		return ErrCompositeBatches
 	}
 
 	// Cantidades: NUMERIC(12,3). Postgres redondearía en silencio un cuarto

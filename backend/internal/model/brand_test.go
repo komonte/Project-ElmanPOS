@@ -18,6 +18,7 @@ func TestBrandValidate(t *testing.T) {
 		// Las marcas se guardan en mayúsculas, como vienen en el set de datos.
 		{name: "uppercased and trimmed", brand: model.Brand{Name: "  bagley "}, wantName: "BAGLEY"},
 		{name: "accents and ñ are uppercased", brand: model.Brand{Name: "La Serenísima ñandú"}, wantName: "LA SERENÍSIMA ÑANDÚ"},
+		{name: "inner spaces are tidied", brand: model.Brand{Name: "coca   cola"}, wantName: "COCA COLA"},
 		{name: "already uppercase", brand: model.Brand{Name: "COCA-COLA"}, wantName: "COCA-COLA"},
 		{name: "max length", brand: model.Brand{Name: strings.Repeat("A", model.BrandNameMaxLen)}, wantName: strings.Repeat("A", model.BrandNameMaxLen)},
 		{name: "empty name", brand: model.Brand{Name: "   "}, wantErr: model.ErrEmptyBrandName},

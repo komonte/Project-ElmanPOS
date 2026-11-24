@@ -19,6 +19,7 @@ func TestTaxValidate(t *testing.T) {
 		wantName string
 	}{
 		{name: "IVA 21%", tax: model.Tax{Name: " IVA 21% ", Rate: rate("21")}, wantName: "IVA 21%"},
+		{name: "inner spaces are tidied", tax: model.Tax{Name: "IVA   21%", Rate: rate("21")}, wantName: "IVA 21%"},
 		{name: "decimal rate", tax: model.Tax{Name: "IVA 10,5%", Rate: rate("10.5")}, wantName: "IVA 10,5%"},
 		{name: "rate 0 (exento)", tax: model.Tax{Name: "Exento", Rate: rate("0")}, wantName: "Exento"},
 		{name: "rate 100", tax: model.Tax{Name: "Tope", Rate: rate("100")}, wantName: "Tope"},

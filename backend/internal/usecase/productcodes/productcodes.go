@@ -94,6 +94,21 @@ func (s *Service) Add(ctx context.Context, productID int64, raw string) (*model.
 	return added, nil
 }
 
+// Check revisa un código antes de cargarlo (el alta lo usa al escanear, para
+// avisar enseguida si el producto ya existe). nil si está libre.
+//   - service.ErrValidation: el código está mal escrito.
+//   - *CodeTakenError: el código ya es de un producto (dice de cuál).
+//
+// Es solo un aviso: al guardar se vuelve a revisar (y el UNIQUE frena el
+// caso de dos altas al mismo tiempo).
+func (s *Service) Check(ctx context.Context, raw string) error {
+	c := &model.ProductCode{Code: raw}
+	if err := c.Validate(); err != nil {
+		return fmt.Errorf("%w: %w", service.ErrValidation, err)
+	}
+	return CheckFree(ctx, s.codes, c.Code)
+}
+
 // Remove quita un código de un producto. service.ErrNotFound si no existe o
 // es de otro producto.
 func (s *Service) Remove(ctx context.Context, productID, codeID int64) error {

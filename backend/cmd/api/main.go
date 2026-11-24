@@ -153,6 +153,7 @@ func main() {
 	mux.HandleFunc("GET /products", webH.ProductsList)
 	mux.HandleFunc("GET /products/new", webH.ProductsNewForm)
 	mux.HandleFunc("GET /products/brand-options", webH.ProductsBrandOptions)
+	mux.HandleFunc("GET /products/barcode-check", webH.ProductsBarcodeCheck)
 	mux.HandleFunc("POST /products/new", webH.ProductsCreate)
 	mux.HandleFunc("GET /products/{id}/edit", webH.ProductsEditForm)
 	mux.HandleFunc("POST /products/{id}/edit", webH.ProductsUpdate)

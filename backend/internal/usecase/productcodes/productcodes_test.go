@@ -192,3 +192,27 @@ func TestAddRaceStillReportsDuplicate(t *testing.T) {
 		t.Errorf("race: got owner %+v, want plain duplicate", taken)
 	}
 }
+
+func TestCheck(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.svc.Add(f.ctx, f.cola, "9770501"); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+
+	// Libre: nil.
+	if err := f.svc.Check(f.ctx, "9770502"); err != nil {
+		t.Errorf("free code: %v", err)
+	}
+
+	// Tomado, escrito sin los ceros: dice el dueño.
+	err := f.svc.Check(f.ctx, " 9770501 ")
+	var taken *productcodes.CodeTakenError
+	if !errors.As(err, &taken) || taken.ProductID != f.cola {
+		t.Errorf("taken code: got %v, want CodeTakenError for %d", err, f.cola)
+	}
+
+	// Mal escrito.
+	err = f.svc.Check(f.ctx, "77-90")
+	wantErr(t, err, service.ErrValidation)
+	wantErr(t, err, model.ErrBarcodeNotDigits)
+}

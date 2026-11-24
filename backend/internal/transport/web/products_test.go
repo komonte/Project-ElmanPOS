@@ -2,6 +2,8 @@ package web
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -221,6 +223,9 @@ func TestRenderProductPartials(t *testing.T) {
 		if strings.Contains(html, `name="barcode"`) {
 			t.Error("edit form: has a barcode field")
 		}
+		if !strings.Contains(html, `name="name" autofocus`) {
+			t.Error("edit form: name should have the focus")
+		}
 		section := strings.Index(html, `id="product-codes"`)
 		if section < 0 || section < strings.Index(html, "</form>") {
 			t.Error("edit form: barcode section missing or inside the product form")
@@ -245,6 +250,14 @@ func TestRenderProductPartials(t *testing.T) {
 		// El código de barras sí, y vuelve con lo escrito si hubo un error.
 		if !strings.Contains(html, `name="barcode"`) || !strings.Contains(html, `value="7790070991232"`) {
 			t.Error("new form: missing barcode field or its value")
+		}
+		// Se escanea primero: el código va antes que el nombre y tiene el foco.
+		barcode, name := strings.Index(html, `id="product-barcode"`), strings.Index(html, `id="product-name"`)
+		if barcode < 0 || barcode > name {
+			t.Error("new form: barcode is not the first field")
+		}
+		if strings.Count(html, "autofocus") != 1 || !strings.Contains(html[barcode:name], "autofocus") {
+			t.Error("new form: autofocus should be on the barcode only")
 		}
 		// Sin stock máximo el campo queda vacío, no "<nil>".
 		if !strings.Contains(html, `name="max_stock" inputmode="decimal" aria-describedby="product-max-stock-hint"
@@ -366,4 +379,58 @@ func TestRenderProductCodes(t *testing.T) {
 			}
 		}
 	})
+}
+
+// checkCodes es un store de códigos de mentira para productcodes.Service:
+// solo FindByCode importa (Check no escribe). 7790070991232 es de OREO (id 1).
+type checkCodes struct{}
+
+func (checkCodes) FindByCode(_ context.Context, code string) (*model.ProductCode, error) {
+	if code == "7790070991232" {
+		return &model.ProductCode{ID: 9, ProductID: 1, Code: code, ProductSKU: "ORE-200G", ProductName: "GALLETITAS OREO 200G"}, nil
+	}
+	return nil, store.ErrNotFound
+}
+func (checkCodes) ListByProduct(context.Context, int64) ([]*model.ProductCode, error) {
+	return nil, nil
+}
+func (checkCodes) Add(context.Context, *model.ProductCode) (*model.ProductCode, error) {
+	return nil, errors.New("not used")
+}
+func (checkCodes) Delete(context.Context, int64, int64) error { return errors.New("not used") }
+
+func TestProductsBarcodeCheck(t *testing.T) {
+	h := &WebHandler{engine: NewTemplateEngine(), productCodes: productcodes.New(nil, checkCodes{})}
+
+	cases := []struct {
+		name    string
+		barcode string
+		want    []string // vacío: la respuesta no muestra nada
+	}{
+		{"taken offers to edit the owner", "7790070991232",
+			[]string{"already belongs to product ORE-200G GALLETITAS OREO 200G", `hx-get="/products/1/edit"`}},
+		{"free shows nothing", "40170725", nil},
+		{"empty shows nothing", "  ", nil},
+		{"invalid", "77-90", []string{"A barcode can only contain digits."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/products/barcode-check?barcode="+url.QueryEscape(tc.barcode), nil)
+			rec := httptest.NewRecorder()
+			h.ProductsBarcodeCheck(rec, r)
+
+			body := rec.Body.String()
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d: %s", rec.Code, body)
+			}
+			if tc.want == nil && strings.Contains(body, `role="alert"`) {
+				t.Errorf("got an alert: %s", body)
+			}
+			for _, s := range tc.want {
+				if !strings.Contains(body, s) {
+					t.Errorf("missing %q in %s", s, body)
+				}
+			}
+		})
+	}
 }

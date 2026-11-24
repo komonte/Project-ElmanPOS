@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
 
@@ -212,6 +214,26 @@ func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	h.renderPartial(w, r, "product_brand_options.gohtml", map[string]any{"Brands": brands, "Query": query})
+}
+
+// ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
+// que se escaneó en el alta, antes de llenar el resto. Si ya es de un
+// producto, lo dice y ofrece editarlo; si está libre, no muestra nada.
+// Es solo un aviso: al guardar se vuelve a revisar.
+func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{}
+	if raw := strings.TrimSpace(r.FormValue("barcode")); raw != "" {
+		err := h.productCodes.Check(r.Context(), raw)
+		var taken *productcodes.CodeTakenError
+		switch {
+		case errors.As(err, &taken):
+			data["OwnerID"] = taken.ProductID
+			data["Message"] = fmt.Sprintf(h.tr(r, "product.barcode_exists"), taken.ProductSKU, taken.ProductName)
+		case err != nil:
+			data["Message"] = h.errMsg(r, err)
+		}
+	}
+	h.renderPartial(w, r, "product_barcode_check.gohtml", data)
 }
 
 // ProductsList handles GET /products

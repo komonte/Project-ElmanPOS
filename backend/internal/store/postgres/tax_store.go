@@ -230,5 +230,5 @@ func (s *TaxStore) ListAll(ctx context.Context, query string, limit int) ([]*mod
 		`SELECT count(*) FROM taxes `+where+`;`,
 		`SELECT id, name, rate, is_active, created_at, updated_at FROM taxes `+where+`
 		 ORDER BY is_active DESC, name LIMIT $2;`,
-		scanTax, query, limit)
+		scanTax, limit, query)
 }

@@ -139,33 +139,54 @@ func (s *ProductStore) GetByID(ctx context.Context, id int64) (*model.Product, e
 	return p, nil
 }
 
-// SearchByName busca por nombre o por sku: en el almacén se busca de las
-// dos formas ("oreo" o "OREO-200").
+// productMatch es el filtro de las búsquedas: lo escrito ($1) en el nombre o
+// en el sku ("oreo" o "OREO-200"), o el código de barras exacto ($2, ya
+// normalizado; vacío no encuentra nada). En el almacén se busca de las tres
+// formas, y el escáner escribe el código en el mismo buscador.
+//
+// El código va como "p.id = (subconsulta)" y no con un EXISTS: como el código
+// es UNIQUE, Postgres corre la subconsulta una sola vez (por índice) y
+// compara un id. Medido con el catálogo real: igual de rápido que sin código;
+// con EXISTS, entre 100 y 400 ms.
+const productMatch = `(p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%'
+	OR p.id = (SELECT pc.product_id FROM product_codes pc WHERE pc.code = $2))`
+
+// searchCode es lo buscado como código de barras, normalizado como se guarda
+// ("9770301" -> "0000009770301"). "" si no puede ser un código (tiene letras,
+// está vacío): con "" la subconsulta no encuentra nada.
+func searchCode(query string) string {
+	code, err := model.NormalizeBarcode(query)
+	if err != nil {
+		return ""
+	}
+	return code
+}
+
+// SearchByName busca entre los activos por nombre, sku o código de barras.
 func (s *ProductStore) SearchByName(ctx context.Context, query string) ([]*model.Product, error) {
 	return s.queryProducts(ctx, productSelect+`
-		WHERE p.is_active = TRUE
-		  AND (p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')
+		WHERE p.is_active = TRUE AND `+productMatch+`
 		ORDER BY p.name, p.sku
-		LIMIT 20;`, query)
+		LIMIT 20;`, query, searchCode(query))
 }
 
 func (s *ProductStore) SearchAllByName(ctx context.Context, query string) ([]*model.Product, error) {
 	return s.queryProducts(ctx, productSelect+`
-		WHERE p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%'
+		WHERE `+productMatch+`
 		ORDER BY p.is_active DESC, p.name, p.sku
-		LIMIT 20;`, query)
+		LIMIT 20;`, query, searchCode(query))
 }
 
-// ListAll busca por nombre o por sku, como SearchByName. El orden coincide
-// con el índice idx_products_admin_list, así Postgres frena en las limit
-// primeras en vez de ordenar todo el catálogo.
+// ListAll busca como SearchByName (vacío = todos). El orden coincide con el
+// índice idx_products_admin_list, así Postgres frena en las limit primeras
+// en vez de ordenar todo el catálogo.
 func (s *ProductStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Product, int, error) {
-	const where = `WHERE ($1 = '' OR p.name ILIKE '%' || $1 || '%' OR p.sku ILIKE '%' || $1 || '%')`
+	const where = `WHERE ($1 = '' OR ` + productMatch + `)`
 	return listPage(ctx, s.db,
 		`SELECT count(*) FROM products p `+where+`;`,
 		productSelect+` `+where+`
-		 ORDER BY p.is_active DESC, p.name, p.sku LIMIT $2;`,
-		scanProduct, query, limit)
+		 ORDER BY p.is_active DESC, p.name, p.sku LIMIT $3;`,
+		scanProduct, limit, query, searchCode(query))
 }
 
 // Update cambia todos los campos salvo is_active: activar y desactivar pasan

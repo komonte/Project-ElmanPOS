@@ -275,5 +275,5 @@ func (s *SupplierStore) ListAll(ctx context.Context, query string, limit int) ([
 		        is_active, created_at, updated_at
 		 FROM suppliers `+where+`
 		 ORDER BY is_active DESC, name LIMIT $2;`,
-		scanSupplier, query, limit)
+		scanSupplier, limit, query)
 }

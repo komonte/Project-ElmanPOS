@@ -54,15 +54,17 @@ func isCheckViolation(err error) bool {
 
 // listPage arma una página de ListAll con dos consultas: countQ cuenta las
 // filas que pasan el filtro y rowsQ trae las primeras limit, ya ordenadas.
-// Las dos reciben la búsqueda en $1 (vacía = sin filtro); rowsQ, el límite en $2.
+// Las dos reciben los argumentos del filtro (filter) desde $1 (la búsqueda,
+// vacía = sin filtro; productos agrega el código de barras en $2). rowsQ
+// recibe además el límite en el lugar siguiente: $2 con un argumento, $3 con dos.
 //
 // Son dos consultas y no una con COUNT(*) OVER (): con la ventana, Postgres
 // tiene que leer y ordenar todas las filas antes de cortar; separadas, la de
 // filas puede usar un índice ordenado y frenar a las limit primeras.
 func listPage[T any](ctx context.Context, db DBTX, countQ, rowsQ string,
-	scan func(rowScanner) (*T, error), query string, limit int) ([]*T, int, error) {
+	scan func(rowScanner) (*T, error), limit int, filter ...any) ([]*T, int, error) {
 	var total int
-	if err := db.QueryRowContext(ctx, countQ, query).Scan(&total); err != nil {
+	if err := db.QueryRowContext(ctx, countQ, filter...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
@@ -70,7 +72,7 @@ func listPage[T any](ctx context.Context, db DBTX, countQ, rowsQ string,
 	if limit <= 0 || total == 0 {
 		return list, total, nil
 	}
-	rows, err := db.QueryContext(ctx, rowsQ, query, limit)
+	rows, err := db.QueryContext(ctx, rowsQ, append(filter, limit)...)
 	if err != nil {
 		return nil, 0, err
 	}

@@ -685,3 +685,59 @@ func TestProductStore_ListAll(t *testing.T) {
 		t.Fatalf("limit 0: got %d rows, total %d, err %v", len(list), total, err)
 	}
 }
+
+// La búsqueda también encuentra por código de barras exacto, escrito como
+// lo lee el escáner (sin los ceros de adelante) o completo.
+func TestProductStore_SearchByBarcode(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-BC", "BUSCAR POR CODIGO TEST")
+	f.create(t, "TEST-BC-OTRO", "OTRO PRODUCTO TEST")
+	_, err := f.tx.ExecContext(f.ctx,
+		`INSERT INTO product_codes (product_id, code_type, code) VALUES ($1, 'INTERNAL', '0000009770301');`, p.ID)
+	if err != nil {
+		t.Fatalf("insert code: %v", err)
+	}
+
+	only := func(t *testing.T, got []*model.Product) {
+		t.Helper()
+		if len(got) != 1 || got[0].ID != p.ID {
+			t.Errorf("got %d products, want only %d", len(got), p.ID)
+		}
+	}
+
+	for _, q := range []string{"9770301", "0000009770301", " 9770301 "} {
+		t.Run("search "+q, func(t *testing.T) {
+			active, err := f.store.SearchByName(f.ctx, q)
+			if err != nil {
+				t.Fatalf("SearchByName: %v", err)
+			}
+			only(t, active)
+
+			all, err := f.store.SearchAllByName(f.ctx, q)
+			if err != nil {
+				t.Fatalf("SearchAllByName: %v", err)
+			}
+			only(t, all)
+
+			page, total, err := f.store.ListAll(f.ctx, q, 50)
+			if err != nil {
+				t.Fatalf("ListAll: %v", err)
+			}
+			if total != 1 {
+				t.Errorf("ListAll total: %d, want 1", total)
+			}
+			only(t, page)
+		})
+	}
+
+	// El código se busca exacto: un pedazo no lo encuentra.
+	t.Run("partial code", func(t *testing.T) {
+		_, total, err := f.store.ListAll(f.ctx, "977030", 50)
+		if err != nil {
+			t.Fatalf("ListAll: %v", err)
+		}
+		if total != 0 {
+			t.Errorf("total: %d, want 0", total)
+		}
+	})
+}

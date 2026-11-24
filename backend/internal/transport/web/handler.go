@@ -152,9 +152,8 @@ func (h *WebHandler) errMsg(r *http.Request, err error) string {
 func (h *WebHandler) actionError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrInUse),
-		// Reglas del árbol al desactivar / reactivar una categoría.
-		errors.Is(err, store.ErrCategoryHasActiveChildren),
-		errors.Is(err, store.ErrCategoryParentInactive):
+		// Reglas como las del árbol de categorías (hijas activas, padre inactivo).
+		errors.Is(err, service.ErrConflict):
 		http.Error(w, h.errMsg(r, err), http.StatusConflict)
 	case errors.Is(err, service.ErrNotFound):
 		http.Error(w, h.errMsg(r, err), http.StatusNotFound)

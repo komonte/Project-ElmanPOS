@@ -3,6 +3,7 @@ package transport
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 type ResourceHandler[T any] struct {
-	svc  *service.Service[T]
+	svc   *service.Service[T]
 	label string
 }
 
@@ -63,14 +64,8 @@ func (h *ResourceHandler[T]) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := h.svc.Create(ctx, &entity)
-	if errors.Is(err, service.ErrAlreadyExists) {
-		errorJSON(w, http.StatusConflict,
-			fmt.Sprintf("%s already exists", h.label))
-		return
-	}
 	if err != nil {
-		errorJSON(w, http.StatusBadRequest,
-			fmt.Sprintf("invalid %s", h.label))
+		h.serviceError(w, r, err)
 		return
 	}
 
@@ -101,12 +96,7 @@ func (h *ResourceHandler[T]) Get(w http.ResponseWriter, r *http.Request) {
 
 	entity, err := h.svc.GetByID(ctx, id)
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			errorJSON(w, http.StatusNotFound,
-				fmt.Sprintf("%s not found", h.label))
-			return
-		}
-		errorJSON(w, http.StatusInternalServerError, "internal error")
+		h.serviceError(w, r, err)
 		return
 	}
 
@@ -133,18 +123,7 @@ func (h *ResourceHandler[T]) Update(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.svc.Update(ctx, id, &entity)
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			errorJSON(w, http.StatusNotFound,
-				fmt.Sprintf("%s not found", h.label))
-			return
-		}
-		if errors.Is(err, service.ErrAlreadyExists) {
-			errorJSON(w, http.StatusConflict,
-				fmt.Sprintf("%s already exists", h.label))
-			return
-		}
-		errorJSON(w, http.StatusBadRequest,
-			fmt.Sprintf("invalid %s", h.label))
+		h.serviceError(w, r, err)
 		return
 	}
 
@@ -164,19 +143,36 @@ func (h *ResourceHandler[T]) Delete(w http.ResponseWriter, r *http.Request) {
 
 	err := h.svc.Delete(ctx, id)
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			errorJSON(w, http.StatusNotFound,
-				fmt.Sprintf("%s not found", h.label))
-			return
-		}
-		if errors.Is(err, service.ErrInUse) {
-			errorJSON(w, http.StatusConflict,
-				fmt.Sprintf("%s is in use", h.label))
-			return
-		}
-		errorJSON(w, http.StatusInternalServerError, "internal error")
+		h.serviceError(w, r, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// serviceError responde el error de una operación sobre un id o de una
+// escritura. Los errores conocidos son culpa del pedido (4xx) y su mensaje
+// se puede mostrar. Cualquier otro (ej. la DB caída) es 500: se loguea con
+// el detalle, pero el cliente solo ve "internal error".
+func (h *ResourceHandler[T]) serviceError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrNotFound):
+		errorJSON(w, http.StatusNotFound, fmt.Sprintf("%s not found", h.label))
+	case errors.Is(err, service.ErrInvalidID):
+		errorJSON(w, http.StatusBadRequest, fmt.Sprintf("invalid %s id", h.label))
+	case errors.Is(err, service.ErrValidation),
+		errors.Is(err, service.ErrInvalidReference):
+		// El mensaje dice qué está mal, ej. "validation failed: category tax is required".
+		errorJSON(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrAlreadyExists):
+		errorJSON(w, http.StatusConflict, fmt.Sprintf("%s already exists", h.label))
+	case errors.Is(err, service.ErrInUse):
+		errorJSON(w, http.StatusConflict, fmt.Sprintf("%s is in use", h.label))
+	case errors.Is(err, service.ErrConflict):
+		// ej. "conflict: category has active subcategories"
+		errorJSON(w, http.StatusConflict, err.Error())
+	default:
+		slog.Error("api request failed", "method", r.Method, "path", r.URL.Path, "error", err)
+		errorJSON(w, http.StatusInternalServerError, "internal error")
+	}
 }

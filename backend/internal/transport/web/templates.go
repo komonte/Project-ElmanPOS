@@ -41,6 +41,7 @@ var partialFiles = []string{
 	"templates/partials/category_form.gohtml",
 	"templates/partials/category_table.gohtml",
 	"templates/partials/product_form.gohtml",
+	"templates/partials/product_brand_options.gohtml",
 	"templates/partials/product_table.gohtml",
 }
 

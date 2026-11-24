@@ -1,0 +1,13 @@
+{{- /* Resultados del buscador de marcas (ProductsBrandOptions). Elegir una
+     copia su id al campo oculto brand_id y su nombre al buscador, y cierra la
+     lista. Sin espacios sueltos (los {{- -}}): si no hay nada que mostrar, la
+     lista queda vacía de verdad y :empty la oculta. */ -}}
+{{- range .Brands}}
+<li role="option">
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}"
+          onclick="const f = this.closest('form'); f.elements.brand_id.value = this.dataset.id; f.elements.brand_q.value = this.dataset.name; this.closest('ul').replaceChildren();"
+          class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">{{.Name}}</button>
+</li>
+{{- else}}
+{{- if .Query}}<li class="px-3 py-2 text-muted">{{t "product.brand_not_found"}}</li>{{end -}}
+{{- end -}}

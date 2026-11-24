@@ -53,14 +53,22 @@
             </select>
             <span id="product-category-hint" class="field-hint">{{t "product.category_hint"}}</span>
           </div>
+          {{/* Marca: hay miles, así que en vez de un <select> es un buscador.
+               brand_q es lo que se escribe; brand_id (oculto) es la marca
+               elegida de la lista. Escribir borra la elegida: hay que volver
+               a elegir una (o dejarlo vacío para "sin marca"). */}}
           <div>
             <label for="product-brand" class="field-label">{{t "product.brand"}}</label>
-            <select id="product-brand" name="brand_id" class="field">
-              <option value="">{{t "product.none"}}</option>
-              {{range .Brands}}
-              <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}{{if .Inactive}} {{t "product.inactive_suffix"}}{{end}}</option>
-              {{end}}
-            </select>
+            <input type="hidden" name="brand_id" value="{{with .Product.BrandID}}{{.}}{{end}}">
+            <input type="search" id="product-brand" name="brand_q" autocomplete="off"
+                   aria-autocomplete="list" aria-controls="product-brand-options"
+                   aria-describedby="product-brand-hint"
+                   value="{{.BrandName}}" placeholder="{{t "product.brand_search"}}"
+                   hx-get="/products/brand-options" hx-trigger="input changed delay:250ms" hx-target="#product-brand-options"
+                   oninput="this.form.elements.brand_id.value = '';"
+                   class="field">
+            <ul id="product-brand-options" role="listbox" class="mt-1 border-2 border-line rounded-md bg-surface empty:hidden max-h-64 overflow-y-auto"></ul>
+            <span id="product-brand-hint" class="field-hint">{{if .BrandInactive}}{{t "product.brand_inactive_hint"}}{{else}}{{t "product.brand_hint"}}{{end}}</span>
           </div>
           <div>
             <label for="product-supplier" class="field-label">{{t "product.supplier"}}</label>

@@ -12,21 +12,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-func TestBrandOptionsKeepsInactiveCurrent(t *testing.T) {
-	brands := []*model.Brand{
-		{ID: 1, Name: "BAGLEY", IsActive: true},
-		{ID: 2, Name: "MARCA VIEJA", IsActive: false},
-	}
-
-	if got := brandOptions(brands, nil); len(got) != 1 || got[0].Selected {
-		t.Fatalf("no brand: got %+v", got)
-	}
-	got := brandOptions(brands, new(int64(2)))
-	if len(got) != 2 || !got[1].Selected || !got[1].Inactive {
-		t.Fatalf("product with inactive brand: got %+v", got)
-	}
-}
-
 func TestSupplierOptionsKeepsInactiveCurrent(t *testing.T) {
 	suppliers := []*model.Supplier{
 		{ID: 1, Name: "Arcor", IsActive: true},
@@ -209,7 +194,7 @@ func TestRenderProductPartials(t *testing.T) {
 		data := map[string]any{
 			"Product":      product,
 			"Categories":   []productOption{{ID: 3, Label: "Fiambreria", Selected: true}},
-			"Brands":       []productOption{{ID: 1, Label: "SANCOR", Selected: true}},
+			"BrandName":    "SANCOR",
 			"Suppliers":    []productOption{},
 			"SaleTypes":    saleTypeOptions(product.SaleType),
 			"MeasureUnits": model.MeasureUnits,
@@ -219,7 +204,7 @@ func TestRenderProductPartials(t *testing.T) {
 		}
 		html := buf.String()
 		for _, s := range []string{
-			`hx-post="/products/7/edit"`, `>MORTA-KG</p>`, `value="2.5"`, `value="10"`,
+			`hx-post="/products/7/edit"`, `>MORTA-KG</p>`, `name="brand_q"`, `value="SANCOR"`, `value="2.5"`, `value="10"`,
 			`<option value="WEIGHT" selected>`, `<option value="KILOGRAM" selected>`,
 		} {
 			if !strings.Contains(html, s) {
@@ -248,4 +233,46 @@ func TestRenderProductPartials(t *testing.T) {
 			t.Error("max_stock should be empty")
 		}
 	})
+}
+
+func TestProductFromFormBrandTypedButNotPicked(t *testing.T) {
+	post := func(body string) (string, *model.Product) {
+		r := httptest.NewRequest("POST", "/products/new", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		p := &model.Product{}
+		return productFromForm(r, p), p
+	}
+
+	// Escribió "arc" pero no eligió de la lista: se avisa.
+	if key, _ := post("name=AB&category_id=3&brand_q=arc&brand_id="); key != "error.product_brand_pick" {
+		t.Fatalf("typed, not picked: got %q", key)
+	}
+	// Eligió de la lista: vale.
+	if key, p := post("name=AB&category_id=3&brand_q=ARCOR&brand_id=4"); key != "" || p.BrandID == nil || *p.BrandID != 4 {
+		t.Fatalf("picked: got %q %v", key, p.BrandID)
+	}
+	// Sin texto ni marca: sin marca.
+	if key, p := post("name=AB&category_id=3&brand_q=&brand_id="); key != "" || p.BrandID != nil {
+		t.Fatalf("empty: got %q %v", key, p.BrandID)
+	}
+}
+
+func TestRenderBrandOptions(t *testing.T) {
+	e := NewTemplateEngine()
+	var buf bytes.Buffer
+	data := map[string]any{"Brands": []*model.Brand{{ID: 4, Name: "ARCOR"}}, "Query": "arc"}
+	if err := e.Render(&buf, "es", "product_brand_options.gohtml", data); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `data-id="4"`) || !strings.Contains(buf.String(), "ARCOR") {
+		t.Fatalf("got %s", buf.String())
+	}
+
+	buf.Reset()
+	if err := e.Render(&buf, "es", "product_brand_options.gohtml", map[string]any{"Query": "zzz"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "No hay marcas") {
+		t.Fatalf("no results: got %s", buf.String())
+	}
 }

@@ -196,5 +196,10 @@
   "error.product_brand_inactive": "The chosen brand is deactivated. Pick another or activate it first.",
   "error.product_category_inactive": "The chosen category is deactivated. Pick another or activate it first.",
   "error.product_supplier_inactive": "The chosen supplier is deactivated. Pick another or activate it first.",
-  "error.product_has_history": "This product already has stock movements, sales or purchases: how it is sold, its unit and batch tracking cannot change."
+  "error.product_has_history": "This product already has stock movements, sales or purchases: how it is sold, its unit and batch tracking cannot change.",
+  "product.brand_search": "Type to search the brand",
+  "product.brand_hint": "Type part of the name and pick it from the list. Leave it empty if it has no brand.",
+  "product.brand_inactive_hint": "This brand is deactivated. You can keep it or search for another.",
+  "product.brand_not_found": "No active brands with that name.",
+  "error.product_brand_pick": "Pick the brand from the list that appears while typing, or clear the text if it has no brand."
 }

@@ -291,6 +291,9 @@
   .h-full {
     height: 100%;
   }
+  .max-h-64 {
+    max-height: calc(var(--spacing) * 64);
+  }
   .min-h-screen {
     min-height: 100vh;
   }
@@ -648,6 +651,9 @@
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
+  .empty\:hidden:empty {
+    display: none;
+  }
   @media (hover: hover) {
     .hover\:border-white:hover {
       border-color: var(--color-white);
@@ -672,6 +678,9 @@
     .hover\:underline:hover {
       text-decoration-line: underline;
     }
+  }
+  .focus\:bg-paper:focus {
+    background-color: var(--color-paper);
   }
   @media (width >= 40rem) {
     .sm\:left-auto {

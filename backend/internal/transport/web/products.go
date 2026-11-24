@@ -38,12 +38,6 @@ func activeOptions[T any](list []*T, current *int64, fields func(*T) (int64, str
 	return opts
 }
 
-func brandOptions(brands []*model.Brand, current *int64) []productOption {
-	return activeOptions(brands, current, func(b *model.Brand) (int64, string, bool) {
-		return b.ID, b.Name, b.IsActive
-	})
-}
-
 func supplierOptions(suppliers []*model.Supplier, current *int64) []productOption {
 	return activeOptions(suppliers, current, func(s *model.Supplier) (int64, string, bool) {
 		return s.ID, s.Name, s.IsActive
@@ -111,6 +105,10 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	p.Description = r.FormValue("description")
 	p.CategoryID, _ = strconv.ParseInt(r.FormValue("category_id"), 10, 64)
 	p.BrandID = optionalID(r.FormValue("brand_id"))
+	// La marca se elige con un buscador: brand_q es el texto escrito y
+	// brand_id la que se eligió de la lista. Si hay texto pero no se eligió
+	// ninguna, se avisa en vez de guardar el producto sin marca sin querer.
+	brandTyped := strings.TrimSpace(r.FormValue("brand_q")) != ""
 	p.PreferredSupplierID = optionalID(r.FormValue("preferred_supplier_id"))
 	p.SaleType = model.SaleType(r.FormValue("sale_type"))
 	p.MeasureUnit = model.MeasureUnit(r.FormValue("measure_unit"))
@@ -119,9 +117,12 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	p.IsConsignment = r.FormValue("is_consignment") != ""
 
 	errKey := ""
+	if brandTyped && p.BrandID == nil {
+		errKey = "error.product_brand_pick"
+	}
 	if d, ok := parseFormDecimal(r.FormValue("reorder_point")); ok {
 		p.ReorderPoint = d
-	} else {
+	} else if errKey == "" {
 		errKey = "error.product_reorder_point"
 	}
 
@@ -154,11 +155,13 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 		h.renderPartial(w, r, "product_form.gohtml", data)
 		return
 	}
-	brands, err := h.brandSvc.GetAllIncludingInactive(ctx)
-	if err != nil {
-		data["Error"] = h.errMsg(r, err)
-		h.renderPartial(w, r, "product_form.gohtml", data)
-		return
+	// La marca no es un <select>: con miles de marcas se busca (ver
+	// ProductsBrandOptions). Solo hace falta el nombre de la actual.
+	if p.BrandID != nil {
+		if b, err := h.brandSvc.GetByID(ctx, *p.BrandID); err == nil {
+			data["BrandName"] = b.Name
+			data["BrandInactive"] = !b.IsActive
+		}
 	}
 	suppliers, err := h.supplierSvc.GetAllIncludingInactive(ctx)
 	if err != nil {
@@ -168,7 +171,6 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	}
 
 	data["Categories"] = productCategoryOptions(categories, p.CategoryID)
-	data["Brands"] = brandOptions(brands, p.BrandID)
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
 	data["SaleTypes"] = saleTypeOptions(p.SaleType)
 	data["MeasureUnits"] = model.MeasureUnits
@@ -182,6 +184,19 @@ func (h *WebHandler) productsTableData(r *http.Request) (map[string]any, error) 
 		return nil, err
 	}
 	return map[string]any{"Products": list, "Shown": len(list), "Total": total}, nil
+}
+
+// ProductsBrandOptions handles GET /products/brand-options: las marcas
+// activas que coinciden con lo escrito en el buscador del formulario (hasta
+// 20, ver SearchByName). Elegir una inactiva no se ofrece.
+func (h *WebHandler) ProductsBrandOptions(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.FormValue("brand_q"))
+	brands, err := h.brandSvc.SearchByName(r.Context(), query)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	h.renderPartial(w, r, "product_brand_options.gohtml", map[string]any{"Brands": brands, "Query": query})
 }
 
 // ProductsList handles GET /products

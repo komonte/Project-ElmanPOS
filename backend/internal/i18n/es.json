@@ -196,5 +196,10 @@
   "error.product_brand_inactive": "La marca elegida está desactivada. Elegí otra o activala primero.",
   "error.product_category_inactive": "La categoría elegida está desactivada. Elegí otra o activala primero.",
   "error.product_supplier_inactive": "El proveedor elegido está desactivado. Elegí otro o activalo primero.",
-  "error.product_has_history": "Este producto ya tiene movimientos de stock, ventas o compras: no se puede cambiar cómo se vende, su unidad ni el control de lotes."
+  "error.product_has_history": "Este producto ya tiene movimientos de stock, ventas o compras: no se puede cambiar cómo se vende, su unidad ni el control de lotes.",
+  "product.brand_search": "Escribí para buscar la marca",
+  "product.brand_hint": "Escribí parte del nombre y elegila de la lista. Dejalo vacío si no tiene marca.",
+  "product.brand_inactive_hint": "Esta marca está desactivada. Podés dejarla o buscar otra.",
+  "product.brand_not_found": "No hay marcas activas con ese nombre.",
+  "error.product_brand_pick": "Elegí la marca de la lista que aparece al escribir, o borrá el texto si no tiene marca."
 }

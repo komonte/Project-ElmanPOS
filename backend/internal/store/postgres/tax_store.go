@@ -13,10 +13,10 @@ import (
 var _ Store[model.Tax] = (*TaxStore)(nil)
 
 type TaxStore struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewTaxStore(db *sql.DB) *TaxStore {
+func NewTaxStore(db DBTX) *TaxStore {
 	return &TaxStore{db: db}
 }
 
@@ -156,9 +156,10 @@ func (s *TaxStore) Update(ctx context.Context, id int64, tax *model.Tax) (*model
 		return nil, errors.New("tax cannot be nil")
 	}
 
-	q := `UPDATE taxes SET name = $1, rate = $2, is_active = $3 WHERE id = $4 RETURNING id, is_active, created_at, updated_at;`
+	// No toca is_active: eso pasa solo por SetActive (ver BrandStore.Update).
+	q := `UPDATE taxes SET name = $1, rate = $2 WHERE id = $3 RETURNING id, is_active, created_at, updated_at;`
 
-	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate, tax.IsActive, id).Scan(&tax.ID, &tax.IsActive, &tax.CreatedAt, &tax.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, q, tax.Name, tax.Rate, id).Scan(&tax.ID, &tax.IsActive, &tax.CreatedAt, &tax.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound

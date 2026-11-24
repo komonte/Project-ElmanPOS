@@ -10,6 +10,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -273,7 +274,7 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.createProduct.Create(r.Context(), product, r.FormValue("barcode")); err != nil {
+	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{Product: product, Barcode: r.FormValue("barcode")}); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}

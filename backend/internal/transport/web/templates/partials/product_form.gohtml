@@ -65,13 +65,53 @@
           <legend class="font-display font-bold text-2xl mb-3">{{t "product.group_classification"}}</legend>
           <div>
             <label for="product-category" class="field-label">{{t "product.category"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <select id="product-category" name="category_id" required aria-describedby="product-category-hint" class="field">
+            <select id="product-category" name="category_id" required aria-describedby="product-category-hint" class="field" {{if .NewCategory}}disabled{{end}}>
               <option value="" disabled {{if not .Product.CategoryID}}selected{{end}}>{{t "product.category_choose"}}</option>
               {{range .Categories}}
               <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}{{if .Inactive}} {{t "product.inactive_suffix"}}{{end}}</option>
               {{end}}
             </select>
             <span id="product-category-hint" class="field-hint">{{t "product.category_hint"}}</span>
+            {{/* Alta: si la categoría no está, se crea acá (se guarda junto con
+                 el producto). Lleva padre e IVA porque la categoría define el
+                 IVA de cada venta. Cerrado, sus campos están deshabilitados:
+                 no se mandan ni se exigen. Ver toggleNewCategory en base.gohtml. */}}
+            {{if not .Product.ID}}
+            <button type="button" id="product-category-new-open" onclick="toggleNewCategory(this.form, true)" {{if .NewCategory}}hidden{{end}}
+                    class="mt-1 text-sm font-bold underline-offset-4 hover:underline">+ {{t "product.category_new"}}</button>
+            <div id="product-category-new" class="mt-4 p-4 border-2 border-line rounded-md space-y-5" {{if not .NewCategory}}hidden{{end}}>
+              <input type="hidden" name="category_new" value="1" {{if not .NewCategory}}disabled{{end}}>
+              <p class="font-bold">{{t "product.category_new_title"}}</p>
+              <div>
+                <label for="new-category-name" class="field-label">{{t "product.category_new_name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+                <input type="text" id="new-category-name" name="new_category_name" required maxlength="100"
+                       value="{{with .NewCategory}}{{.Name}}{{end}}" {{if not .NewCategory}}disabled{{end}} class="field">
+              </div>
+              <div>
+                <label for="new-category-parent" class="field-label">{{t "product.category_new_parent"}}</label>
+                {{/* Al elegir el padre, el IVA se completa con el suyo. */}}
+                <select id="new-category-parent" name="new_category_parent_id" {{if not .NewCategory}}disabled{{end}} class="field"
+                        onchange="const tax = this.selectedOptions[0].dataset.tax; if (tax) this.form.elements.new_category_tax_id.value = tax;">
+                  <option value="">{{t "product.category_new_parent_none"}}</option>
+                  {{range .CategoryParents}}
+                  <option value="{{.ID}}" data-tax="{{.TaxID}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+                  {{end}}
+                </select>
+              </div>
+              <div>
+                <label for="new-category-tax" class="field-label">{{t "product.category_new_tax"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+                <select id="new-category-tax" name="new_category_tax_id" required aria-describedby="new-category-tax-hint" {{if not .NewCategory}}disabled{{end}} class="field max-w-60">
+                  <option value="" {{if not .NewCategory}}selected{{else if not .NewCategory.TaxID}}selected{{end}}>{{t "product.category_new_tax_choose"}}</option>
+                  {{range .Taxes}}
+                  <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+                  {{end}}
+                </select>
+                <span id="new-category-tax-hint" class="field-hint">{{t "product.category_new_tax_hint"}}</span>
+              </div>
+              <button type="button" onclick="toggleNewCategory(this.form, false)"
+                      class="text-sm font-bold underline-offset-4 hover:underline">{{t "product.category_new_cancel"}}</button>
+            </div>
+            {{end}}
           </div>
           {{/* Marca: hay miles, así que en vez de un <select> es un buscador.
                brand_q es lo que se escribe; brand_id (oculto) es la marca

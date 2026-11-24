@@ -275,6 +275,7 @@ func TestCreateWithInvalidNewCategory(t *testing.T) {
 		Product:     f.product("CATEGORIA SIN IVA TEST"),
 		NewCategory: &model.Category{Name: "Sin iva test"},
 	})
+	wantErr(t, err, ErrNewCategory)
 	wantErr(t, err, service.ErrValidation)
 	wantErr(t, err, model.ErrCategoryTaxRequired)
 	if n := f.categoriesNamed(t, "Sin iva test"); n != 0 {
@@ -291,6 +292,7 @@ func TestCreateWithNewCategoryThatExists(t *testing.T) {
 		Product:     f.product("CATEGORIA REPETIDA TEST"),
 		NewCategory: &model.Category{Name: "Categoria test create", TaxID: f.taxID},
 	})
+	wantErr(t, err, ErrNewCategory)
 	wantErr(t, err, service.ErrAlreadyExists)
 }
 

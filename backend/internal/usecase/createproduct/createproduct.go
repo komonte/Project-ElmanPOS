@@ -55,6 +55,13 @@ func (e *BrandInactiveError) Error() string {
 
 func (e *BrandInactiveError) Unwrap() error { return service.ErrConflict }
 
+// ErrNewCategory envuelve los errores de la categoría nueva (nombre vacío,
+// repetido, sin impuesto...). Así quien muestra el error puede aclarar que es
+// de la categoría y no del producto: los dos tienen "nombre". El error de
+// adentro se sigue encontrando con errors.Is (service.ErrValidation,
+// model.ErrCategoryTaxRequired...).
+var ErrNewCategory = errors.New("new category")
+
 // codeStore es lo que el alta usa de los códigos dentro de la transacción.
 type codeStore interface {
 	productcodes.CodeFinder
@@ -123,7 +130,7 @@ func (s *Service) Create(ctx context.Context, req Request) (*model.Product, erro
 	}
 	if newCategory != nil {
 		if err := newCategory.Validate(); err != nil {
-			return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
+			return nil, fmt.Errorf("%w: %w: %w", ErrNewCategory, service.ErrValidation, err)
 		}
 	}
 	var code *model.ProductCode
@@ -158,7 +165,7 @@ func (s *Service) Create(ctx context.Context, req Request) (*model.Product, erro
 				func(c *model.Category) error { return c.Validate() })
 			c, err := categories.Create(ctx, newCategory)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: %w", ErrNewCategory, err)
 			}
 			p.CategoryID = c.ID
 		}

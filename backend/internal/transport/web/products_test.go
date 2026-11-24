@@ -391,6 +391,9 @@ func TestErrMsgBarcode(t *testing.T) {
 		{"new brand that exists inactive",
 			&createproduct.BrandInactiveError{Name: "ARCOR"},
 			"Brand ARCOR already exists, but it is inactive. Activate it in Brands or choose another one."},
+		{"new category error says so",
+			fmt.Errorf("%w: %w: %w", createproduct.ErrNewCategory, service.ErrValidation, model.ErrCategoryTaxRequired),
+			"New category: Choose the category's VAT rate."},
 		{"invalid characters",
 			fmt.Errorf("%w: %w", service.ErrValidation, model.ErrBarcodeNotDigits),
 			"A barcode can only contain digits."},
@@ -499,5 +502,91 @@ func TestProductsBarcodeCheck(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewCategoryParentOptions(t *testing.T) {
+	root := int64(1)
+	all := []*model.Category{
+		{ID: 1, Name: "Almacen", TaxID: 10, IsActive: true},
+		{ID: 2, Name: "Galletitas", ParentID: &root, TaxID: 11, IsActive: true},
+		{ID: 3, Name: "Vieja", TaxID: 10, IsActive: false},
+	}
+	selected := int64(2)
+	got := newCategoryParentOptions(all, &selected)
+
+	// Solo activas (un padre inactivo lo rechaza el store), con camino e IVA.
+	if len(got) != 2 {
+		t.Fatalf("got %d options, want 2: %+v", len(got), got)
+	}
+	if got[1].Label != "Almacen › Galletitas" || got[1].TaxID != 11 || !got[1].Selected || got[0].Selected {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestNewCategoryFromForm(t *testing.T) {
+	form := func(body string) *model.Category {
+		r := httptest.NewRequest("POST", "/products/new", strings.NewReader(body))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return newCategoryFromForm(r)
+	}
+
+	// Sin abrir el subformulario: nada que crear.
+	if c := form("category_id=3&new_category_name=X"); c != nil {
+		t.Errorf("closed: got %+v", c)
+	}
+	c := form("category_new=1&new_category_name=Galletitas&new_category_parent_id=1&new_category_tax_id=10")
+	if c == nil || c.Name != "Galletitas" || c.ParentID == nil || *c.ParentID != 1 || c.TaxID != 10 {
+		t.Errorf("open: got %+v", c)
+	}
+	// Sin padre: categoría principal.
+	if c := form("category_new=1&new_category_name=Bebidas&new_category_parent_id=&new_category_tax_id=10"); c == nil || c.ParentID != nil {
+		t.Errorf("no parent: got %+v", c)
+	}
+}
+
+func TestRenderProductFormNewCategory(t *testing.T) {
+	e := NewTemplateEngine()
+	render := func(data map[string]any) string {
+		data["SaleTypes"] = saleTypeOptions("")
+		data["MeasureUnits"] = model.MeasureUnits
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	parents := []productOption{{ID: 1, Label: "Almacen", TaxID: 10}}
+	taxes := []productOption{{ID: 10, Label: "IVA 21%"}}
+
+	// Cerrado: el link para abrirlo, y los campos deshabilitados (no se mandan).
+	html := render(map[string]any{"Product": &model.Product{}, "CategoryParents": parents, "Taxes": taxes})
+	for _, s := range []string{`+ Nueva categoría`, `name="category_new" value="1" disabled`,
+		`name="new_category_name" required maxlength="100"
+                       value="" disabled`, `data-tax="10"`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("closed: missing %q", s)
+		}
+	}
+	if strings.Contains(html, `name="category_id" required aria-describedby="product-category-hint" class="field" disabled`) {
+		t.Error("closed: category select is disabled")
+	}
+
+	// Vuelve con un error: abierto, con lo escrito, y el select deshabilitado.
+	parent := int64(1)
+	taxes[0].Selected = true
+	html = render(map[string]any{"Product": &model.Product{}, "CategoryParents": parents, "Taxes": taxes,
+		"NewCategory": &model.Category{Name: "Galletitas", ParentID: &parent, TaxID: 10}})
+	for _, s := range []string{`name="category_new" value="1" >`, `value="Galletitas"`, `<option value="10" selected>IVA 21%`,
+		`class="field" disabled>`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("open: missing %q", s)
+		}
+	}
+
+	// Edición: no se crean categorías.
+	html = render(map[string]any{"Product": &model.Product{ID: 7, Name: "X"}})
+	if strings.Contains(html, "category_new") {
+		t.Error("edit form: offers a new category")
 	}
 }

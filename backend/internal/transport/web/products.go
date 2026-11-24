@@ -25,6 +25,7 @@ type productOption struct {
 	Label    string
 	Selected bool
 	Inactive bool
+	TaxID    int64 // solo en las categorías padre de una categoría nueva
 }
 
 // activeOptions arma las opciones de un <select> de una tabla maestra: las
@@ -61,6 +62,41 @@ func productCategoryOptions(all []*model.Category, current int64) []productOptio
 		return strings.ToLower(opts[i].Label) < strings.ToLower(opts[j].Label)
 	})
 	return opts
+}
+
+// newCategoryParentOptions son las categorías que pueden ser padre de una
+// categoría nueva: solo las activas (el store rechaza un padre inactivo), con
+// su camino y su impuesto, para precargar el de la nueva.
+func newCategoryParentOptions(all []*model.Category, selected *int64) []productOption {
+	opts := productCategoryOptions(all, 0)
+	taxes := make(map[int64]int64, len(all))
+	for _, c := range all {
+		taxes[c.ID] = c.TaxID
+	}
+	active := opts[:0]
+	for _, o := range opts {
+		if o.Inactive {
+			continue
+		}
+		o.TaxID = taxes[o.ID]
+		o.Selected = selected != nil && *selected == o.ID
+		active = append(active, o)
+	}
+	return active
+}
+
+// newCategoryFromForm lee la categoría nueva del alta (nil si no se pidió).
+// Un número mal escrito queda en 0 y Validate lo rechaza.
+func newCategoryFromForm(r *http.Request) *model.Category {
+	if r.FormValue("category_new") != "1" {
+		return nil
+	}
+	taxID, _ := strconv.ParseInt(r.FormValue("new_category_tax_id"), 10, 64)
+	return &model.Category{
+		Name:     r.FormValue("new_category_name"),
+		ParentID: optionalID(r.FormValue("new_category_parent_id")),
+		TaxID:    taxID,
+	}
 }
 
 // saleTypeOptions son los tipos de venta que ofrece el formulario. COMPOSITE
@@ -192,6 +228,26 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	}
 
 	data["Categories"] = productCategoryOptions(categories, p.CategoryID)
+	if p.ID == 0 {
+		// Alta: la categoría se puede crear ahí mismo (nombre, padre e IVA).
+		// Si vuelve con un error, el subformulario sigue abierto con lo escrito.
+		nc := newCategoryFromForm(r)
+		taxes, err := h.taxSvc.GetAllIncludingInactive(ctx)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		var parentID, taxID *int64
+		if nc != nil {
+			parentID, taxID = nc.ParentID, &nc.TaxID
+			data["NewCategory"] = nc
+		}
+		data["CategoryParents"] = newCategoryParentOptions(categories, parentID)
+		data["Taxes"] = activeOptions(taxes, taxID, func(t *model.Tax) (int64, string, bool) {
+			return t.ID, t.Name, t.IsActive
+		})
+	}
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
 	data["SaleTypes"] = saleTypeOptions(p.SaleType)
 	data["MeasureUnits"] = model.MeasureUnits
@@ -302,9 +358,10 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{
-		Product:  product,
-		Barcode:  r.FormValue("barcode"),
-		NewBrand: r.FormValue("brand_new"),
+		Product:     product,
+		Barcode:     r.FormValue("barcode"),
+		NewBrand:    r.FormValue("brand_new"),
+		NewCategory: newCategoryFromForm(r),
 	}); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return

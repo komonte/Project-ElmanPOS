@@ -12,8 +12,8 @@
 
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
     <div class="p-4 border-b border-gray-200 bg-gray-50">
-      <input type="text" name="search" placeholder="{{t "common.search"}}"
-             hx-get="/taxes" hx-trigger="keyup changed delay:300ms" hx-target="#taxes-table" hx-swap="innerHTML"
+      <input type="search" name="search" placeholder="{{t "common.search"}}"
+             hx-get="/taxes" hx-trigger="input changed delay:300ms, search" hx-target="#taxes-table" hx-swap="innerHTML"
              class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
     </div>
     <div id="taxes-table">

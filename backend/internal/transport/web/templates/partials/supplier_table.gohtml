@@ -31,13 +31,13 @@
         <button hx-get="/suppliers/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML"
                 class="text-indigo-600 hover:text-indigo-800 font-medium mr-3">{{t "common.edit"}}</button>
         {{if .IsActive}}
-        <button hx-patch="/suppliers/{{.ID}}/deactivate" hx-confirm="{{t "supplier.deactivate_confirm"}}" hx-target="#suppliers-table" hx-swap="innerHTML"
+        <button hx-include="[name='search']" hx-patch="/suppliers/{{.ID}}/deactivate" hx-confirm="{{t "supplier.deactivate_confirm"}}" hx-target="#suppliers-table" hx-swap="innerHTML"
                 class="text-yellow-600 hover:text-yellow-800 font-medium mr-3">{{t "supplier.deactivate"}}</button>
         {{else}}
-        <button hx-patch="/suppliers/{{.ID}}/reactivate" hx-target="#suppliers-table" hx-swap="innerHTML"
+        <button hx-include="[name='search']" hx-patch="/suppliers/{{.ID}}/reactivate" hx-target="#suppliers-table" hx-swap="innerHTML"
                 class="text-green-600 hover:text-green-800 font-medium mr-3">{{t "supplier.activate"}}</button>
         {{end}}
-        <button hx-delete="/suppliers/{{.ID}}" hx-confirm="{{t "supplier.delete_confirm"}}" hx-target="#suppliers-table" hx-swap="innerHTML"
+        <button hx-include="[name='search']" hx-delete="/suppliers/{{.ID}}" hx-confirm="{{t "supplier.delete_confirm"}}" hx-target="#suppliers-table" hx-swap="innerHTML"
                 class="text-red-600 hover:text-red-800 font-medium">{{t "common.delete"}}</button>
       </td>
     </tr>

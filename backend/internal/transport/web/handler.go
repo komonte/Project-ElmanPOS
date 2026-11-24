@@ -30,6 +30,20 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 	}
 }
 
+// adminList es lo que muestran las tablas de admin: activos e inactivos,
+// filtrados por la búsqueda si hay una. La usan la carga de la página y las
+// acciones de la tabla (borrar, desactivar, reactivar), que mandan la búsqueda
+// actual con hx-include. Así, después de una acción la tabla no pierde el
+// filtro ni esconde lo que se acaba de desactivar.
+// FormValue lee tanto la query (GET, DELETE) como el cuerpo (PATCH).
+func adminList[T any](r *http.Request, svc *service.Service[T]) ([]*T, error) {
+	query := strings.TrimSpace(r.FormValue("search"))
+	if query == "" {
+		return svc.GetAllIncludingInactive(r.Context())
+	}
+	return svc.SearchAllByName(r.Context(), query)
+}
+
 func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
 	lang := transport.GetLocale(r.Context())
 	if data == nil {
@@ -129,16 +143,7 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 // BrandsList handles GET /brands
 func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var brands []*model.Brand
-	var err error
-	if query != "" {
-		brands, err = h.brandSvc.SearchAllByName(ctx, query)
-	} else {
-		brands, err = h.brandSvc.GetAllIncludingInactive(ctx)
-	}
+	brands, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -290,7 +295,7 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
-	brands, err := h.brandSvc.GetAll(r.Context())
+	brands, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -304,16 +309,7 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 
 // TaxesList handles GET /taxes
 func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var taxes []*model.Tax
-	var err error
-	if query != "" {
-		taxes, err = h.taxSvc.SearchAllByName(ctx, query)
-	} else {
-		taxes, err = h.taxSvc.GetAllIncludingInactive(ctx)
-	}
+	taxes, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -481,7 +477,7 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
-	taxes, err := h.taxSvc.GetAll(r.Context())
+	taxes, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -493,16 +489,7 @@ func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
 
 // SuppliersList handles GET /suppliers
 func (h *WebHandler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	query := strings.TrimSpace(r.URL.Query().Get("search"))
-
-	var suppliers []*model.Supplier
-	var err error
-	if query != "" {
-		suppliers, err = h.supplierSvc.SearchAllByName(ctx, query)
-	} else {
-		suppliers, err = h.supplierSvc.GetAllIncludingInactive(ctx)
-	}
+	suppliers, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -664,11 +651,9 @@ func (h *WebHandler) SuppliersReactivate(w http.ResponseWriter, r *http.Request)
 	h.suppliersTable(w, r)
 }
 
-// suppliersTable redibuja la tabla después de una acción. Incluye los
-// inactivos, igual que SuppliersList: si no, al desactivar uno desaparecería
-// de la lista y no se podría reactivar sin recargar la página.
+// suppliersTable redibuja la tabla después de una acción (ver adminList).
 func (h *WebHandler) suppliersTable(w http.ResponseWriter, r *http.Request) {
-	suppliers, err := h.supplierSvc.GetAllIncludingInactive(r.Context())
+	suppliers, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

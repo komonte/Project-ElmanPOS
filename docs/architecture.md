@@ -68,6 +68,39 @@ Manual dependency injection in `cmd/api/main.go` — no DI framework.
   `GetAllIncludingInactive`, `SearchAllByName`, `Deactivate` and `Reactivate`.
   No per-entity service is needed just for soft delete.
 
+### D-05: Large catalog volume
+
+**Context:** The real catalog (SEPA dataset, see `db/import/`) has ~65,000
+products and ~6,000 brands. Loading a whole table to show it, a `<select>`
+with thousands of options, or an API list without a limit all stop working
+at that size (the product table took 90 ms in Postgres alone and the product
+form weighed 460 KB).
+
+**Decision:**
+- **Paginated admin lists.** `Store[T]` has `ListAll(ctx, query, limit)`: the
+  first `limit` rows (active and inactive) and the total that match the search.
+  It runs two queries (count + page) instead of `COUNT(*) OVER ()`, so the page
+  can stop early on an ordered index. The web tables show 50 rows and a
+  "showing 50 of N" notice; the search finds the rest.
+- **Indexes for that access** (migration `0011`): a B-tree in the admin order
+  (`is_active DESC, name[, sku]`) and `pg_trgm` GIN indexes for
+  `name ILIKE '%...%'` on products and brands.
+- **Search instead of `<select>`** for large master tables in forms (brands in
+  the product form): an htmx search that returns up to 20 active matches.
+  Small tables (categories, suppliers, taxes) keep their `<select>`.
+- **API lists are paginated:** `GET /api/{entities}` returns at most
+  `?limit=` rows (default 100, max 500), filtered with `?search=`, and the
+  total in the `X-Total-Count` header. `?name=` is still the quick search
+  among active rows.
+
+**Consequences:**
+- Measured with the real catalog: product table 90 ms → 0.06 ms, search
+  "queso" 81 ms → 16 ms, product form 460 KB → 8 KB, `GET /api/products`
+  ~30 MB → 45 KB.
+- A new master store must implement `ListAll` (use `listPage` in `db.go`).
+- Searches shorter than 3 characters cannot use the trigram index (they scan
+  the table); still a few ms at this size.
+
 ---
 
 ## Protocols
@@ -82,7 +115,7 @@ Steps:
 1. Create `model/entity.go` — struct + `Validate()`
 2. Create `store/postgres/entity_store.go` — implements `Store[Entity]` using
    `QueryContext`/`QueryRowContext`/`ExecContext` with explicit SQL, including
-   the soft-delete methods (D-04). Add `var _ Store[model.Entity] = (*EntityStore)(nil)`
+   the soft-delete methods (D-04) and the paginated `ListAll` (D-05). Add `var _ Store[model.Entity] = (*EntityStore)(nil)`
    so a missing method fails at compile time. Unique-column errors wrap
    `store.ErrDuplicate` (e.g. `fmt.Errorf("name %w", ErrDuplicate)`) so the
    generic service maps them to `ErrAlreadyExists`.

@@ -63,11 +63,28 @@ func newTestMux() *http.ServeMux {
 		},
 	}
 
+	category := &model.Category{ID: 1, Name: "Limpieza", TaxID: 1}
+	categoryStore := &MockStore[model.Category]{
+		getByIDFn: func(_ context.Context, id int64) (*model.Category, error) {
+			if id != 1 {
+				return nil, store.ErrNotFound
+			}
+			return category, nil
+		},
+		deleteFn: func(_ context.Context, id int64) error {
+			if id != 1 {
+				return store.ErrNotFound
+			}
+			return nil
+		},
+	}
+
 	mux := http.NewServeMux()
 	transport.RegisterAPIRoutes(mux,
 		transport.NewResourceHandler[model.Brand](service.NewService[model.Brand](brandStore, nil), "brand"),
 		transport.NewResourceHandler[model.Tax](service.NewService[model.Tax](taxStore, nil), "tax"),
 		transport.NewResourceHandler[model.Supplier](service.NewService[model.Supplier](supplierStore, nil), "supplier"),
+		transport.NewResourceHandler[model.Category](service.NewService[model.Category](categoryStore, nil), "category"),
 	)
 	return mux
 }
@@ -101,6 +118,13 @@ func TestAPIRoutesThroughMux(t *testing.T) {
 		{http.MethodDelete, "/api/suppliers/1", http.StatusNoContent},
 		{http.MethodPatch, "/api/suppliers/1", http.StatusMethodNotAllowed},
 		{http.MethodPatch, "/api/suppliers", http.StatusMethodNotAllowed},
+
+		{http.MethodGet, "/api/categories/1", http.StatusOK},
+		{http.MethodGet, "/api/categories/999", http.StatusNotFound},
+		{http.MethodGet, "/api/categories/abc", http.StatusBadRequest},
+		{http.MethodDelete, "/api/categories/1", http.StatusNoContent},
+		{http.MethodPatch, "/api/categories/1", http.StatusMethodNotAllowed},
+		{http.MethodPatch, "/api/categories", http.StatusMethodNotAllowed},
 	}
 
 	for _, tc := range cases {

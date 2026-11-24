@@ -236,3 +236,10 @@ func TestHandlerWithSupplier(t *testing.T) {
 		ID: 1, Name: "Arcor",
 	})
 }
+
+func TestHandlerWithCategory(t *testing.T) {
+	t.Parallel()
+	runHandlerTests[model.Category](t, "category", "/api/categories", &model.Category{
+		ID: 1, Name: "Limpieza", TaxID: 1,
+	})
+}

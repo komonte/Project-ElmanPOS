@@ -20,6 +20,23 @@ import (
 func testTx(t *testing.T) *sql.Tx {
 	t.Helper()
 
+	tx, err := testDB(t).BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin tx (is the DB up?): %v", err)
+	}
+	// Cleanup corre en orden inverso: primero el Rollback, después el Close.
+	t.Cleanup(func() { tx.Rollback() })
+
+	return tx
+}
+
+// testDB abre la DB de TEST_DATABASE_URL (o saltea el test) y la cierra al
+// terminar. Casi todos los tests usan testTx; testDB es para los pocos que
+// necesitan guardar de verdad (ej. probar un COMMIT), y tienen que borrar lo
+// que escriben.
+func testDB(t *testing.T) *sql.DB {
+	t.Helper()
+
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
 		t.Skip("TEST_DATABASE_URL not set; run `make test` with the DB up")
@@ -30,13 +47,5 @@ func testTx(t *testing.T) *sql.Tx {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatalf("begin tx (is the DB up?): %v", err)
-	}
-	// Cleanup corre en orden inverso: primero el Rollback, después el Close.
-	t.Cleanup(func() { tx.Rollback() })
-
-	return tx
+	return db
 }

@@ -1,43 +1,43 @@
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog">
-  <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onclick="if (event.target === this) closeModal()">
+  <div class="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold text-gray-900">{{if .Supplier.ID}}{{t "supplier.edit"}}{{else}}{{t "supplier.create"}}{{end}}</h2>
-      <button onclick="document.getElementById('form-modal').innerHTML=''"
-              class="text-gray-400 hover:text-gray-600">&times;</button>
+      <h2 id="form-title" class="text-lg font-semibold text-gray-900">{{if .Supplier.ID}}{{t "supplier.edit"}}{{else}}{{t "supplier.create"}}{{end}}</h2>
+      <button type="button" onclick="closeModal()" aria-label="{{t "common.close"}}"
+              class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
     </div>
     {{if .Error}}
-    <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{.Error}}</div>
+    <div role="alert" class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{{.Error}}</div>
     {{end}}
     <form hx-post="{{if .Supplier.ID}}/suppliers/{{.Supplier.ID}}/edit{{else}}/suppliers/new{{end}}"
           hx-target="#form-modal" hx-swap="innerHTML"
           class="space-y-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.name"}}</label>
-        <input type="text" name="name" value="{{if .Supplier}}{{.Supplier.Name}}{{end}}" required maxlength="160"
+        <label for="supplier-name" class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.name"}}</label>
+        <input type="text" id="supplier-name" name="name" autofocus value="{{if .Supplier}}{{.Supplier.Name}}{{end}}" required maxlength="160"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.tax_id_number"}}</label>
-        <input type="text" name="tax_id_number" value="{{if .Supplier}}{{.Supplier.TaxIDNumber}}{{end}}" placeholder="20-12345678-6"
+        <label for="supplier-tax-id-number" class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.tax_id_number"}}</label>
+        <input type="text" id="supplier-tax-id-number" name="tax_id_number" value="{{if .Supplier}}{{.Supplier.TaxIDNumber}}{{end}}" placeholder="20-12345678-6"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.phone"}}</label>
-        <input type="tel" name="phone" value="{{if .Supplier}}{{.Supplier.Phone}}{{end}}" maxlength="40"
+        <label for="supplier-phone" class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.phone"}}</label>
+        <input type="tel" id="supplier-phone" name="phone" value="{{if .Supplier}}{{.Supplier.Phone}}{{end}}" maxlength="40"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.email"}}</label>
-        <input type="email" name="email" value="{{if .Supplier}}{{.Supplier.Email}}{{end}}" maxlength="120"
+        <label for="supplier-email" class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.email"}}</label>
+        <input type="email" id="supplier-email" name="email" value="{{if .Supplier}}{{.Supplier.Email}}{{end}}" maxlength="120"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.payment_terms"}}</label>
-        <input type="text" name="payment_terms" value="{{if .Supplier}}{{.Supplier.PaymentTerms}}{{end}}" maxlength="120" placeholder="{{t "supplier.payment_terms_hint"}}"
+        <label for="supplier-payment-terms" class="block text-sm font-medium text-gray-700 mb-1">{{t "supplier.payment_terms"}}</label>
+        <input type="text" id="supplier-payment-terms" name="payment_terms" value="{{if .Supplier}}{{.Supplier.PaymentTerms}}{{end}}" maxlength="120" placeholder="{{t "supplier.payment_terms_hint"}}"
                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
       </div>
       <div class="flex justify-end gap-3 pt-2">
-        <button type="button" onclick="document.getElementById('form-modal').innerHTML=''"
+        <button type="button" onclick="closeModal()"
                 class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
           {{t "common.cancel"}}
         </button>

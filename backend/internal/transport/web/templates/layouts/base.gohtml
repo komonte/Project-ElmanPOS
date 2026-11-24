@@ -25,6 +25,17 @@
             class="absolute top-2 right-3 text-red-400 hover:text-red-600 text-lg leading-none">&times;</button>
   </div>
   <script>
+    // Los formularios se abren en #form-modal; vaciarlo lo cierra.
+    function closeModal() {
+      document.getElementById('form-modal').innerHTML = '';
+    }
+    document.addEventListener('keydown', function (e) {
+      var modal = document.getElementById('form-modal');
+      if (e.key === 'Escape' && modal && modal.firstElementChild) {
+        closeModal();
+      }
+    });
+
     (function () {
       var toast = document.getElementById('toast');
       var timer;

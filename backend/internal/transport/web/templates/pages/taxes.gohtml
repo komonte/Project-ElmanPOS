@@ -16,7 +16,7 @@
              hx-get="/taxes" hx-trigger="input changed delay:300ms, search" hx-target="#taxes-table" hx-swap="innerHTML"
              class="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500">
     </div>
-    <div id="taxes-table">
+    <div id="taxes-table" class="overflow-x-auto">
       {{template "tax_table.gohtml" .}}
     </div>
   </div>

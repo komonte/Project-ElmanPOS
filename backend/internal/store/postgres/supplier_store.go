@@ -27,7 +27,7 @@ func (s *SupplierStore) Create(ctx context.Context, supplier *model.Supplier) (*
 	// Los opcionales vacíos ("") se guardan como NULL.
 	// id, is_active y las fechas los pone la DB y vuelven por RETURNING.
 	q := `INSERT INTO suppliers (name, tax_id_number, phone, email, payment_terms)
-	      VALUES ($1, COALESCE($2, ''), COALESCE($3, ''), COALESCE($4, ''), COALESCE($5, ''))
+	      VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''))
 	      RETURNING id, is_active, created_at, updated_at;`
 
 	err := s.db.QueryRowContext(ctx, q, supplier.Name, supplier.TaxIDNumber, supplier.Phone, supplier.Email, supplier.PaymentTerms).Scan(&supplier.ID, &supplier.IsActive, &supplier.CreatedAt, &supplier.UpdatedAt)

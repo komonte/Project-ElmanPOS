@@ -37,3 +37,39 @@ func TestSupplierStore_UpdateKeepsIsActive(t *testing.T) {
 		t.Fatal("update reactivated the supplier")
 	}
 }
+
+// Los opcionales vacíos se guardan como NULL. Con '' el segundo proveedor
+// sin CUIT chocaba con el primero en el UNIQUE (dos '' son iguales; dos NULL no).
+func TestSupplierStore_CreateEmptyOptionalsAreNull(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	s := postgres.NewSupplierStore(tx)
+
+	a, err := s.Create(ctx, &model.Supplier{Name: "Proveedor sin CUIT A"})
+	if err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	if _, err := s.Create(ctx, &model.Supplier{Name: "Proveedor sin CUIT B"}); err != nil {
+		t.Fatalf("create B (second supplier without CUIT): %v", err)
+	}
+
+	var nulls int
+	err = tx.QueryRowContext(ctx, `
+		SELECT num_nulls(tax_id_number, phone, email, payment_terms)
+		FROM suppliers WHERE id = $1;`, a.ID).Scan(&nulls)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if nulls != 4 {
+		t.Fatalf("got %d NULL optionals, want 4", nulls)
+	}
+
+	// Leído de vuelta, NULL vuelve como "".
+	got, err := s.GetByID(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.TaxIDNumber != "" || got.Email != "" {
+		t.Fatalf("got %+v, want empty optionals", got)
+	}
+}

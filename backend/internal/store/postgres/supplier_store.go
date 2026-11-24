@@ -254,3 +254,26 @@ func (s *SupplierStore) SetActive(ctx context.Context, id int64, active bool) er
 
 	return nil
 }
+
+func scanSupplier(row rowScanner) (*model.Supplier, error) {
+	sp := new(model.Supplier)
+	err := row.Scan(&sp.ID, &sp.Name, &sp.TaxIDNumber, &sp.Phone, &sp.Email, &sp.PaymentTerms,
+		&sp.IsActive, &sp.CreatedAt, &sp.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return sp, nil
+}
+
+func (s *SupplierStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Supplier, int, error) {
+	const where = `WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')`
+	return listPage(ctx, s.db,
+		`SELECT count(*) FROM suppliers `+where+`;`,
+		`SELECT id, name,
+		        COALESCE(tax_id_number, ''), COALESCE(phone, ''),
+		        COALESCE(email, ''), COALESCE(payment_terms, ''),
+		        is_active, created_at, updated_at
+		 FROM suppliers `+where+`
+		 ORDER BY is_active DESC, name LIMIT $2;`,
+		scanSupplier, query, limit)
+}

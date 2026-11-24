@@ -142,6 +142,18 @@ func (s *Service[T]) SearchAllByName(ctx context.Context, query string) ([]*T, e
 	return s.store.SearchAllByName(ctx, q)
 }
 
+// MaxListLimit es el tope de filas de una página de ListAll, para que un
+// pedido no pueda traer el catálogo entero de una vez.
+const MaxListLimit = 500
+
+// ListAll es la lista de admin paginada (ver postgres.Store.ListAll). La
+// búsqueda se limpia de espacios; el límite se ajusta a 0..MaxListLimit
+// (0 sirve para pedir solo el total).
+func (s *Service[T]) ListAll(ctx context.Context, query string, limit int) ([]*T, int, error) {
+	limit = max(0, min(limit, MaxListLimit))
+	return s.store.ListAll(ctx, strings.TrimSpace(query), limit)
+}
+
 // Deactivate es la baja lógica (D-04): is_active = FALSE, la fila queda.
 func (s *Service[T]) Deactivate(ctx context.Context, id int64) error {
 	return s.setActive(ctx, id, false)

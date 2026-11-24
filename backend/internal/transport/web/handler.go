@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
@@ -21,30 +20,33 @@ type WebHandler struct {
 	taxSvc      *service.Service[model.Tax]
 	supplierSvc *service.Service[model.Supplier]
 	categorySvc *service.Service[model.Category]
+	productSvc  *service.Service[model.Product]
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category]) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product]) *WebHandler {
 	return &WebHandler{
 		engine:      engine,
 		brandSvc:    brandSvc,
 		taxSvc:      taxSvc,
 		supplierSvc: supplierSvc,
 		categorySvc: categorySvc,
+		productSvc:  productSvc,
 	}
 }
 
+// adminListLimit es cuántas filas muestra una tabla de admin. Con miles de
+// productos o marcas, la tabla trae solo estas y avisa cuántas hay en total.
+const adminListLimit = 50
+
 // adminList es lo que muestran las tablas de admin: activos e inactivos,
-// filtrados por la búsqueda si hay una. La usan la carga de la página y las
-// acciones de la tabla (borrar, desactivar, reactivar), que mandan la búsqueda
-// actual con hx-include. Así, después de una acción la tabla no pierde el
-// filtro ni esconde lo que se acaba de desactivar.
+// filtrados por la búsqueda si hay una, los primeros adminListLimit, y
+// cuántos hay en total (para el aviso "se muestran 50 de N"). La usan la
+// carga de la página y las acciones de la tabla (borrar, desactivar,
+// reactivar), que mandan la búsqueda actual con hx-include. Así, después de
+// una acción la tabla no pierde el filtro ni esconde lo que se desactivó.
 // FormValue lee tanto la query (GET, DELETE) como el cuerpo (PATCH).
-func adminList[T any](r *http.Request, svc *service.Service[T]) ([]*T, error) {
-	query := strings.TrimSpace(r.FormValue("search"))
-	if query == "" {
-		return svc.GetAllIncludingInactive(r.Context())
-	}
-	return svc.SearchAllByName(r.Context(), query)
+func adminList[T any](r *http.Request, svc *service.Service[T]) ([]*T, int, error) {
+	return svc.ListAll(r.Context(), r.FormValue("search"), adminListLimit)
 }
 
 func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
@@ -90,6 +92,7 @@ var errorKeys = []struct {
 	key string
 }{
 	{store.ErrDuplicateTaxID, "error.duplicate_tax_id"},
+	{store.ErrDuplicateSKU, "error.duplicate_sku"},
 	{store.ErrDuplicateName, "error.duplicate_name"},
 
 	{model.ErrEmptyBrandName, "error.name_required"},
@@ -117,6 +120,27 @@ var errorKeys = []struct {
 	{store.ErrCategoryCycle, "error.category_cycle"},
 	{store.ErrCategoryHasActiveChildren, "error.category_has_active_children"},
 	{store.ErrCategoryParentInactive, "error.category_parent_inactive"},
+
+	{model.ErrProductSKUTooLong, "error.product_sku_too_long"},
+	{model.ErrEmptyProductName, "error.name_required"},
+	{model.ErrProductNameTooShort, "error.name_too_short"},
+	{model.ErrProductNameTooLong, "error.name_too_long"},
+	{model.ErrProductDescriptionTooLong, "error.product_description_too_long"},
+	{model.ErrProductCategoryRequired, "error.product_category_required"},
+	// Solo pasan si alguien arma el formulario a mano: los <select> no los permiten.
+	{model.ErrInvalidProductBrand, "error.product_choice_invalid"},
+	{model.ErrInvalidProductSupplier, "error.product_choice_invalid"},
+	{model.ErrInvalidSaleType, "error.product_choice_invalid"},
+	{model.ErrInvalidMeasureUnit, "error.product_choice_invalid"},
+	{model.ErrWeightNeedsKilogram, "error.product_weight_needs_kg"},
+	{model.ErrCompositeBatches, "error.product_composite_batches"},
+	{model.ErrInvalidReorderPoint, "error.product_reorder_point"},
+	{model.ErrInvalidMaxStock, "error.product_max_stock"},
+	{model.ErrInvalidMargin, "error.product_margin"},
+	{store.ErrProductBrandInactive, "error.product_brand_inactive"},
+	{store.ErrProductCategoryInactive, "error.product_category_inactive"},
+	{store.ErrProductSupplierInactive, "error.product_supplier_inactive"},
+	{store.ErrProductHasHistory, "error.product_has_history"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no
@@ -209,7 +233,7 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 
 // BrandsList handles GET /brands
 func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
-	brands, err := adminList(r, h.brandSvc)
+	brands, total, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -218,13 +242,13 @@ func (h *WebHandler) BrandsList(w http.ResponseWriter, r *http.Request) {
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
 		h.renderPartial(w, r, "brand_table.gohtml", map[string]any{
-			"Brands": brands,
+			"Brands": brands, "Shown": len(brands), "Total": total,
 		})
 		return
 	}
 
 	h.render(w, r, "brands.gohtml", map[string]any{
-		"Brands":   brands,
+		"Brands": brands, "Shown": len(brands), "Total": total,
 		"Section":  "brands",
 		"TitleKey": "brand.title",
 	})
@@ -361,13 +385,13 @@ func (h *WebHandler) BrandsReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
-	brands, err := adminList(r, h.brandSvc)
+	brands, total, err := adminList(r, h.brandSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	h.renderPartial(w, r, "brand_table.gohtml", map[string]any{
-		"Brands": brands,
+		"Brands": brands, "Shown": len(brands), "Total": total,
 	})
 }
 
@@ -375,7 +399,7 @@ func (h *WebHandler) brandsTable(w http.ResponseWriter, r *http.Request) {
 
 // TaxesList handles GET /taxes
 func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
-	taxes, err := adminList(r, h.taxSvc)
+	taxes, total, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -384,13 +408,13 @@ func (h *WebHandler) TaxesList(w http.ResponseWriter, r *http.Request) {
 	isHtmx := r.Header.Get("HX-Request") != ""
 	if isHtmx {
 		h.renderPartial(w, r, "tax_table.gohtml", map[string]any{
-			"Taxes": taxes,
+			"Taxes": taxes, "Shown": len(taxes), "Total": total,
 		})
 		return
 	}
 
 	h.render(w, r, "taxes.gohtml", map[string]any{
-		"Taxes":    taxes,
+		"Taxes": taxes, "Shown": len(taxes), "Total": total,
 		"Section":  "taxes",
 		"TitleKey": "tax.title",
 	})
@@ -543,19 +567,19 @@ func (h *WebHandler) TaxesReactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) taxesTable(w http.ResponseWriter, r *http.Request) {
-	taxes, err := adminList(r, h.taxSvc)
+	taxes, total, err := adminList(r, h.taxSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	h.renderPartial(w, r, "tax_table.gohtml", map[string]any{
-		"Taxes": taxes,
+		"Taxes": taxes, "Shown": len(taxes), "Total": total,
 	})
 }
 
 // SuppliersList handles GET /suppliers
 func (h *WebHandler) SuppliersList(w http.ResponseWriter, r *http.Request) {
-	suppliers, err := adminList(r, h.supplierSvc)
+	suppliers, total, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -563,15 +587,15 @@ func (h *WebHandler) SuppliersList(w http.ResponseWriter, r *http.Request) {
 
 	if r.Header.Get("HX-Request") != "" {
 		h.renderPartial(w, r, "supplier_table.gohtml", map[string]any{
-			"Suppliers": suppliers,
+			"Suppliers": suppliers, "Shown": len(suppliers), "Total": total,
 		})
 		return
 	}
 
 	h.render(w, r, "suppliers.gohtml", map[string]any{
-		"Suppliers": suppliers,
-		"Section":   "suppliers",
-		"TitleKey":  "supplier.title",
+		"Suppliers": suppliers, "Shown": len(suppliers), "Total": total,
+		"Section":  "suppliers",
+		"TitleKey": "supplier.title",
 	})
 }
 
@@ -719,13 +743,13 @@ func (h *WebHandler) SuppliersReactivate(w http.ResponseWriter, r *http.Request)
 
 // suppliersTable redibuja la tabla después de una acción (ver adminList).
 func (h *WebHandler) suppliersTable(w http.ResponseWriter, r *http.Request) {
-	suppliers, err := adminList(r, h.supplierSvc)
+	suppliers, total, err := adminList(r, h.supplierSvc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	h.renderPartial(w, r, "supplier_table.gohtml", map[string]any{
-		"Suppliers": suppliers,
+		"Suppliers": suppliers, "Shown": len(suppliers), "Total": total,
 	})
 }
 

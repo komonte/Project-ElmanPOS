@@ -24,12 +24,14 @@ var pageFiles = []string{
 	"templates/pages/taxes.gohtml",
 	"templates/pages/suppliers.gohtml",
 	"templates/pages/categories.gohtml",
+	"templates/pages/products.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
 // y que las páginas también incluyen.
 var partialFiles = []string{
 	"templates/partials/nav.gohtml",
+	"templates/partials/list_notice.gohtml",
 	"templates/partials/brand_form.gohtml",
 	"templates/partials/brand_table.gohtml",
 	"templates/partials/tax_form.gohtml",
@@ -38,6 +40,9 @@ var partialFiles = []string{
 	"templates/partials/supplier_table.gohtml",
 	"templates/partials/category_form.gohtml",
 	"templates/partials/category_table.gohtml",
+	"templates/partials/product_form.gohtml",
+	"templates/partials/product_brand_options.gohtml",
+	"templates/partials/product_table.gohtml",
 }
 
 type TemplateEngine struct {

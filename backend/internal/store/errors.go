@@ -22,6 +22,7 @@ var (
 	ErrDuplicate      = errors.New("already exists")
 	ErrDuplicateName  = fmt.Errorf("name %w", ErrDuplicate)
 	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
+	ErrDuplicateSKU   = fmt.Errorf("sku %w", ErrDuplicate)
 
 	// ErrConflict es la base de los errores de "choca con cómo están los
 	// datos ahora" (ej. desactivar una categoría con hijas activas). Igual
@@ -33,6 +34,16 @@ var (
 	ErrCategoryCycle             = conflictError("category cannot be moved under itself or one of its subcategories")
 	ErrCategoryHasActiveChildren = conflictError("category has active subcategories")
 	ErrCategoryParentInactive    = conflictError("category parent is inactive")
+
+	// Productos (F-01, BR-06): no se elige una marca, categoría o proveedor
+	// inactivo. Al editar, sí se puede conservar el que ya tenía.
+	ErrProductBrandInactive    = conflictError("product brand is inactive")
+	ErrProductCategoryInactive = conflictError("product category is inactive")
+	ErrProductSupplierInactive = conflictError("product preferred supplier is inactive")
+
+	// F-01: con historial (movimientos, ventas, compras o lotes), cambiar
+	// cómo se vende o se mide el producto falsearía lo ya registrado.
+	ErrProductHasHistory = conflictError("product sale type, measure unit and batch control cannot change once it has stock history")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

@@ -1,0 +1,21 @@
+{{define "content"}}
+<header class="flex flex-wrap items-end justify-between gap-4 mb-8">
+  <h1 class="shelf-title">{{t "product.title"}}</h1>
+  <button hx-get="/products/new" hx-target="#form-modal" hx-swap="innerHTML" class="btn-primary">
+    <span aria-hidden="true" class="text-2xl leading-none">+</span>{{t "product.create"}}
+  </button>
+</header>
+
+<div id="form-modal"></div>
+
+<div class="mb-4">
+  <label for="search" class="sr-only">{{t "product.search"}}</label>
+  <input id="search" type="search" name="search" placeholder="{{t "product.search"}}"
+         hx-get="/products" hx-trigger="input changed delay:300ms, search" hx-target="#products-table" hx-swap="innerHTML"
+         class="field max-w-sm">
+</div>
+
+<div id="products-table" class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  {{template "product_table.gohtml" .}}
+</div>
+{{end}}

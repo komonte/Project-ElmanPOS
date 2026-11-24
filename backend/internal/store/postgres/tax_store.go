@@ -215,3 +215,20 @@ func (s *TaxStore) SetActive(ctx context.Context, id int64, active bool) error {
 
 	return nil
 }
+
+func scanTax(row rowScanner) (*model.Tax, error) {
+	t := new(model.Tax)
+	if err := row.Scan(&t.ID, &t.Name, &t.Rate, &t.IsActive, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func (s *TaxStore) ListAll(ctx context.Context, query string, limit int) ([]*model.Tax, int, error) {
+	const where = `WHERE ($1 = '' OR name ILIKE '%' || $1 || '%')`
+	return listPage(ctx, s.db,
+		`SELECT count(*) FROM taxes `+where+`;`,
+		`SELECT id, name, rate, is_active, created_at, updated_at FROM taxes `+where+`
+		 ORDER BY is_active DESC, name LIMIT $2;`,
+		scanTax, query, limit)
+}

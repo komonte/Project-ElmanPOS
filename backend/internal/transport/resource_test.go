@@ -30,6 +30,7 @@ type MockStore[T any] struct {
 	getAllIncludingInactiveFn func(ctx context.Context) ([]*T, error)
 	searchAllByNameFn         func(ctx context.Context, q string) ([]*T, error)
 	setActiveFn               func(ctx context.Context, id int64, active bool) error
+	listAllFn                 func(ctx context.Context, q string, limit int) ([]*T, int, error)
 }
 
 func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
@@ -47,6 +48,9 @@ func (m *MockStore[T]) SearchAllByName(ctx context.Context, q string) ([]*T, err
 func (m *MockStore[T]) SetActive(ctx context.Context, id int64, active bool) error {
 	return m.setActiveFn(ctx, id, active)
 }
+func (m *MockStore[T]) ListAll(ctx context.Context, q string, limit int) ([]*T, int, error) {
+	return m.listAllFn(ctx, q, limit)
+}
 
 // serve routes req through a ServeMux wired with Register, the same way
 // RegisterAPIRoutes does in main.go, instead of calling handlers directly.
@@ -59,8 +63,8 @@ func serve[T any](h *transport.ResourceHandler[T], base string, rec *httptest.Re
 func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 	t.Run("GET collection returns all", func(t *testing.T) {
 		mock := &MockStore[T]{
-			getAllFn: func(_ context.Context) ([]*T, error) {
-				return []*T{entity, entity}, nil
+			listAllFn: func(_ context.Context, _ string, _ int) ([]*T, int, error) {
+				return []*T{entity, entity}, 2, nil
 			},
 		}
 		svc := service.NewService[T](mock, nil)
@@ -77,8 +81,8 @@ func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 
 	t.Run("GET collection returns empty list", func(t *testing.T) {
 		mock := &MockStore[T]{
-			getAllFn: func(_ context.Context) ([]*T, error) {
-				return make([]*T, 0), nil
+			listAllFn: func(_ context.Context, _ string, _ int) ([]*T, int, error) {
+				return make([]*T, 0), 0, nil
 			},
 		}
 		svc := service.NewService[T](mock, nil)
@@ -95,8 +99,8 @@ func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 
 	t.Run("GET collection store failure returns 500", func(t *testing.T) {
 		mock := &MockStore[T]{
-			getAllFn: func(_ context.Context) ([]*T, error) {
-				return nil, errStore
+			listAllFn: func(_ context.Context, _ string, _ int) ([]*T, int, error) {
+				return nil, 0, errStore
 			},
 		}
 		svc := service.NewService[T](mock, nil)
@@ -108,6 +112,44 @@ func runHandlerTests[T any](t *testing.T, label, base string, entity *T) {
 
 		if rec.Code != http.StatusInternalServerError {
 			t.Fatalf("expected 500, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET collection is paginated", func(t *testing.T) {
+		var gotQuery string
+		var gotLimit int
+		mock := &MockStore[T]{
+			listAllFn: func(_ context.Context, q string, limit int) ([]*T, int, error) {
+				gotQuery, gotLimit = q, limit
+				return []*T{entity}, 1234, nil
+			},
+		}
+		h := transport.NewResourceHandler[T](service.NewService[T](mock, nil), label)
+
+		// Sin ?limit: el límite por defecto, y el total en el header.
+		rec := httptest.NewRecorder()
+		serve(h, base, rec, httptest.NewRequest(http.MethodGet, base, nil))
+		if rec.Code != http.StatusOK || gotLimit != transport.DefaultListLimit {
+			t.Fatalf("default: got %d, limit %d", rec.Code, gotLimit)
+		}
+		if got := rec.Header().Get("X-Total-Count"); got != "1234" {
+			t.Fatalf("X-Total-Count: got %q, want 1234", got)
+		}
+
+		// Con ?search y ?limit.
+		rec = httptest.NewRecorder()
+		serve(h, base, rec, httptest.NewRequest(http.MethodGet, base+"?search=abc&limit=7", nil))
+		if rec.Code != http.StatusOK || gotQuery != "abc" || gotLimit != 7 {
+			t.Fatalf("search+limit: got %d, %q, %d", rec.Code, gotQuery, gotLimit)
+		}
+
+		// Un límite que no es número (o negativo) es un pedido mal armado.
+		for _, bad := range []string{"abc", "-1"} {
+			rec = httptest.NewRecorder()
+			serve(h, base, rec, httptest.NewRequest(http.MethodGet, base+"?limit="+bad, nil))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("limit=%s: got %d, want 400", bad, rec.Code)
+			}
 		}
 	})
 
@@ -313,5 +355,12 @@ func TestHandlerWithCategory(t *testing.T) {
 	t.Parallel()
 	runHandlerTests[model.Category](t, "category", "/api/categories", &model.Category{
 		ID: 1, Name: "Limpieza", TaxID: 1,
+	})
+}
+
+func TestHandlerWithProduct(t *testing.T) {
+	t.Parallel()
+	runHandlerTests[model.Product](t, "product", "/api/products", &model.Product{
+		ID: 1, SKU: "OREO-200", Name: "GALLETITAS OREO 200G", CategoryID: 1,
 	})
 }

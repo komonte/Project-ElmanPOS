@@ -23,7 +23,17 @@ func NewResourceHandler[T any](s *service.Service[T], label string) *ResourceHan
 	}
 }
 
-// List handles GET {base}, optionally filtered with ?name=.
+// DefaultListLimit es cuántas filas devuelve GET {base} si no se pide
+// ?limit=. El catálogo tiene decenas de miles de productos: sin un límite,
+// un pedido devolvería un JSON de varios MB.
+const DefaultListLimit = 100
+
+// List handles GET {base}.
+//   - ?name=: búsqueda rápida entre los activos (hasta 20).
+//   - Si no: lista paginada de activos e inactivos (cada uno trae is_active),
+//     filtrada con ?search= y cortada en ?limit= (DefaultListLimit si falta,
+//     tope service.MaxListLimit). El header X-Total-Count dice cuántos pasan
+//     el filtro en total.
 func (h *ResourceHandler[T]) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -39,12 +49,23 @@ func (h *ResourceHandler[T]) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		entities, err = h.svc.GetAll(ctx)
+		limit := DefaultListLimit
+		if v := r.URL.Query().Get("limit"); v != "" {
+			n, convErr := strconv.Atoi(v)
+			if convErr != nil || n < 0 {
+				errorJSON(w, http.StatusBadRequest, "invalid limit")
+				return
+			}
+			limit = n
+		}
+		var total int
+		entities, total, err = h.svc.ListAll(ctx, r.URL.Query().Get("search"), limit)
 		if err != nil {
 			errorJSON(w, http.StatusInternalServerError,
 				fmt.Sprintf("failed to retrieve %ss", h.label))
 			return
 		}
+		w.Header().Set("X-Total-Count", strconv.Itoa(total))
 	}
 
 	if err := writeJSON(w, http.StatusOK, entities); err != nil {

@@ -84,15 +84,19 @@ func main() {
 	categorySvc := service.NewService[model.Category](categoryStore, func(c *model.Category) error { return c.Validate() })
 	categoryH := transport.NewResourceHandler[model.Category](categorySvc, "category")
 
+	productStore := postgres.NewProductStore(db)
+	productSvc := service.NewService[model.Product](productStore, func(p *model.Product) error { return p.Validate() })
+	productH := transport.NewResourceHandler[model.Product](productSvc, "product")
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -136,6 +140,16 @@ func main() {
 	mux.HandleFunc("DELETE /categories/{id}", webH.CategoriesDelete)
 	mux.HandleFunc("PATCH /categories/{id}/deactivate", webH.CategoriesDeactivate)
 	mux.HandleFunc("PATCH /categories/{id}/reactivate", webH.CategoriesReactivate)
+
+	mux.HandleFunc("GET /products", webH.ProductsList)
+	mux.HandleFunc("GET /products/new", webH.ProductsNewForm)
+	mux.HandleFunc("GET /products/brand-options", webH.ProductsBrandOptions)
+	mux.HandleFunc("POST /products/new", webH.ProductsCreate)
+	mux.HandleFunc("GET /products/{id}/edit", webH.ProductsEditForm)
+	mux.HandleFunc("POST /products/{id}/edit", webH.ProductsUpdate)
+	mux.HandleFunc("DELETE /products/{id}", webH.ProductsDelete)
+	mux.HandleFunc("PATCH /products/{id}/deactivate", webH.ProductsDeactivate)
+	mux.HandleFunc("PATCH /products/{id}/reactivate", webH.ProductsReactivate)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

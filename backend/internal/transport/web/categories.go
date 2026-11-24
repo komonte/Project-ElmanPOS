@@ -177,7 +177,7 @@ func categoryFromForm(r *http.Request, c *model.Category) {
 
 // categoriesTableData arma los datos de la tabla (ver adminList).
 func (h *WebHandler) categoriesTableData(r *http.Request) (map[string]any, error) {
-	list, err := adminList(r, h.categorySvc)
+	list, total, err := adminList(r, h.categorySvc)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,11 @@ func (h *WebHandler) categoriesTableData(r *http.Request) (map[string]any, error
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"Categories": categoryRows(list, categoryPaths(all))}, nil
+	return map[string]any{
+		"Categories": categoryRows(list, categoryPaths(all)),
+		"Shown":      len(list),
+		"Total":      total,
+	}, nil
 }
 
 // CategoriesList handles GET /categories

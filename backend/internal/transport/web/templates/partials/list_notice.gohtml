@@ -1,0 +1,8 @@
+{{/* Aviso de lista cortada: la tabla muestra las primeras filas (ver
+     adminList) y dice cuántas hay en total. Lo usan todas las tablas de admin;
+     necesita .Shown y .Total. */}}
+{{define "list-notice"}}
+{{if and .Total (lt .Shown .Total)}}
+<p role="status" class="px-4 py-3 border-b-2 border-line bg-paper text-muted">{{printf (t "common.list_truncated") .Shown .Total}}</p>
+{{end}}
+{{end}}

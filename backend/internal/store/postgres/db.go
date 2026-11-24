@@ -51,3 +51,39 @@ func isCheckViolation(err error) bool {
 	}
 	return false
 }
+
+// listPage arma una página de ListAll con dos consultas: countQ cuenta las
+// filas que pasan el filtro y rowsQ trae las primeras limit, ya ordenadas.
+// Las dos reciben la búsqueda en $1 (vacía = sin filtro); rowsQ, el límite en $2.
+//
+// Son dos consultas y no una con COUNT(*) OVER (): con la ventana, Postgres
+// tiene que leer y ordenar todas las filas antes de cortar; separadas, la de
+// filas puede usar un índice ordenado y frenar a las limit primeras.
+func listPage[T any](ctx context.Context, db DBTX, countQ, rowsQ string,
+	scan func(rowScanner) (*T, error), query string, limit int) ([]*T, int, error) {
+	var total int
+	if err := db.QueryRowContext(ctx, countQ, query).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	list := make([]*T, 0)
+	if limit <= 0 || total == 0 {
+		return list, total, nil
+	}
+	rows, err := db.QueryContext(ctx, rowsQ, query, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		x, err := scan(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		list = append(list, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}

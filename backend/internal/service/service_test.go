@@ -24,6 +24,7 @@ type MockStore[T any] struct {
 	getAllIncludingInactiveFn func(ctx context.Context) ([]*T, error)
 	searchAllByNameFn         func(ctx context.Context, q string) ([]*T, error)
 	setActiveFn               func(ctx context.Context, id int64, active bool) error
+	listAllFn                 func(ctx context.Context, q string, limit int) ([]*T, int, error)
 }
 
 func (m *MockStore[T]) Create(ctx context.Context, entity *T) (*T, error)  { return m.createFn(ctx, entity) }
@@ -40,6 +41,9 @@ func (m *MockStore[T]) SearchAllByName(ctx context.Context, q string) ([]*T, err
 }
 func (m *MockStore[T]) SetActive(ctx context.Context, id int64, active bool) error {
 	return m.setActiveFn(ctx, id, active)
+}
+func (m *MockStore[T]) ListAll(ctx context.Context, q string, limit int) ([]*T, int, error) {
+	return m.listAllFn(ctx, q, limit)
 }
 
 type ServiceTestSuite[T any] struct {
@@ -641,5 +645,33 @@ func TestServiceCategoryTreeErrorsAreConflicts(t *testing.T) {
 	// Una regla no se confunde con otra.
 	if errors.Is(err, store.ErrCategoryCycle) {
 		t.Fatal("ErrCategoryParentInactive matched ErrCategoryCycle")
+	}
+}
+
+// ListAll limpia la búsqueda y no deja pedir más de MaxListLimit filas ni
+// un límite negativo.
+func TestServiceListAllClampsLimit(t *testing.T) {
+	var gotQuery string
+	var gotLimit int
+	mock := &MockStore[model.Brand]{
+		listAllFn: func(_ context.Context, q string, limit int) ([]*model.Brand, int, error) {
+			gotQuery, gotLimit = q, limit
+			return nil, 0, nil
+		},
+	}
+	svc := service.NewService[model.Brand](mock, nil)
+
+	tests := []struct {
+		limit, want int
+	}{
+		{50, 50},
+		{-1, 0},
+		{service.MaxListLimit + 1, service.MaxListLimit},
+	}
+	for _, tt := range tests {
+		svc.ListAll(context.Background(), "  coca  ", tt.limit)
+		if gotLimit != tt.want || gotQuery != "coca" {
+			t.Errorf("limit %d: store got %q/%d, want %q/%d", tt.limit, gotQuery, gotLimit, "coca", tt.want)
+		}
 	}
 }

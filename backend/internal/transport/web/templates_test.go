@@ -18,6 +18,7 @@ func TestRenderPagesUseLayout(t *testing.T) {
 		"taxes.gohtml":     `id="taxes-table"`,
 		"suppliers.gohtml":  `id="suppliers-table"`,
 		"categories.gohtml": `id="categories-table"`,
+		"products.gohtml":   `id="products-table"`,
 	}
 
 	for _, lang := range []string{"en", "es"} {

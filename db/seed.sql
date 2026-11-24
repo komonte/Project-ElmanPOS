@@ -15,7 +15,7 @@ INSERT INTO categories (parent_id, name, tax_id) VALUES (1, 'Galletitas', 1);
 INSERT INTO categories (parent_id, name, tax_id) VALUES (1, 'Fiambreria', 1);
 
 -- Brands
-INSERT INTO brands (name) VALUES ('Bagley'), ('Coca-Cola'), ('Sancor');
+INSERT INTO brands (name) VALUES ('BAGLEY'), ('COCA-COLA'), ('SANCOR');
 
 -- Supplier
 INSERT INTO suppliers (name, tax_id_number, phone, payment_terms, is_active)
@@ -31,11 +31,11 @@ VALUES ('admin', 'Admin',   '$2a$10$placeholder-placeholder-placeholder', 'ADMIN
 INSERT INTO products (sku, name, description, brand_id, category_id, measure_unit, sale_type,
                       controls_batches, reorder_point, max_stock, margin_percent,
                       preferred_supplier_id, is_active)
-VALUES ('ORE-200G',  'Galletitas Oreo 200g', 'Paquete de galletitas', 1, 2, 'UNIT', 'UNIT',
+VALUES ('ORE-200G',  'GALLETITAS OREO 200G', 'Paquete de galletitas', 1, 2, 'UNIT', 'UNIT',
         FALSE, 10, 50, 30.00, 1, TRUE),                             -- P1: no batch control
-       ('COLA-1500', 'Soda Cola 1.5L',       'Botella PET 1.5 L',    2, 1, 'UNIT', 'UNIT',
+       ('COLA-1500', 'SODA COLA 1.5L',       'Botella PET 1.5 L',    2, 1, 'UNIT', 'UNIT',
         FALSE, 0, NULL, 0, NULL, TRUE),                              -- P2: no batch control
-       ('MORTA-KG',  'Mortadela',            'A granel, precio por kg', 3, 3, 'KILOGRAM', 'WEIGHT',
+       ('MORTA-KG',  'MORTADELA',            'A granel, precio por kg', 3, 3, 'KILOGRAM', 'WEIGHT',
         TRUE, 2, 10, 25.00, NULL, TRUE);                             -- P3: batch control + weight
 
 -- Barcodes
@@ -111,6 +111,6 @@ VALUES ('expiry_warning_days', '30'::jsonb, 'Days ahead to flag batches in R-02'
 COMMIT;
 
 -- Sanity: balances after seed
-\echo '-- EXPECTED: Galletitas Oreo 200g = 8; Soda Cola 1.5L = 12; Mortadela = 7.000'
+\echo '-- EXPECTED: GALLETITAS OREO 200G = 8; SODA COLA 1.5L = 12; MORTADELA = 7.000'
 SELECT p.name, b.quantity FROM stock_balances b JOIN products p ON p.id = b.product_id
 WHERE b.store_id = 1 ORDER BY b.product_id;

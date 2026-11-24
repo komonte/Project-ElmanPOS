@@ -96,7 +96,7 @@ INSERT INTO categories (parent_id, name, tax_id) VALUES (1, 'Galletitas', 1);
 INSERT INTO categories (parent_id, name, tax_id) VALUES (1, 'Fiambreria', 1);
 
 -- 4.3 Brands
-INSERT INTO brands (name) VALUES ('Bagley'), ('Coca-Cola'), ('Sancor');
+INSERT INTO brands (name) VALUES ('BAGLEY'), ('COCA-COLA'), ('SANCOR');
 
 -- 4.4 Supplier (CUIT stored as 11 digits with a valid check digit, like model.Supplier.Validate leaves it)
 INSERT INTO suppliers (name, tax_id_number, phone, payment_terms, is_active)
@@ -112,11 +112,11 @@ VALUES ('admin', 'Admin',   '$2a$10$placeholder-placeholder-placeholder', 'ADMIN
 INSERT INTO products (sku, name, description, brand_id, category_id, measure_unit, sale_type,
                       controls_batches, reorder_point, max_stock, margin_percent,
                       preferred_supplier_id, is_active)
-VALUES ('ORE-200G',  'Galletitas Oreo 200g', 'Paquete de galletitas', 1, 2, 'UNIT', 'UNIT',
+VALUES ('ORE-200G',  'GALLETITAS OREO 200G', 'Paquete de galletitas', 1, 2, 'UNIT', 'UNIT',
         FALSE, 10, 50, 30.00, 1, TRUE),                             -- P1: no batch control
-       ('COLA-1500', 'Soda Cola 1.5L',       'Botella PET 1.5 L',    2, 1, 'UNIT', 'UNIT',
+       ('COLA-1500', 'SODA COLA 1.5L',       'Botella PET 1.5 L',    2, 1, 'UNIT', 'UNIT',
         FALSE, 0, NULL, 0, NULL, TRUE),                              -- P2: no batch control
-       ('MORTA-KG',  'Mortadela',            'A granel, precio por kg', 3, 3, 'KILOGRAM', 'WEIGHT',
+       ('MORTA-KG',  'MORTADELA',            'A granel, precio por kg', 3, 3, 'KILOGRAM', 'WEIGHT',
         TRUE, 2, 10, 25.00, NULL, TRUE);                             -- P3: batch control + weight
 
 -- 4.7 Barcodes
@@ -200,7 +200,7 @@ COMMIT;
 -- Sanity: balances after seed
 SELECT p.name, b.quantity FROM stock_balances b JOIN products p ON p.id = b.product_id
 WHERE b.store_id = 1 ORDER BY b.product_id;
--- EXPECTED: Galletitas Oreo 200g = 8; Soda Cola 1.5L = 12; Mortadela = 7.000
+-- EXPECTED: GALLETITAS OREO 200G = 8; SODA COLA 1.5L = 12; MORTADELA = 7.000
 ```
 
 ---
@@ -737,7 +737,7 @@ JOIN stock_balances b ON b.product_id = p.id AND b.store_id = 1
 LEFT JOIN suppliers s ON s.id = p.preferred_supplier_id
 WHERE p.is_active AND b.quantity <= p.reorder_point
 ORDER BY b.quantity / NULLIF(p.reorder_point, 0) ASC, p.name;
--- EXPECTED: only "Galletitas Oreo 200g" (5 <= reorder 10; max_stock 50; Distribuidora del Sur S.A.)
+-- EXPECTED: only "GALLETITAS OREO 200G" (5 <= reorder 10; max_stock 50; Distribuidora del Sur S.A.)
 ```
 
 ### R-02: Expiring Soon
@@ -750,7 +750,7 @@ JOIN products p ON p.id = pb.product_id
 JOIN app_settings a ON a.key = 'expiry_warning_days'
 WHERE pb.expiry_date <= CURRENT_DATE + (a.value #>> '{}')::int
   AND pb.remaining_quantity > 0;
--- EXPECTED: one row — Mortadela / L-2475 / 2026-08-20 / 1.000 / 4500.00
+-- EXPECTED: one row — MORTADELA / L-2475 / 2026-08-20 / 1.000 / 4500.00
 -- (L-2601 expires 2026-12-15, outside the 30-day window)
 ```
 
@@ -767,8 +767,8 @@ WHERE s.status = 'COMPLETED' AND s.created_at >= CURRENT_DATE
 GROUP BY p.id, p.name
 ORDER BY revenue DESC;
 -- EXPECTED (revenue 8000, only the completed sale):
---   Mortadela           1.000 / 6500.00 / 2000.00   (A: 81%)
---   Galletitas Oreo 200g 1     / 1500.00 /  600.00   (B)
+--   MORTADELA           1.000 / 6500.00 / 2000.00   (A: 81%)
+--   GALLETITAS OREO 200G 1     / 1500.00 /  600.00   (B)
 -- Sale B (P2) is absent: VOIDED sales are excluded.
 ```
 
@@ -784,7 +784,7 @@ WHERE p.is_active AND b.quantity > p.reorder_point
         JOIN sales s ON s.id = si.sale_id
         WHERE si.product_id = p.id AND s.status = 'COMPLETED' AND s.created_at >= CURRENT_DATE)
 ORDER BY p.name;
--- EXPECTED: only "Soda Cola 1.5L" (18 on hand, zero completed sales in the period)
+-- EXPECTED: only "SODA COLA 1.5L" (18 on hand, zero completed sales in the period)
 ```
 
 ### R-05: Inventory Valuation

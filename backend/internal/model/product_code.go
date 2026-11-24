@@ -40,7 +40,13 @@ type ProductCode struct {
 	ProductID int64    `json:"product_id" db:"product_id"`
 	CodeType  CodeType `json:"code_type" db:"code_type"`
 	Code      string   `json:"code" db:"code"`
-	CreatedAt string   `json:"created_at" db:"created_at"`
+
+	// Solo lectura: el store los llena con un JOIN, para decir de qué
+	// producto es un código. Add los ignora.
+	ProductSKU  string `json:"product_sku,omitempty" db:"-"`
+	ProductName string `json:"product_name,omitempty" db:"-"`
+
+	CreatedAt string `json:"created_at" db:"created_at"`
 }
 
 // Validate normaliza el código y calcula su tipo: el CodeType que venga se

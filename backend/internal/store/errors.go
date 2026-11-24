@@ -40,6 +40,10 @@ var (
 	ErrProductBrandInactive    = conflictError("product brand is inactive")
 	ErrProductCategoryInactive = conflictError("product category is inactive")
 	ErrProductSupplierInactive = conflictError("product preferred supplier is inactive")
+
+	// F-01: con historial (movimientos, ventas, compras o lotes), cambiar
+	// cómo se vende o se mide el producto falsearía lo ya registrado.
+	ErrProductHasHistory = conflictError("product sale type, measure unit and batch control cannot change once it has stock history")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

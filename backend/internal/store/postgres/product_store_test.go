@@ -443,3 +443,95 @@ func TestProductStore_UpdateToAnotherInactiveReference(t *testing.T) {
 		})
 	}
 }
+
+// addHistory le carga al producto una fila de historial del tipo pedido.
+// Arma a mano lo mínimo que cada tabla exige (usuario, local, compra).
+func (f *productFixture) addHistory(t *testing.T, kind string, productID int64) {
+	t.Helper()
+	switch kind {
+	case "batch":
+		f.insertID(t, `INSERT INTO product_batches (product_id, batch_number, original_quantity, remaining_quantity, unit_cost)
+		               VALUES ($1, 'L-TEST', 10, 10, 100) RETURNING id;`, productID)
+		return
+	}
+
+	userID := f.insertID(t, `INSERT INTO users (username, name, password_hash, role)
+	                         VALUES ('test_product_user', 'Test', 'x', 'ADMIN') RETURNING id;`)
+	purchaseID := f.insertID(t, `INSERT INTO purchases (supplier_id, total, received_by)
+	                             VALUES ($1, 1000, $2) RETURNING id;`, f.supplierID, userID)
+	switch kind {
+	case "purchase item":
+		f.insertID(t, `INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost)
+		               VALUES ($1, $2, 10, 100) RETURNING id;`, purchaseID, productID)
+	case "stock movement":
+		storeID := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test product') RETURNING id;`)
+		f.insertID(t, `INSERT INTO stock_movements (product_id, store_id, movement_type, quantity, unit_cost, purchase_id, performed_by)
+		               VALUES ($1, $2, 'PURCHASE', 10, 100, $3, $4) RETURNING id;`, productID, storeID, purchaseID, userID)
+	default:
+		t.Fatalf("unknown history kind %q", kind)
+	}
+}
+
+func TestProductStore_LockedFieldsWithHistory(t *testing.T) {
+	changes := []struct {
+		name   string
+		modify func(p *model.Product)
+	}{
+		{"sale type", func(p *model.Product) { p.SaleType = model.SaleTypeComposite }},
+		{"measure unit", func(p *model.Product) { p.MeasureUnit = model.MeasureUnitLiter }},
+		{"controls batches", func(p *model.Product) { p.ControlsBatches = true }},
+	}
+	// sale_items también cuenta como historial, pero armar una venta pide
+	// sesión de caja, caja y local: queda cubierto por la misma consulta.
+	kinds := []string{"stock movement", "purchase item", "batch"}
+
+	for _, kind := range kinds {
+		for _, ch := range changes {
+			t.Run(kind+"/"+ch.name, func(t *testing.T) {
+				f := newProductFixture(t)
+				p := f.create(t, "TEST-LOCK", "BLOQUEADO TEST")
+				f.addHistory(t, kind, p.ID)
+
+				changed := *p
+				ch.modify(&changed)
+				_, err := f.store.Update(f.ctx, p.ID, &changed)
+				wantErr(t, err, store.ErrProductHasHistory)
+				wantErr(t, err, store.ErrConflict)
+			})
+		}
+	}
+}
+
+func TestProductStore_OtherFieldsWithHistory(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-HIST", "CON HISTORIAL TEST")
+	f.addHistory(t, "stock movement", p.ID)
+
+	// Con historial, el resto de los campos se sigue pudiendo cambiar.
+	p.Name = "NOMBRE NUEVO TEST"
+	p.ReorderPoint = decimal.NewFromInt(4)
+	got, err := f.store.Update(f.ctx, p.ID, p)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.Name != "NOMBRE NUEVO TEST" {
+		t.Fatalf("name: got %q", got.Name)
+	}
+}
+
+func TestProductStore_LockedFieldsWithoutHistory(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-FREE", "SIN HISTORIAL TEST")
+
+	// Sin historial, se puede cambiar todo (ej. se cargó mal el tipo de venta).
+	p.SaleType = model.SaleTypeWeight
+	p.MeasureUnit = model.MeasureUnitKilogram
+	p.ControlsBatches = true
+	got, err := f.store.Update(f.ctx, p.ID, p)
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got.SaleType != model.SaleTypeWeight || got.MeasureUnit != model.MeasureUnitKilogram || !got.ControlsBatches {
+		t.Fatalf("got %q %q %v", got.SaleType, got.MeasureUnit, got.ControlsBatches)
+	}
+}

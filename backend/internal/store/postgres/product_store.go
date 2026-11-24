@@ -156,6 +156,11 @@ func (s *ProductStore) SearchAllByName(ctx context.Context, query string) ([]*mo
 
 // Update cambia todos los campos salvo is_active: activar y desactivar pasan
 // solo por SetActive. Así un PUT por la API sin "is_active" no desactiva.
+//
+// measure_unit, sale_type y controls_batches no cambian si el producto ya
+// tiene historial (F-01): movimientos de stock, ventas, compras o lotes.
+// La regla va en el mismo UPDATE (en el WHERE las columnas tienen todavía
+// los valores viejos), así no hay hueco entre revisar y guardar.
 func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Product) (*model.Product, error) {
 	if product == nil {
 		return nil, errors.New("product cannot be nil")
@@ -169,7 +174,16 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 	          category_id = $5, measure_unit = $6, sale_type = $7,
 	          controls_batches = $8, reorder_point = $9, max_stock = $10,
 	          margin_percent = $11, preferred_supplier_id = $12, is_consignment = $13
-	      WHERE id = $14;`
+	      WHERE id = $14
+	        AND (
+	              (measure_unit = $6 AND sale_type = $7 AND controls_batches = $8)
+	              OR NOT (
+	                   EXISTS (SELECT 1 FROM stock_movements WHERE product_id = $14)
+	                OR EXISTS (SELECT 1 FROM sale_items      WHERE product_id = $14)
+	                OR EXISTS (SELECT 1 FROM purchase_items  WHERE product_id = $14)
+	                OR EXISTS (SELECT 1 FROM product_batches WHERE product_id = $14)
+	              )
+	            );`
 
 	res, err := s.db.ExecContext(ctx, q,
 		product.SKU, product.Name, product.Description, product.BrandID, product.CategoryID,
@@ -180,8 +194,22 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 	if err != nil {
 		return nil, productWriteError(err)
 	}
-	if err := requireOneRow(res); err != nil {
+	n, err := res.RowsAffected()
+	if err != nil {
 		return nil, err
+	}
+	if n == 0 {
+		// El WHERE no encontró la fila: o el id no existe, o la regla del
+		// historial la frenó. Si existe, fue la regla.
+		var exists bool
+		err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM products WHERE id = $1);`, id).Scan(&exists)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, store.ErrProductHasHistory
+		}
+		return nil, store.ErrNotFound
 	}
 
 	return s.GetByID(ctx, id)

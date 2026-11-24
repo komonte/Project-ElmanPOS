@@ -11,6 +11,8 @@
       <a href="/" {{if eq .Section "dashboard"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "dashboard"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.dashboard"}}</a>
     <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_catalog"}}</p>
+      <a href="/categories" {{if eq .Section "categories"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "categories"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.categories"}}</a>
       <a href="/brands" {{if eq .Section "brands"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "brands"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.brands"}}</a>
       <a href="/taxes" {{if eq .Section "taxes"}}aria-current="page"{{end}}

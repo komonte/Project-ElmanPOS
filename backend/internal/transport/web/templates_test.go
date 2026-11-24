@@ -16,7 +16,8 @@ func TestRenderPagesUseLayout(t *testing.T) {
 		"index.gohtml":     "/brands", // el panel no tiene tabla: alcanza con el menú
 		"brands.gohtml":    `id="brands-table"`,
 		"taxes.gohtml":     `id="taxes-table"`,
-		"suppliers.gohtml": `id="suppliers-table"`,
+		"suppliers.gohtml":  `id="suppliers-table"`,
+		"categories.gohtml": `id="categories-table"`,
 	}
 
 	for _, lang := range []string{"en", "es"} {

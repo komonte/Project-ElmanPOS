@@ -8,6 +8,7 @@
   <h2 id="catalog-heading" class="font-display font-bold text-3xl leading-none">{{t "nav.group_catalog"}}</h2>
   <p class="mt-1 mb-3 text-muted">{{t "dashboard.active_counts"}}</p>
   <ul class="bg-surface border-2 border-line rounded-md divide-y-2 divide-line">
+    {{template "dashboard-row" (dict "Href" "/categories" "Label" (t "nav.categories") "Count" .CategoryCount)}}
     {{template "dashboard-row" (dict "Href" "/brands" "Label" (t "nav.brands") "Count" .BrandCount)}}
     {{template "dashboard-row" (dict "Href" "/taxes" "Label" (t "nav.taxes") "Count" .TaxCount)}}
     {{template "dashboard-row" (dict "Href" "/suppliers" "Label" (t "nav.suppliers") "Count" .SupplierCount)}}

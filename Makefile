@@ -89,7 +89,7 @@ lint:
 
 ## Run all tests
 test:
-	cd backend && go test ./... -count=1
+	cd backend && TEST_DATABASE_URL="$(DB_URL)" go test ./... -count=1
 
 # ── Dev Workflow ──────────────────────────────────────────────────
 

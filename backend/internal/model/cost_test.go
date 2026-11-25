@@ -78,21 +78,29 @@ func TestSuggestPrice(t *testing.T) {
 		name   string
 		cost   string
 		margin string
+		vat    string
 		want   string
 		wantOK bool
 	}{
-		{name: "30% margin", cost: "700", margin: "30", want: "1000", wantOK: true},
-		{name: "50% margin doubles", cost: "450.50", margin: "50", want: "901", wantOK: true},
-		// 1000 / 0,7 = 1428,571… → 1428,57
-		{name: "rounds to 2 decimals", cost: "1000", margin: "30", want: "1428.57", wantOK: true},
-		{name: "decimal margin", cost: "100", margin: "37.5", want: "160", wantOK: true},
-		{name: "margin 0: no suggestion", cost: "700", margin: "0"},
-		{name: "margin 100: no suggestion", cost: "700", margin: "100"},
-		{name: "negative margin: no suggestion", cost: "700", margin: "-5"},
+		// 700 / 0,7 = 1000 sin IVA.
+		{name: "VAT 21%", cost: "700", margin: "30", vat: "21", want: "1210", wantOK: true},
+		{name: "VAT 10.5%", cost: "700", margin: "30", vat: "10.5", want: "1105", wantOK: true},
+		{name: "VAT 0% (exempt)", cost: "700", margin: "30", vat: "0", want: "1000", wantOK: true},
+		{name: "50% margin doubles", cost: "450.50", margin: "50", vat: "0", want: "901", wantOK: true},
+		// 1000 × 1,21 / 0,7 = 1728,571… → 1728,57. Redondear antes de sumar
+		// el IVA daría otro número: 1428,57 × 1,21 = 1728,67.
+		{name: "rounds once at the end", cost: "1000", margin: "30", vat: "21", want: "1728.57", wantOK: true},
+		// 99,99 × 1,21 / 0,75 = 161,3172 → 161,32.
+		{name: "cents", cost: "99.99", margin: "25", vat: "21", want: "161.32", wantOK: true},
+		{name: "decimal margin", cost: "100", margin: "37.5", vat: "0", want: "160", wantOK: true},
+		{name: "margin 0: no suggestion", cost: "700", margin: "0", vat: "21"},
+		{name: "margin 100: no suggestion", cost: "700", margin: "100", vat: "21"},
+		{name: "negative margin: no suggestion", cost: "700", margin: "-5", vat: "21"},
+		{name: "negative VAT: no suggestion", cost: "700", margin: "30", vat: "-1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := model.SuggestPrice(dec(tt.cost), dec(tt.margin))
+			got, ok := model.SuggestPrice(dec(tt.cost), dec(tt.margin), dec(tt.vat))
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}

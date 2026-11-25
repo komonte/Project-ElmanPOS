@@ -60,7 +60,8 @@ func (f *fakeCosts) Set(_ context.Context, productID int64, unitCost decimal.Dec
 	f.history[productID] = append([]*model.Cost{c}, f.history[productID]...)
 
 	res := &costs.Result{Cost: c}
-	if price, ok := model.SuggestPrice(unitCost, decimal.RequireFromString(margin)); ok {
+	// Como si la categoría tuviera IVA 21%.
+	if price, ok := model.SuggestPrice(unitCost, decimal.RequireFromString(margin), decimal.NewFromInt(21)); ok {
 		res.SuggestedPrice = &price
 	}
 	return res, nil
@@ -86,8 +87,8 @@ func TestCostsSet(t *testing.T) {
 	}{
 		{"cost as text, with suggestion", "/api/products/1/costs", `{"unit_cost": "700"}`,
 			http.StatusCreated, `"unit_cost":"700","avg_cost":"700"`},
-		{"suggested price", "/api/products/1/costs", `{"unit_cost": "700"}`,
-			http.StatusCreated, `"suggested_price":"1000"`},
+		{"suggested price includes VAT", "/api/products/1/costs", `{"unit_cost": "700"}`,
+			http.StatusCreated, `"suggested_price":"1210"`},
 		{"cost as number", "/api/products/1/costs", `{"unit_cost": 700.50}`,
 			http.StatusCreated, `"unit_cost":"700.5"`},
 		{"margin 0: no suggestion", "/api/products/3/costs", `{"unit_cost": "700"}`,

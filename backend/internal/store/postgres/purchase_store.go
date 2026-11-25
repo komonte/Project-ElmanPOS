@@ -92,7 +92,8 @@ func (s *PurchaseStore) CreateItem(ctx context.Context, it *model.PurchaseItem) 
 }
 
 // GetByID devuelve una compra con sus renglones, en el orden en que se
-// cargaron. ErrNotFound si no existe.
+// cargaron, cada uno con el número y vencimiento de su lote. ErrNotFound si
+// no existe.
 func (s *PurchaseStore) GetByID(ctx context.Context, id int64) (*model.Purchase, error) {
 	p, err := scanPurchase(s.db.QueryRowContext(ctx, `
 		SELECT `+purchaseColumns+` FROM purchases WHERE id = $1;`, id))
@@ -103,10 +104,15 @@ func (s *PurchaseStore) GetByID(ctx context.Context, id int64) (*model.Purchase,
 		return nil, err
 	}
 
+	// El número y el vencimiento del lote están en product_batches: se
+	// traen con el renglón (vacíos si no tiene lote).
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT `+purchaseItemColumns+` FROM purchase_items
-		WHERE purchase_id = $1
-		ORDER BY id;`, id)
+		SELECT pi.id, pi.purchase_id, pi.product_id, pi.quantity, pi.unit_cost, pi.batch_id, pi.created_at,
+		       COALESCE(b.batch_number, ''), COALESCE(b.expiry_date::text, '')
+		FROM purchase_items pi
+		LEFT JOIN product_batches b ON b.id = pi.batch_id
+		WHERE pi.purchase_id = $1
+		ORDER BY pi.id;`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +120,9 @@ func (s *PurchaseStore) GetByID(ctx context.Context, id int64) (*model.Purchase,
 
 	p.Items = make([]*model.PurchaseItem, 0)
 	for rows.Next() {
-		it, err := scanPurchaseItem(rows)
+		it := new(model.PurchaseItem)
+		err := rows.Scan(&it.ID, &it.PurchaseID, &it.ProductID, &it.Quantity, &it.UnitCost,
+			&it.BatchID, &it.CreatedAt, &it.BatchNumber, &it.ExpiryDate)
 		if err != nil {
 			return nil, err
 		}

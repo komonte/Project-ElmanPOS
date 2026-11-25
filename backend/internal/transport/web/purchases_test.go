@@ -352,3 +352,26 @@ func TestPurchaseLineSearchHandlesEnter(t *testing.T) {
 		t.Error("page must define purchaseSearchEnter")
 	}
 }
+
+// Al cerrar un panel abierto desde un renglón (Escape, Cancelar, la X), el
+// cursor vuelve al buscador de ese renglón, para seguir escaneando sin el
+// mouse. closeModal (layout) vuelve al elemento marcado con
+// data-modal-return, y la página marca el buscador al abrir el panel. Como
+// los otros tests de JavaScript, revisa que esté conectado; el
+// comportamiento se prueba en un navegador.
+func TestPurchasePanelReturnsFocusToItsLine(t *testing.T) {
+	var buf bytes.Buffer
+	if err := NewTemplateEngine().Render(&buf, "es", "purchases.gohtml", map[string]any{
+		"Section": "purchases", "TitleKey": "purchase.title", "Suppliers": []productOption{}}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	for _, s := range []string{
+		"document.querySelector('[data-modal-return]')", // closeModal, en el layout
+		"setAttribute('data-modal-return', '')",         // al abrir el panel
+	} {
+		if !strings.Contains(html, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}

@@ -97,3 +97,36 @@ func TestPriceStore_UnknownProduct(t *testing.T) {
 		t.Errorf("got %v, want %v", err, store.ErrInvalidReference)
 	}
 }
+
+// Las lecturas de productos traen el precio vigente (LATERAL en productSelect).
+func TestProductStore_CurrentPrice(t *testing.T) {
+	f := newProductFixture(t)
+	prices := postgres.NewPriceStore(f.tx)
+	p := f.create(t, "TEST-PR-5", "PRECIO EN LISTA TEST")
+
+	if p.CurrentPrice != nil {
+		t.Fatalf("new product: got price %v, want nil", p.CurrentPrice)
+	}
+
+	for _, amount := range []string{"100", "120.50"} {
+		if _, err := prices.Create(f.ctx, price(p.ID, amount)); err != nil {
+			t.Fatalf("create %s: %v", amount, err)
+		}
+	}
+
+	got, err := f.store.GetByID(f.ctx, p.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.CurrentPrice == nil || !got.CurrentPrice.Equal(decimal.RequireFromString("120.50")) {
+		t.Errorf("get: got price %v, want the newest 120.50", got.CurrentPrice)
+	}
+
+	list, _, err := f.store.ListAll(f.ctx, "PRECIO EN LISTA TEST", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].CurrentPrice == nil || !list[0].CurrentPrice.Equal(decimal.RequireFromString("120.50")) {
+		t.Errorf("list: got %+v", list)
+	}
+}

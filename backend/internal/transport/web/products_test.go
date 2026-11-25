@@ -186,6 +186,25 @@ func TestRenderProductPartials(t *testing.T) {
 		}
 	})
 
+	t.Run("table shows the current price", func(t *testing.T) {
+		priced := *product
+		priced.ID = 8
+		priced.Name = "QUESO CON PRECIO"
+		priced.CurrentPrice = new(decimal.RequireFromString("1500.5"))
+		var buf bytes.Buffer
+		data := map[string]any{"Products": []*model.Product{&priced, product}, "Shown": 2, "Total": 2}
+		if err := e.Render(&buf, "es", "product_table.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		// El que tiene precio lo muestra; el que no, una raya.
+		for _, s := range []string{">Precio<", "$ 1.500,50", "—"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+
 	t.Run("table complete has no notice", func(t *testing.T) {
 		var buf bytes.Buffer
 		data := map[string]any{"Products": []*model.Product{product}, "Shown": 1, "Total": 1}

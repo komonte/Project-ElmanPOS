@@ -154,6 +154,7 @@
   "product.barcode_add": "Add",
   "product.barcode_remove": "Remove",
   "product.barcode_remove_confirm": "Remove this barcode from the product?",
+  "product.price_col": "Price",
   "product.prices": "Sale price",
   "product.prices_hint": "Saved right away, without pressing Save, and effective now. The previous price stays in the history; past sales do not change.",
   "product.prices_empty": "This product has no price yet.",

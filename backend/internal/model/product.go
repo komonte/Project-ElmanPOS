@@ -105,6 +105,11 @@ type Product struct {
 	CategoryName string `json:"category_name,omitempty" db:"-"`
 	SupplierName string `json:"supplier_name,omitempty" db:"-"`
 
+	// CurrentPrice es el precio vigente (F-03): solo lectura, el store lo
+	// trae de prices. nil si todavía no tiene. Se cambia con el caso de uso
+	// de precios, nunca con Create o Update.
+	CurrentPrice *decimal.Decimal `json:"current_price" db:"-"`
+
 	CreatedAt string `json:"created_at" db:"created_at"`
 	UpdatedAt string `json:"updated_at" db:"updated_at"`
 }

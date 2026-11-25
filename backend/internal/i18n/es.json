@@ -154,6 +154,7 @@
   "product.barcode_add": "Agregar",
   "product.barcode_remove": "Quitar",
   "product.barcode_remove_confirm": "¿Quitar este código de barras del producto?",
+  "product.price_col": "Precio",
   "product.prices": "Precio de venta",
   "product.prices_hint": "Se guarda al momento, sin apretar Guardar, y rige desde ya. El precio anterior queda en la historia; las ventas ya hechas no cambian.",
   "product.prices_empty": "Este producto todavía no tiene precio.",

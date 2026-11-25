@@ -613,7 +613,7 @@ func TestRenderProductFormNewCategory(t *testing.T) {
 func TestRenderProductPrices(t *testing.T) {
 	e := NewTemplateEngine()
 	history := []*model.Price{
-		{ID: 3, ProductID: 7, UnitPrice: decimal.RequireFromString("1600"), ValidFrom: "2026-11-25T10:00:00Z"},
+		{ID: 3, ProductID: 7, UnitPrice: decimal.RequireFromString("1600"), ValidFrom: "2026-11-25T15:00:00Z"},
 		{ID: 2, ProductID: 7, UnitPrice: decimal.RequireFromString("1500.5"), ValidFrom: "2026-11-01T09:30:00Z"},
 	}
 
@@ -629,7 +629,9 @@ func TestRenderProductPrices(t *testing.T) {
 	t.Run("current and history", func(t *testing.T) {
 		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history})
 		for _, s := range []string{
-			"$ 1.600,00", "desde 2026-11-25 10:00:00", // vigente
+			// Solo el día: la hora depende de la zona en que se muestran las
+			// fechas, y eso no es lo que prueba este test.
+			"$ 1.600,00", "desde 2026-11-25 ", // vigente
 			"Precios anteriores", "$ 1.500,50", // historia
 			`hx-post="/products/7/prices"`,
 		} {

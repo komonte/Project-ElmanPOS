@@ -11,7 +11,7 @@ This document defines the authoritative relational model for **Elman-U POS**. It
 |---|---|---|
 | Money | `NUMERIC(12,2)` | Arbitrary precision, satisfies **BR-01**. Floating point is prohibited. |
 | Quantity / weight | `NUMERIC(12,3)` | Supports kg / liter / fractional units (0.300 kg of cold cuts). |
-| Timestamps | `TIMESTAMPTZ` | UTC storage, avoids timezone ambiguity. |
+| Timestamps | `TIMESTAMPTZ` | UTC storage, avoids timezone ambiguity. The web shows them in the store's time zone (`STORE_TIMEZONE`, default `America/Argentina/Buenos_Aires`). |
 | Primary keys | `BIGSERIAL` | Sequential surrogate keys (except `stock_balances`, see §4.7). |
 | Status / fixed vocabulary | `ENUM` (PostgreSQL) | Enforces allowed values at engine level (**NFR-02**). |
 

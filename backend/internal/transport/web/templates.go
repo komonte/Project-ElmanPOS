@@ -87,12 +87,7 @@ func NewTemplateEngine() *TemplateEngine {
 			"money": func(d decimal.Decimal) string {
 				return formatMoney(lang, d)
 			},
-			"formatTime": func(t string) string {
-				if t == "" {
-					return "-"
-				}
-				return strings.Replace(t[:19], "T", " ", 1)
-			},
+			"formatTime": formatTime,
 		}
 
 		base, err := template.New("").Funcs(funcMap).ParseFS(templateFS, partialFiles...)

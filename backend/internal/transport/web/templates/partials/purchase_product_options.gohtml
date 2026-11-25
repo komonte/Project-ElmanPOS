@@ -1,6 +1,7 @@
 {{- /* Resultados del buscador de producto de un renglón (PurchasesProductOptions).
      Elegir uno llama a purchasePickProduct (página de compras). Sin
-     resultados, ofrece dar de alta lo escrito (purchaseQuickProduct). Sin espacios
+     resultados, ofrece dar de alta lo escrito (purchaseQuickProduct) y, si es
+     un código (.IsCode), agregarlo a un producto existente (purchaseAssignCode). Sin espacios
      sueltos: si no hay nada, la lista queda vacía y :empty la oculta. */ -}}
 {{- range .Products}}
 <li role="option">
@@ -17,4 +18,10 @@
   <button type="button" data-quick-product data-q="{{.Query}}" onclick="purchaseQuickProduct(this)"
           class="block w-full text-left px-3 py-2 font-bold hover:bg-paper focus:bg-paper">{{printf (t "purchase.quick_offer") .Query}}</button>
 </li>
+{{- if .IsCode}}
+<li>
+  <button type="button" data-q="{{.Query}}" onclick="purchaseAssignCode(this)"
+          class="block w-full text-left px-3 py-2 font-bold hover:bg-paper focus:bg-paper">{{t "purchase.assign_offer"}}</button>
+</li>
+{{- end}}
 {{- end -}}

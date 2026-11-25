@@ -71,7 +71,7 @@ func TestQuickProductTrigger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"purchaseProductCreated":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\""}}`
+	want := `{"purchaseProductChosen":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\""}}`
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)
 	}
@@ -92,7 +92,7 @@ func TestRenderQuickProduct(t *testing.T) {
 	t.Run("scanned code: focus on the name", func(t *testing.T) {
 		html := render(t, map[string]any{"Product": quickProductPrefill("7790895001611"), "Categories": cats})
 		for _, s := range []string{`hx-post="/purchases/quick-product"`, `name="barcode"`, `value="7790895001611"`,
-			"Almacén &gt; Lácteos", `value="unit" checked`, "Crear y usar en el renglón"} {
+			"Almacén &gt; Lácteos", `value="unit" checked`, "Crear y usar en el renglón", "purchaseSwitchToAssign()"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
@@ -106,6 +106,10 @@ func TestRenderQuickProduct(t *testing.T) {
 		html := render(t, map[string]any{"Product": quickProductPrefill("queso cremoso"), "Categories": cats})
 		if !strings.Contains(html, `value="queso cremoso"`) || !strings.Contains(html, `name="category_id" required autofocus`) {
 			t.Errorf("got %s", html)
+		}
+		// Sin código no hay a qué producto agregárselo.
+		if strings.Contains(html, "purchaseSwitchToAssign") {
+			t.Error("a typed name should not offer to assign a code")
 		}
 	})
 
@@ -123,3 +127,42 @@ func TestRenderQuickProduct(t *testing.T) {
 }
 
 func regexpMatch(pattern, s string) bool { return regexp.MustCompile(pattern).MatchString(s) }
+
+func TestRenderAssignCode(t *testing.T) {
+	e := NewTemplateEngine()
+	render := func(t *testing.T, name string, data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", name, data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	panel := render(t, "purchase_assign_code.gohtml", map[string]any{"Code": "7790000000017",
+		"Error": "Ese código de barras ya es del producto 000002 SODA COLA 1.5L."})
+	for _, s := range []string{"Agregar código a un producto", `role="alert"`, "000002 SODA COLA 1.5L",
+		`hx-get="/purchases/assign-code/options"`, `hx-include="#assign-code-value"`,
+		`id="assign-code-value" name="code" value="7790000000017"`} {
+		if !strings.Contains(panel, s) {
+			t.Errorf("panel: missing %q", s)
+		}
+	}
+	// El buscador no va en un <form>: Enter (el escáner) no envía nada.
+	if strings.Contains(panel, "<form") {
+		t.Error("panel: the search must not be inside a form")
+	}
+
+	opts := render(t, "purchase_assign_code_options.gohtml", map[string]any{"Query": "soda", "Code": "7790000000017",
+		"Products": []*model.Product{{ID: 2, SKU: "000002", Name: "SODA COLA 1.5L"}}})
+	for _, s := range []string{`hx-post="/purchases/assign-code"`, `name="code" value="7790000000017"`,
+		`name="product_id" value="2"`, "SODA COLA 1.5L"} {
+		if !strings.Contains(opts, s) {
+			t.Errorf("options: missing %q", s)
+		}
+	}
+	none := render(t, "purchase_assign_code_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
+	if !strings.Contains(none, "No hay productos activos") {
+		t.Errorf("options: no results: got %s", none)
+	}
+}

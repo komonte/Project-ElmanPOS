@@ -55,12 +55,27 @@ func (h *WebHandler) purchaseFormData(ctx context.Context, supplierID int64) (ma
 // de producto de un renglón. Busca activos por nombre, sku o código de barras
 // (sirve escanear). Los combos no se muestran: no se reciben (se reciben sus
 // partes).
+//
+// Sin resultados ofrece dar de alta lo escrito y, si es un código de barras
+// (IsCode), también agregárselo a un producto que ya existe.
 func (h *WebHandler) PurchasesProductOptions(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.FormValue("product_q"))
-	found, err := h.productSvc.SearchByName(r.Context(), query)
+	products, err := h.receivableProducts(r.Context(), query)
 	if err != nil {
 		h.actionError(w, r, err)
 		return
+	}
+	_, codeErr := model.NormalizeBarcode(query)
+	h.renderPartial(w, r, "purchase_product_options.gohtml", map[string]any{
+		"Products": products, "Query": query, "IsCode": codeErr == nil})
+}
+
+// receivableProducts busca productos que se pueden recibir: activos (lo hace
+// SearchByName) y que no sean combos.
+func (h *WebHandler) receivableProducts(ctx context.Context, query string) ([]*model.Product, error) {
+	found, err := h.productSvc.SearchByName(ctx, query)
+	if err != nil {
+		return nil, err
 	}
 	products := make([]*model.Product, 0, len(found))
 	for _, p := range found {
@@ -68,7 +83,7 @@ func (h *WebHandler) PurchasesProductOptions(w http.ResponseWriter, r *http.Requ
 			products = append(products, p)
 		}
 	}
-	h.renderPartial(w, r, "purchase_product_options.gohtml", map[string]any{"Products": products, "Query": query})
+	return products, nil
 }
 
 // PurchasesReceive handles POST /purchases: guarda la recepción y responde el

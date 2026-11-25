@@ -207,6 +207,18 @@ func TestRenderPurchaseForm(t *testing.T) {
 				t.Errorf("no results: missing %q in %s", s, empty)
 			}
 		}
+		// "zzz" no es un código: no se ofrece agregarlo a otro producto.
+		if strings.Contains(empty, "purchaseAssignCode") {
+			t.Error("a name should not offer to assign a code")
+		}
+		code := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "7790000000017",
+			"IsCode": true, "Products": []*model.Product{}})
+		for _, s := range []string{"Dar de alta «7790000000017»", `data-q="7790000000017" onclick="purchaseAssignCode(this)"`,
+			"Agregar este código a un producto existente"} {
+			if !strings.Contains(code, s) {
+				t.Errorf("code: missing %q", s)
+			}
+		}
 		// Con resultados no se ofrece el alta.
 		if strings.Contains(html, "data-quick-product") {
 			t.Error("results: should not offer a quick create")
@@ -271,7 +283,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}})
 		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
-			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductCreated'"} {
+			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}

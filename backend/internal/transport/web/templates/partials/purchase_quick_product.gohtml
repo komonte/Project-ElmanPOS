@@ -26,6 +26,15 @@
       <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
       {{end}}
       {{with .Product}}
+      {{/* Con un código: quizá el producto ya existe sin ese código (Enter al
+           escanear abre este panel directo). Cambia al panel de agregar
+           código, con el código que esté escrito. */}}
+      {{if .Barcode}}
+      <p class="mb-5">
+        <button type="button" onclick="purchaseSwitchToAssign()"
+                class="font-bold underline underline-offset-4">{{t "purchase.quick_exists"}}</button>
+      </p>
+      {{end}}
       <form hx-post="/purchases/quick-product" hx-target="#form-modal" hx-swap="innerHTML" class="space-y-5">
         <div>
           <label for="quick-name" class="field-label">{{t "product.name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>

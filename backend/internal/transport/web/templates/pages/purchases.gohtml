@@ -68,22 +68,39 @@
     row.querySelector('[name=quantity]').focus();
   }
 
-  // Alta rápida: abre el panel con lo escrito en el renglón y recuerda qué
-  // renglón la pidió, para elegir ahí el producto creado.
-  let purchaseQuickRow = null;
+  // Los paneles que salen de un renglón (alta rápida, agregar código)
+  // recuerdan qué renglón los abrió, para elegir ahí el producto.
+  let purchasePanelRow = null;
+  function purchaseOpenPanel(button, url, values) {
+    purchasePanelRow = button.closest('[data-purchase-line]');
+    htmx.ajax('GET', url, { target: '#form-modal', swap: 'innerHTML', values: values });
+  }
+
+  // Alta rápida, con lo escrito en el renglón.
   function purchaseQuickProduct(button) {
-    purchaseQuickRow = button.closest('[data-purchase-line]');
-    htmx.ajax('GET', '/purchases/quick-product', {
-      target: '#form-modal', swap: 'innerHTML', values: { q: button.dataset.q },
+    purchaseOpenPanel(button, '/purchases/quick-product', { q: button.dataset.q });
+  }
+
+  // Agregar el código escaneado a un producto que ya existe.
+  function purchaseAssignCode(button) {
+    purchaseOpenPanel(button, '/purchases/assign-code', { code: button.dataset.q });
+  }
+
+  // Desde el alta rápida: el producto ya existe, solo le falta el código.
+  // Sigue siendo el mismo renglón (purchasePanelRow no cambia).
+  function purchaseSwitchToAssign() {
+    htmx.ajax('GET', '/purchases/assign-code', {
+      target: '#form-modal', swap: 'innerHTML',
+      values: { code: document.getElementById('quick-barcode').value },
     });
   }
 
-  // El servidor avisa que creó el producto (HX-Trigger) y el panel se cierra
+  // El servidor avisa qué producto elegir (HX-Trigger) y el panel se cierra
   // solo (la respuesta es vacía). Si el renglón se quitó mientras tanto, el
-  // producto queda creado pero no se elige en ningún lado.
-  document.body.addEventListener('purchaseProductCreated', function (e) {
-    const row = purchaseQuickRow;
-    purchaseQuickRow = null;
+  // producto (o su código nuevo) queda guardado pero no se elige en ningún lado.
+  document.body.addEventListener('purchaseProductChosen', function (e) {
+    const row = purchasePanelRow;
+    purchasePanelRow = null;
     if (row && row.isConnected) purchaseSetProduct(row, e.detail);
   });
 

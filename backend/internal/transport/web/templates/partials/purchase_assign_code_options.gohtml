@@ -1,0 +1,16 @@
+{{- /* Resultados del buscador del panel "agregar código" (ver
+     purchase_assign_code.gohtml). Cada uno es un form chico: elegirlo agrega
+     el código a ese producto. Sin espacios sueltos: vacío, :empty oculta la
+     lista. */ -}}
+{{- range .Products}}
+<li>
+  <form hx-post="/purchases/assign-code" hx-target="#form-modal" hx-swap="innerHTML">
+    <input type="hidden" name="code" value="{{$.Code}}">
+    <input type="hidden" name="product_id" value="{{.ID}}">
+    <button type="submit" class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
+      {{.Name}} <span class="text-sm text-muted">· {{.SKU}}</span>
+    </button>
+  </form>
+</li>
+{{- end}}
+{{- if and .Query (not .Products)}}<li class="px-3 py-2 text-muted">{{t "purchase.product_not_found"}}</li>{{end -}}

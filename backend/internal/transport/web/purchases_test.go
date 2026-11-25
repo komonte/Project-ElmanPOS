@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -268,4 +269,22 @@ func TestRenderPurchaseForm(t *testing.T) {
 			}
 		}
 	})
+}
+
+// El formulario de compra tiene hx-swap="outerHTML" y htmx lo hereda. Si el
+// buscador de un renglón no dice su propio swap, cada respuesta reemplaza la
+// lista entera: el <ul> desaparece, elegir un producto no la vacía y la
+// búsqueda siguiente escribe en la lista del renglón de abajo ("next ul").
+func TestPurchaseLineSearchSwapsInsideItsList(t *testing.T) {
+	var buf bytes.Buffer
+	if err := NewTemplateEngine().Render(&buf, "es", "purchase_line.gohtml", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	input := regexp.MustCompile(`(?s)<input type="search" name="product_q".*?>`).FindString(buf.String())
+	if input == "" {
+		t.Fatal("product_q input not found")
+	}
+	if !strings.Contains(input, `hx-swap="innerHTML"`) {
+		t.Errorf(`product_q must set hx-swap="innerHTML", got %s`, input)
+	}
 }

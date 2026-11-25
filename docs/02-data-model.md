@@ -296,7 +296,7 @@ Indexes: `(product_id, remaining_quantity, expiry_date)` — FIFO scan picks old
 | sale_id | BIGINT | FK → sales.id, NULL | |
 | purchase_id | BIGINT | FK → purchases.id, NULL | |
 | count_id | BIGINT | FK → stock_counts.id, NULL | |
-| performed_by | BIGINT | FK → users.id, NOT NULL | |
+| performed_by | BIGINT | FK → users.id, NULL | Who made the movement. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
 | notes | VARCHAR(500) | NULL | Free-text context. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -452,7 +452,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | status | purchase_status | NOT NULL DEFAULT 'RECEIVED' | |
 | total | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | |
 | received_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
-| received_by | BIGINT | FK → users.id, NOT NULL | |
+| received_by | BIGINT | FK → users.id, NULL | Who received the purchase. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 

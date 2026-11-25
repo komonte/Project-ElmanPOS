@@ -13,6 +13,9 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	// Las zonas horarias van dentro del binario: así STORE_TIMEZONE funciona
+	// también en una máquina o contenedor sin /usr/share/zoneinfo.
+	_ "time/tzdata"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"

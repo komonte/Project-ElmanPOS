@@ -4,7 +4,8 @@
 // audit_log (NFR-03).
 //
 // Con el costo nuevo se sugiere un precio de venta según el margen del
-// producto. La sugerencia no se guarda: el usuario la acepta como precio
+// producto y el IVA de su categoría (el costo va sin IVA y el precio lo
+// incluye). La sugerencia no se guarda: el usuario la acepta como precio
 // nuevo (F-03, usecase/prices) o la ignora.
 //
 // La recepción de compras (F-06) va a guardar costos dentro de su propia
@@ -109,8 +110,9 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 			}
 		}
 
-		if price, ok := model.SuggestPrice(unitCost, prod.MarginPercent); ok {
-			res.SuggestedPrice = &price
+		res.SuggestedPrice, err = suggestedPrice(ctx, tx, prod, unitCost)
+		if err != nil {
+			return err
 		}
 
 		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
@@ -125,6 +127,35 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 		return nil, err
 	}
 	return &res, nil
+}
+
+// SuggestedPrice devuelve el precio sugerido para un producto y un costo sin
+// IVA: con el margen del producto y el IVA de su categoría
+// (model.SuggestPrice). nil si no hay sugerencia (margen 0). La pantalla lo
+// usa para el costo vigente; Set, para el costo que guarda.
+func (s *Service) SuggestedPrice(ctx context.Context, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
+	return suggestedPrice(ctx, s.db, prod, unitCost)
+}
+
+// suggestedPrice busca el IVA del producto (categoría → impuesto) y calcula la
+// sugerencia. Con margen 0 no consulta nada: no hay sugerencia igual.
+func suggestedPrice(ctx context.Context, db postgres.DBTX, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
+	if !prod.MarginPercent.IsPositive() {
+		return nil, nil
+	}
+	cat, err := postgres.NewCategoryStore(db).GetByID(ctx, prod.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+	tax, err := postgres.NewTaxStore(db).GetByID(ctx, cat.TaxID)
+	if err != nil {
+		return nil, err
+	}
+	price, ok := model.SuggestPrice(unitCost, prod.MarginPercent, tax.Rate)
+	if !ok {
+		return nil, nil
+	}
+	return &price, nil
 }
 
 // History devuelve los costos de un producto, del más nuevo al más viejo (el

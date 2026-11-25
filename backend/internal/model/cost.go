@@ -77,20 +77,30 @@ func AverageCost(prev *Cost, onHand, unitCost, qtyIn decimal.Decimal) decimal.De
 	return total.Div(onHand.Add(qtyIn)).Round(2)
 }
 
-// SuggestPrice sugiere el precio de venta para un costo y un margen (F-04):
+// SuggestPrice sugiere el precio de venta para un costo, un margen y una tasa
+// de IVA (F-04):
 //
-//	sugerido = costo / (1 - margen/100)
+//	sugerido = costo / (1 - margen/100) × (1 + iva/100)
 //
-// El margen es sobre el precio, no sobre el costo: con 30%, de cada $100 que
-// se cobran, $30 quedan de ganancia. Costo 700 → sugerido 1000.
+// El costo se carga sin IVA y el precio de venta lo incluye (es el precio al
+// público), así que la sugerencia suma el IVA de la categoría del producto.
+// El margen es sobre el precio sin IVA: con 30%, de cada $100 sin IVA que se
+// cobran, $30 quedan de ganancia. Costo 700, margen 30%, IVA 21% → 1000 sin
+// IVA → sugerido 1210.
 //
-// Devuelve false si no hay sugerencia: margen 0 (el producto se pone a mano)
-// o margen fuera de rango (>= 100 dividiría por cero). La sugerencia nunca se
-// guarda sola: el usuario la acepta como precio nuevo (F-03) o la ignora.
-func SuggestPrice(unitCost, marginPercent decimal.Decimal) (decimal.Decimal, bool) {
-	if !marginPercent.IsPositive() || !marginPercent.LessThan(hundred) {
+// La cuenta se hace entera y se redondea una sola vez, a 2 decimales.
+//
+// Devuelve false si no hay sugerencia: margen 0 (el producto se pone a mano),
+// margen fuera de rango (>= 100 dividiría por cero) o IVA negativo. La
+// sugerencia nunca se guarda sola: el usuario la acepta como precio nuevo
+// (F-03) o la ignora.
+func SuggestPrice(unitCost, marginPercent, vatRate decimal.Decimal) (decimal.Decimal, bool) {
+	if !marginPercent.IsPositive() || !marginPercent.LessThan(hundred) || vatRate.IsNegative() {
 		return decimal.Zero, false
 	}
-	share := decimal.NewFromInt(1).Sub(marginPercent.Div(hundred))
-	return unitCost.Div(share).Round(2), true
+	one := decimal.NewFromInt(1)
+	share := one.Sub(marginPercent.Div(hundred))
+	withVAT := unitCost.Mul(one.Add(vatRate.Div(hundred)))
+	// Primero multiplica y después divide: así hay una sola división.
+	return withVAT.Div(share).Round(2), true
 }

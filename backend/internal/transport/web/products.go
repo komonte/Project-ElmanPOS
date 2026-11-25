@@ -602,7 +602,8 @@ func (h *WebHandler) ProductPricesSet(w http.ResponseWriter, r *http.Request) {
 const costHistoryShown = 10
 
 // productCostsData arma los datos de la sección de costo: los últimos costos,
-// el margen y el precio sugerido. El margen sale del producto guardado, no del
+// el margen y el precio sugerido (con IVA, ver costs.Service.SuggestedPrice).
+// El margen sale del producto guardado, no del
 // formulario: si el formulario vuelve con un error, el margen escrito todavía
 // no se guardó y la sugerencia no tiene que cambiar.
 func (h *WebHandler) productCostsData(ctx context.Context, productID int64) (map[string]any, error) {
@@ -619,8 +620,12 @@ func (h *WebHandler) productCostsData(ctx context.Context, productID int64) (map
 	}
 	data := map[string]any{"ProductID": productID, "Costs": history, "Margin": prod.MarginPercent}
 	if len(history) > 0 {
-		if price, ok := model.SuggestPrice(history[0].UnitCost, prod.MarginPercent); ok {
-			data["Suggested"] = &price
+		price, err := h.costs.SuggestedPrice(ctx, prod, history[0].UnitCost)
+		if err != nil {
+			return nil, err
+		}
+		if price != nil {
+			data["Suggested"] = price
 		}
 	}
 	return data, nil

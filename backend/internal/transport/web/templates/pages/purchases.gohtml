@@ -90,6 +90,26 @@
     diff.classList.toggle('text-danger', d !== 0);
   }
 
+  // Enter en el buscador de un renglón. El lector de códigos lo manda después
+  // del código, y sin esto enviaría la compra a medio cargar. Busca al
+  // momento (sin esperar el delay del buscador) y, si hay un solo resultado,
+  // lo elige: escanear y pasar a la cantidad. Con varios, se elige de la
+  // lista. La búsqueda con delay que quede pendiente llega después y la
+  // descarta purchaseDropLateSearch (el renglón ya tiene producto).
+  function purchaseSearchEnter(e, input) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = input.value.trim();
+    if (q === '') return;
+    const list = input.closest('[data-purchase-line]').querySelector('ul[role=listbox]');
+    htmx.ajax('GET', '/purchases/product-options', {
+      target: list, swap: 'innerHTML', values: { product_q: q },
+    }).then(function () {
+      const options = list.querySelectorAll('button[data-id]');
+      if (options.length === 1) purchasePickProduct(options[0]);
+    });
+  }
+
   // Descarta los resultados de una búsqueda que llegan cuando el renglón ya
   // tiene producto: se eligió uno antes de que respondiera la última tecla, y
   // la respuesta tardía volvería a abrir la lista. Escribir en el buscador

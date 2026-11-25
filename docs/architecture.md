@@ -43,7 +43,10 @@ The generic layer covers flat CRUD only.
   (F-03) are `usecase/prices`: `Set` (price + audit row in one transaction)
   and `History`. Manual cost entry (F-04) is `usecase/costs`: `Set` (cost
   with its average + audit row in one transaction; returns the suggested
-  price, never saved) and `History`. When a use
+  price, never saved) and `History`. Purchase reception (F-06) is
+  `usecase/purchases`: `Receive` (header, lines, batches, stock movements,
+  balances, costs and audit row in one transaction; returns the total
+  difference and the price suggestions, never saved) and `Get`. When a use
   case takes several optional parts, it takes them in a request struct
   (`createproduct.Request`).
 - A use case works on a **copy** of the entity it receives: if the

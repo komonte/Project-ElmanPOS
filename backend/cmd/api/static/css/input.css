@@ -1,4 +1,5 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+@source "../../../../internal/transport/web/templates";
 
 /* ---- Fuentes (servidas desde /static/fonts, funcionan sin internet) ----
    Atkinson Hyperlegible: texto. Diseñada para que letras parecidas

@@ -306,3 +306,27 @@ func TestPurchasesPageDropsLateSearches(t *testing.T) {
 		}
 	}
 }
+
+// El lector de códigos manda Enter después del código. En el buscador de un
+// renglón ese Enter no tiene que enviar la compra a medio cargar: lo maneja
+// purchaseSearchEnter (busca al momento y elige si hay un solo resultado).
+// Como en TestPurchasesPageDropsLateSearches, el test revisa que esté
+// conectado; el comportamiento se prueba en un navegador.
+func TestPurchaseLineSearchHandlesEnter(t *testing.T) {
+	e := NewTemplateEngine()
+	var line, page bytes.Buffer
+	if err := e.Render(&line, "es", "purchase_line.gohtml", map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+	input := regexp.MustCompile(`(?s)<input type="search" name="product_q".*?>`).FindString(line.String())
+	if !strings.Contains(input, `onkeydown="purchaseSearchEnter(event, this)"`) {
+		t.Errorf("product_q must call purchaseSearchEnter on keydown, got %s", input)
+	}
+	if err := e.Render(&page, "es", "purchases.gohtml", map[string]any{
+		"Section": "purchases", "TitleKey": "purchase.title", "Suppliers": []productOption{}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(page.String(), "function purchaseSearchEnter") {
+		t.Error("page must define purchaseSearchEnter")
+	}
+}

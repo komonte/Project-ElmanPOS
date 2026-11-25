@@ -162,13 +162,25 @@ func TestSetAverageCost(t *testing.T) {
 	}
 }
 
+// El costo se carga sin IVA y el precio de venta lo incluye (decisión del
+// 2026-11-25): la sugerencia suma el IVA de la categoría del producto.
 func TestSetSuggestsPrice(t *testing.T) {
 	f := newFixture(t)
 
-	// Margen 30%: 700 / 0,7 = 1000.
+	// Categoría con IVA 21%, margen 30%: 700 / 0,7 = 1000 sin IVA → 1210.
 	res := f.set(t, f.productID, "700")
-	if res.SuggestedPrice == nil || !res.SuggestedPrice.Equal(dec("1000")) {
-		t.Errorf("suggested: got %v, want 1000", res.SuggestedPrice)
+	if res.SuggestedPrice == nil || !res.SuggestedPrice.Equal(dec("1210")) {
+		t.Errorf("suggested: got %v, want 1210 (with 21%% IVA)", res.SuggestedPrice)
+	}
+
+	// Otra categoría, IVA 10,5%: 1000 sin IVA → 1105.
+	var taxID, categoryID, productID int64
+	f.scan(t, &taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA 10,5 test costs', 10.5) RETURNING id;`)
+	f.scan(t, &categoryID, `INSERT INTO categories (name, tax_id) VALUES ('Categoria 10,5 test costs', $1) RETURNING id;`, taxID)
+	f.scan(t, &productID, `INSERT INTO products (name, category_id, margin_percent)
+		VALUES ('PRODUCTO 10,5 TEST COSTS', $1, 30) RETURNING id;`, categoryID)
+	if res := f.set(t, productID, "700"); res.SuggestedPrice == nil || !res.SuggestedPrice.Equal(dec("1105")) {
+		t.Errorf("suggested: got %v, want 1105 (with 10.5%% IVA)", res.SuggestedPrice)
 	}
 	// La sugerencia no se guarda como precio.
 	if n := f.count(t, `SELECT count(*) FROM prices WHERE product_id = $1;`, f.productID); n != 0 {

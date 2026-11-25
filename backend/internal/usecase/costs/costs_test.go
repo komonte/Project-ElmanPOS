@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
@@ -274,4 +275,114 @@ func TestHistory(t *testing.T) {
 
 	_, err = f.svc.History(f.ctx, 999_999_999)
 	wantErr(t, err, service.ErrNotFound)
+}
+
+// Una carga manual mientras entra una compra del mismo producto: tiene que
+// esperar a que la compra termine y conservar el promedio que dejó la compra,
+// no pisarlo con el promedio viejo. Dos transacciones de verdad: guarda datos
+// y los borra al terminar (sin movimientos de stock, que no se pueden borrar).
+func TestSetWaitsForAConcurrentReception(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL not set; run `make test` with the DB up")
+	}
+	db, err := sql.Open("postgres", url)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	ctx := context.Background()
+
+	scan := func(dest *int64, q string, args ...any) {
+		t.Helper()
+		if err := db.QueryRowContext(ctx, q, args...).Scan(dest); err != nil {
+			t.Fatalf("setup %q: %v", q, err)
+		}
+	}
+	var taxID, categoryID, productID, storeID int64
+	scan(&taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA test costs lock', 21) RETURNING id;`)
+	scan(&categoryID, `INSERT INTO categories (name, tax_id) VALUES ('Categoria test costs lock', $1) RETURNING id;`, taxID)
+	scan(&productID, `INSERT INTO products (name, category_id) VALUES ('PRODUCTO TEST COSTS LOCK', $1) RETURNING id;`, categoryID)
+	scan(&storeID, `INSERT INTO stores (name, is_active) VALUES ('Local test costs lock', FALSE) RETURNING id;`)
+	t.Cleanup(func() {
+		for _, q := range []string{
+			`DELETE FROM audit_log WHERE table_name = 'product_costs'
+				AND record_id IN (SELECT id FROM product_costs WHERE product_id = $1);`,
+			`DELETE FROM product_costs WHERE product_id = $1;`,
+			`DELETE FROM stock_balances WHERE product_id = $1;`,
+			`DELETE FROM products WHERE id = $1;`,
+		} {
+			if _, err := db.ExecContext(ctx, q, productID); err != nil {
+				t.Errorf("cleanup %q: %v", q, err)
+			}
+		}
+		db.ExecContext(ctx, `DELETE FROM stores WHERE id = $1;`, storeID)
+		db.ExecContext(ctx, `DELETE FROM categories WHERE id = $1;`, categoryID)
+		db.ExecContext(ctx, `DELETE FROM taxes WHERE id = $1;`, taxID)
+	})
+
+	// Antes: 10 unidades a 100.
+	balances := postgres.NewStockBalanceStore(db)
+	if _, err := balances.Add(ctx, productID, storeID, dec("10")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgres.NewCostStore(db).Create(ctx, &model.Cost{ProductID: productID,
+		UnitCost: dec("100"), AvgCost: dec("100")}); err != nil {
+		t.Fatal(err)
+	}
+
+	// La "compra": traba, entran 10 a 200 (promedio 150), y todavía no termina.
+	reception, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reception.Rollback()
+	if _, err := postgres.NewStockBalanceStore(reception).LockOnHand(ctx, productID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgres.NewStockBalanceStore(reception).Add(ctx, productID, storeID, dec("10")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgres.NewCostStore(reception).Create(ctx, &model.Cost{ProductID: productID,
+		UnitCost: dec("200"), AvgCost: dec("150")}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mientras tanto, la carga manual.
+	type result struct {
+		res *Result
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		res, err := New(db, postgres.NewTxRunner(db)).Set(ctx, productID, dec("300"))
+		done <- result{res, err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("manual cost did not wait for the reception: %v", r.err)
+		}
+		t.Fatalf("manual cost did not wait for the reception: saved avg %s over the reception's 150",
+			r.res.Cost.AvgCost)
+	case <-time.After(300 * time.Millisecond):
+		// Sigue esperando: bien.
+	}
+	if err := reception.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			t.Fatalf("set: %v", r.err)
+		}
+		// Hay stock: la carga manual conserva el promedio, el de la compra.
+		if !r.res.Cost.AvgCost.Equal(dec("150")) {
+			t.Errorf("avg: got %s, want 150 (the one the reception left)", r.res.Cost.AvgCost)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("manual cost still waiting after the reception committed")
+	}
 }

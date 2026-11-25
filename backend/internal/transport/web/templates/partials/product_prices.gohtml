@@ -1,0 +1,55 @@
+{{/* Precio de venta de un producto (F-03), en el panel de edición. Va fuera
+     del <form> del producto (HTML no permite un form dentro de otro) y se
+     guarda al momento, sin esperar al "Guardar" del producto. Un precio nuevo
+     no edita el anterior: se agrega y rige desde ya. Guardar devuelve esta
+     misma sección (outerHTML).
+
+     Datos: .ProductID, .Prices (el más nuevo primero: el vigente es el
+     primero), y al volver de guardar .PriceError y .PriceValue (lo que se
+     escribió, si hubo error). */}}
+<section id="product-prices" class="mt-5 pt-6 space-y-5" aria-labelledby="product-prices-title">
+  <div>
+    <h3 id="product-prices-title" class="font-display font-bold text-2xl">{{t "product.prices"}}</h3>
+    <p class="text-sm text-muted">{{t "product.prices_hint"}}</p>
+  </div>
+
+  {{if .PriceError}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.PriceError}}</div>
+  {{end}}
+
+  {{with .Prices}}
+  {{$current := index . 0}}
+  <p>
+    <span class="font-display font-bold text-4xl tabular">{{money $current.UnitPrice}}</span>
+    <span class="text-sm text-muted"> · {{t "product.price_since"}} {{formatTime $current.ValidFrom}}</span>
+  </p>
+  {{else}}
+  <p class="text-muted">{{t "product.prices_empty"}}</p>
+  {{end}}
+
+  <form hx-post="/products/{{.ProductID}}/prices" hx-target="#product-prices" hx-swap="outerHTML"
+        class="flex flex-wrap items-end gap-3">
+    <div>
+      <label for="product-price-new" class="field-label">{{t "product.price_new"}}</label>
+      <input type="text" id="product-price-new" name="unit_price" inputmode="decimal" autocomplete="off" required
+             value="{{.PriceValue}}" {{if .PriceError}}autofocus{{end}}
+             class="field max-w-40 tabular">
+    </div>
+    <button type="submit" class="btn-secondary">{{t "product.price_save"}}</button>
+  </form>
+
+  {{/* with primero: sin datos (.Prices nil), len fallaría. */}}
+  {{with .Prices}}{{if gt (len .) 1}}
+  <details>
+    <summary class="font-bold">{{t "product.price_history"}}</summary>
+    <ul class="mt-4 divide-y-2 divide-line border-2 border-line rounded-md">
+      {{range .}}
+      <li class="flex items-center justify-between gap-4 px-4 py-2">
+        <span class="text-sm text-muted tabular">{{formatTime .ValidFrom}}</span>
+        <span class="font-bold tabular">{{money .UnitPrice}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}{{end}}
+</section>

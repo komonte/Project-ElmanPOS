@@ -103,7 +103,7 @@ func main() {
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
@@ -166,6 +166,7 @@ func main() {
 	mux.HandleFunc("PATCH /products/{id}/reactivate", webH.ProductsReactivate)
 	mux.HandleFunc("POST /products/{id}/codes", webH.ProductCodesAdd)
 	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
+	mux.HandleFunc("POST /products/{id}/prices", webH.ProductPricesSet)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

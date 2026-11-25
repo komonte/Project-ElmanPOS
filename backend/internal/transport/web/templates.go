@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 )
 
@@ -43,6 +45,7 @@ var partialFiles = []string{
 	"templates/partials/product_form.gohtml",
 	"templates/partials/product_brand_options.gohtml",
 	"templates/partials/product_table.gohtml",
+	"templates/partials/product_prices.gohtml",
 	"templates/partials/product_codes.gohtml",
 	"templates/partials/product_barcode_check.gohtml",
 }
@@ -78,6 +81,11 @@ func NewTemplateEngine() *TemplateEngine {
 					}
 				}
 				return m
+			},
+			// money muestra un precio como se lee en el idioma:
+			// "$ 1.500,50" en español, "$1,500.50" en inglés.
+			"money": func(d decimal.Decimal) string {
+				return formatMoney(lang, d)
 			},
 			"formatTime": func(t string) string {
 				if t == "" {

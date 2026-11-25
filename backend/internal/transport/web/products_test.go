@@ -590,3 +590,60 @@ func TestRenderProductFormNewCategory(t *testing.T) {
 		t.Error("edit form: offers a new category")
 	}
 }
+
+func TestRenderProductPrices(t *testing.T) {
+	e := NewTemplateEngine()
+	history := []*model.Price{
+		{ID: 3, ProductID: 7, UnitPrice: decimal.RequireFromString("1600"), ValidFrom: "2026-11-25T10:00:00Z"},
+		{ID: 2, ProductID: 7, UnitPrice: decimal.RequireFromString("1500.5"), ValidFrom: "2026-11-01T09:30:00Z"},
+	}
+
+	render := func(t *testing.T, data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_prices.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	t.Run("current and history", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history})
+		for _, s := range []string{
+			"$ 1.600,00", "desde 2026-11-25 10:00:00", // vigente
+			"Precios anteriores", "$ 1.500,50", // historia
+			`hx-post="/products/7/prices"`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
+			t.Error("plain section: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("one price has no history", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history[:1]})
+		if !strings.Contains(html, "$ 1.600,00") || strings.Contains(html, "Precios anteriores") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("no price", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": []*model.Price{}})
+		if !strings.Contains(html, "todavía no tiene precio") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("error keeps the typed price and the focus", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": []*model.Price{},
+			"PriceError": "El precio tiene que ser un número mayor que 0, con hasta 2 decimales.", "PriceValue": "12,345"})
+		for _, s := range []string{`role="alert"`, "mayor que 0", `value="12,345"`, "autofocus"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+}

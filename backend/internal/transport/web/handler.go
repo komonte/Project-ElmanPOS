@@ -157,6 +157,7 @@ var errorKeys = []struct {
 	{model.ErrInvalidReorderPoint, "error.product_reorder_point"},
 	{model.ErrInvalidMaxStock, "error.product_max_stock"},
 	{model.ErrInvalidMargin, "error.product_margin"},
+	{model.ErrInvalidShelfLife, "error.product_shelf_life"},
 	{store.ErrProductBrandInactive, "error.product_brand_inactive"},
 	{store.ErrProductCategoryInactive, "error.product_category_inactive"},
 	{store.ErrProductSupplierInactive, "error.product_supplier_inactive"},

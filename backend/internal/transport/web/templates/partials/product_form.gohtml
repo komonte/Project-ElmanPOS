@@ -190,6 +190,15 @@
             <span><span class="font-bold">{{t "product.controls_batches"}}</span>
               <span class="block text-sm text-muted">{{t "product.controls_batches_hint"}}</span></span>
           </label>
+          {{/* Días de vida: precargan el vencimiento al recibir (hoy + días).
+               Sirve para lo que controla lotes; no se exige ni se oculta. */}}
+          <div>
+            <label for="product-shelf-life" class="field-label">{{t "product.shelf_life_days"}}</label>
+            <input type="text" id="product-shelf-life" name="shelf_life_days" inputmode="numeric" autocomplete="off"
+                   aria-describedby="product-shelf-life-hint"
+                   value="{{with .Product.ShelfLifeDays}}{{.}}{{end}}" class="field max-w-40 tabular">
+            <span id="product-shelf-life-hint" class="field-hint">{{t "product.shelf_life_hint"}}</span>
+          </div>
           <label class="flex items-start gap-3">
             <input type="checkbox" name="is_consignment" {{if .Product.IsConsignment}}checked{{end}} class="mt-1 size-5 accent-ink">
             <span><span class="font-bold">{{t "product.is_consignment"}}</span>

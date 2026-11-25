@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -106,7 +107,11 @@ func TestProductFromForm(t *testing.T) {
 			"sale_type": {"WEIGHT"}, "measure_unit": {"KILOGRAM"},
 			"controls_batches": {"on"}, "is_consignment": {"on"},
 			"reorder_point": {"2,5"}, "max_stock": {"10"}, "margin_percent": {"30"},
+			"shelf_life_days": {" 21 "},
 		})
+		if p.ShelfLifeDays == nil || *p.ShelfLifeDays != 21 {
+			t.Errorf("shelf life: got %v, want 21", p.ShelfLifeDays)
+		}
 		if p.CategoryID != 3 || p.BrandID == nil || *p.BrandID != 2 || p.PreferredSupplierID == nil || *p.PreferredSupplierID != 5 {
 			t.Errorf("ids: got %d %v %v", p.CategoryID, p.BrandID, p.PreferredSupplierID)
 		}
@@ -120,8 +125,8 @@ func TestProductFromForm(t *testing.T) {
 
 	t.Run("empty optionals", func(t *testing.T) {
 		p := post(url.Values{"sku": {"A"}, "name": {"AB"}, "category_id": {"3"}})
-		if p.BrandID != nil || p.PreferredSupplierID != nil || p.MaxStock != nil {
-			t.Errorf("optionals: got %v %v %v, want nil", p.BrandID, p.PreferredSupplierID, p.MaxStock)
+		if p.BrandID != nil || p.PreferredSupplierID != nil || p.MaxStock != nil || p.ShelfLifeDays != nil {
+			t.Errorf("optionals: got %v %v %v %v, want nil", p.BrandID, p.PreferredSupplierID, p.MaxStock, p.ShelfLifeDays)
 		}
 		// Checkbox sin tildar: no viene en el formulario.
 		if p.ControlsBatches || p.IsConsignment {
@@ -132,10 +137,10 @@ func TestProductFromForm(t *testing.T) {
 	t.Run("unchecking a checkbox on edit", func(t *testing.T) {
 		r := httptest.NewRequest("POST", "/products/1/edit", strings.NewReader("sku=A&name=AB&category_id=3"))
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		p := &model.Product{ControlsBatches: true, MaxStock: new(decimal.NewFromInt(9))}
+		p := &model.Product{ControlsBatches: true, MaxStock: new(decimal.NewFromInt(9)), ShelfLifeDays: new(21)}
 		productFromForm(r, p)
-		if p.ControlsBatches || p.MaxStock != nil {
-			t.Errorf("got batches=%v max=%v, want cleared", p.ControlsBatches, p.MaxStock)
+		if p.ControlsBatches || p.MaxStock != nil || p.ShelfLifeDays != nil {
+			t.Errorf("got batches=%v max=%v shelf life=%v, want cleared", p.ControlsBatches, p.MaxStock, p.ShelfLifeDays)
 		}
 	})
 
@@ -145,6 +150,13 @@ func TestProductFromForm(t *testing.T) {
 		{"reorder_point", "error.product_reorder_point"},
 		{"max_stock", "error.product_max_stock"},
 		{"margin_percent", "error.product_margin"},
+		{"shelf_life_days", "error.product_shelf_life"},
+	}
+	// Días de vida con decimales: no es un número de días.
+	r := httptest.NewRequest("POST", "/products/new", strings.NewReader("sku=A&name=AB&category_id=3&shelf_life_days=2,5"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if got := productFromForm(r, &model.Product{}); got != "error.product_shelf_life" {
+		t.Errorf("shelf life 2,5: got %q", got)
 	}
 	for _, tt := range badNumbers {
 		t.Run("bad "+tt.field, func(t *testing.T) {
@@ -170,7 +182,7 @@ func TestRenderProductPartials(t *testing.T) {
 		ID: 7, SKU: "MORTA-KG", Name: "MORTADELA", BrandName: "SANCOR", CategoryName: "Fiambreria",
 		SaleType: model.SaleTypeWeight, MeasureUnit: model.MeasureUnitKilogram,
 		ReorderPoint: decimal.RequireFromString("2.5"), MaxStock: new(decimal.NewFromInt(10)),
-		MarginPercent: decimal.NewFromInt(25), IsActive: true,
+		MarginPercent: decimal.NewFromInt(25), ShelfLifeDays: new(21), IsActive: true,
 	}
 
 	t.Run("table truncated", func(t *testing.T) {
@@ -233,6 +245,7 @@ func TestRenderProductPartials(t *testing.T) {
 		for _, s := range []string{
 			`hx-post="/products/7/edit"`, `>MORTA-KG</p>`, `name="brand_q"`, `value="SANCOR"`, `value="2.5"`, `value="10"`,
 			`<option value="WEIGHT" selected>`, `<option value="KILOGRAM" selected>`,
+			`name="shelf_life_days"`, "Días de vida",
 		} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
@@ -245,6 +258,9 @@ func TestRenderProductPartials(t *testing.T) {
 		}
 		if !strings.Contains(html, `name="name" autofocus`) {
 			t.Error("edit form: name should have the focus")
+		}
+		if !regexp.MustCompile(`name="shelf_life_days"[^>]*value="21"`).MatchString(html) {
+			t.Error("edit form: shelf life should show 21")
 		}
 		section := strings.Index(html, `id="product-codes"`)
 		if section < 0 || section < strings.Index(html, "</form>") {

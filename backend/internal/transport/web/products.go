@@ -184,6 +184,15 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	} else if errKey == "" {
 		errKey = "error.product_margin"
 	}
+
+	p.ShelfLifeDays = nil // vacío: sin dato
+	if v := strings.TrimSpace(r.FormValue("shelf_life_days")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			p.ShelfLifeDays = &n // el rango lo revisa Validate
+		} else if errKey == "" {
+			errKey = "error.product_shelf_life"
+		}
+	}
 	return errKey
 }
 

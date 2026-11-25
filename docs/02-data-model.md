@@ -214,6 +214,8 @@ Rows are only appended (F-03): a new price gets `valid_from = clock_timestamp()`
 
 Constraint: `UNIQUE (product_id, valid_from)`. Index `(product_id, valid_from DESC)`.
 
+Rows are only appended (F-04): a new cost gets `valid_from = clock_timestamp()` and the current cost is the latest `valid_from`. `unit_cost` is the last cost (the PVP suggestion uses it); `avg_cost` is computed by the app (`model.AverageCost`) from the current cost and the stock summed over all stores, never typed. The app also requires `unit_cost > 0` (the column has no `CHECK`). Costs normally come from purchase reception (F-06); a manual entry keeps `avg_cost` unless there was no cost or no stock.
+
 > **Rationale (P-02 / BR-03):** costs and prices are historical series, never mutable single columns. Reports value past sales with the cost/price effective at that moment.
 
 ---
@@ -496,7 +498,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 
 > Required actions logged: price/cost changes, stock overrides, voided sales, cash discrepancies (**NFR-03**).
 >
-> Written today: price changes (F-03, `table_name = 'prices'`, `action = 'INSERT'`, `new_data` = the price). `user_id` stays `NULL` until there is a login (F-13).
+> Written today: price changes (F-03, `table_name = 'prices'`) and cost changes (F-04, `table_name = 'product_costs'`), both with `action = 'INSERT'` and `new_data` = the saved row. `user_id` stays `NULL` until there is a login (F-13).
 
 ### 4.25 `app_settings` — global business configuration
 

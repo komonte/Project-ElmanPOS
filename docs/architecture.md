@@ -41,7 +41,9 @@ The generic layer covers flat CRUD only.
   product's barcodes) and `usecase/createproduct` (product + optional
   barcode, new brand and new category in one transaction, F-01). Prices
   (F-03) are `usecase/prices`: `Set` (price + audit row in one transaction)
-  and `History`. When a use
+  and `History`. Manual cost entry (F-04) is `usecase/costs`: `Set` (cost
+  with its average + audit row in one transaction; returns the suggested
+  price, never saved) and `History`. When a use
   case takes several optional parts, it takes them in a request struct
   (`createproduct.Request`).
 - A use case works on a **copy** of the entity it receives: if the

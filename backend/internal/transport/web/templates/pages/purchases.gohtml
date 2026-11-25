@@ -90,6 +90,18 @@
     diff.classList.toggle('text-danger', d !== 0);
   }
 
+  // Descarta los resultados de una búsqueda que llegan cuando el renglón ya
+  // tiene producto: se eligió uno antes de que respondiera la última tecla, y
+  // la respuesta tardía volvería a abrir la lista. Escribir en el buscador
+  // borra el producto elegido (oninput), así que una búsqueda nueva sí se ve.
+  function purchaseDropLateSearch(e) {
+    const list = e.detail.target;
+    if (!list.matches('[data-purchase-line] ul[role=listbox]')) return;
+    const row = list.closest('[data-purchase-line]');
+    if (row.querySelector('[name=product_id]').value !== '') e.detail.shouldSwap = false;
+  }
+  document.addEventListener('htmx:beforeSwap', purchaseDropLateSearch);
+
   document.addEventListener('input', function (e) {
     if (e.target.closest('#purchase-form')) purchaseRecalc();
   });

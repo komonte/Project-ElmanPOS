@@ -1,7 +1,13 @@
 {{/* Panel lateral, igual que el de categorías. Los campos van en grupos
      (qué es, dónde va, cómo se vende, stock y precio) para que un formulario
      largo se lea de a partes. Los <select> de categoría, marca y proveedor
-     traen solo los activos, más el actual aunque esté inactivo. */}}
+     traen solo los activos, más el actual aunque esté inactivo.
+
+     .ForPurchase: el alta desde un renglón de compra (PurchasesQuickProductForm).
+     Es el mismo formulario, pero guarda en /purchases/quick-product, que no
+     redirige (cerraría la compra a medio cargar): elige el producto en el
+     renglón. .Focus dice dónde va el cursor: "name" (vino el código
+     escaneado), "category" (vino el nombre) o vacío (el código, como siempre). */}}
 <div class="fixed inset-0 z-50 flex justify-end bg-ink/40" onclick="if (event.target === this) closeModal()">
   <div class="h-full w-full sm:max-w-lg bg-surface border-l-8 border-tag overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
     <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b-2 border-line">
@@ -13,7 +19,15 @@
       {{if .Error}}
       <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
       {{end}}
-      <form hx-post="{{if .Product.ID}}/products/{{.Product.ID}}/edit{{else}}/products/new{{end}}"
+      {{/* Compra con un código: quizá el producto ya existe sin ese código.
+           Cambia al panel de agregar código (purchaseSwitchToAssign). */}}
+      {{if and .ForPurchase .Barcode}}
+      <p class="mb-6">
+        <button type="button" onclick="purchaseSwitchToAssign()"
+                class="font-bold underline underline-offset-4">{{t "purchase.quick_exists"}}</button>
+      </p>
+      {{end}}
+      <form hx-post="{{if .Product.ID}}/products/{{.Product.ID}}/edit{{else if .ForPurchase}}/purchases/quick-product{{else}}/products/new{{end}}"
             hx-target="#form-modal" hx-swap="innerHTML"
             class="space-y-8">
 
@@ -38,10 +52,10 @@
           {{if not .Product.ID}}
           <div>
             <label for="product-barcode" class="field-label">{{t "product.barcode"}}</label>
-            <input type="text" id="product-barcode" name="barcode" inputmode="numeric" autocomplete="off" maxlength="20" autofocus
+            <input type="text" id="product-barcode" name="barcode" inputmode="numeric" autocomplete="off" maxlength="20" {{if not .Focus}}autofocus{{end}}
                    aria-describedby="product-barcode-hint" value="{{.Barcode}}"
                    onkeydown="if (event.key === 'Enter') event.preventDefault();"
-                   hx-get="/products/barcode-check" hx-trigger="keyup[key=='Enter'], change"
+                   hx-get="/products/barcode-check{{if .ForPurchase}}?for=purchase{{end}}" hx-trigger="keyup[key=='Enter'], change"
                    hx-target="#product-barcode-check" hx-swap="innerHTML" hx-sync="this:replace"
                    class="field max-w-60 tabular">
             <span id="product-barcode-hint" class="field-hint">{{t "product.barcode_hint"}}</span>
@@ -51,7 +65,7 @@
           {{end}}
           <div>
             <label for="product-name" class="field-label">{{t "product.name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <input type="text" id="product-name" name="name" {{if .Product.ID}}autofocus{{end}} required maxlength="200"
+            <input type="text" id="product-name" name="name" {{if or .Product.ID (eq .Focus "name")}}autofocus{{end}} required maxlength="200"
                    value="{{.Product.Name}}" class="field uppercase">
           </div>
           <div>
@@ -65,7 +79,7 @@
           <legend class="font-display font-bold text-2xl mb-3">{{t "product.group_classification"}}</legend>
           <div>
             <label for="product-category" class="field-label">{{t "product.category"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <select id="product-category" name="category_id" required aria-describedby="product-category-hint" class="field" {{if .NewCategory}}disabled{{end}}>
+            <select id="product-category" name="category_id" required aria-describedby="product-category-hint" {{if eq .Focus "category"}}autofocus{{end}} class="field" {{if .NewCategory}}disabled{{end}}>
               <option value="" disabled {{if not .Product.CategoryID}}selected{{end}}>{{t "product.category_choose"}}</option>
               {{range .Categories}}
               <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}{{if .Inactive}} {{t "product.inactive_suffix"}}{{end}}</option>

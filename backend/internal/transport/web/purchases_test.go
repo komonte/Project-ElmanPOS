@@ -283,7 +283,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}})
 		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
-			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign"} {
+			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign", "function purchaseUseExisting"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}

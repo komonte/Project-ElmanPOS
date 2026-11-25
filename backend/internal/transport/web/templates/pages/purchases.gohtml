@@ -6,8 +6,9 @@
 
 {{template "purchase_form.gohtml" .}}
 
-{{/* Alta rápida de producto (purchase_quick_product.gohtml). Fuera del form
-     de la compra: no puede haber un form dentro de otro. */}}
+{{/* Paneles que salen de un renglón: alta de producto (product_form.gohtml
+     en modo compra) y agregar código. Fuera del form de la compra: no puede
+     haber un form dentro de otro. */}}
 <div id="form-modal"></div>
 
 {{/* Un renglón vacío para clonar con "Agregar renglón" (purchaseAddLine). */}}
@@ -76,9 +77,13 @@
     htmx.ajax('GET', url, { target: '#form-modal', swap: 'innerHTML', values: values });
   }
 
-  // Alta rápida, con lo escrito en el renglón.
+  // Alta de producto (el formulario de Productos), con lo escrito en el
+  // renglón y el proveedor de la compra como proveedor preferido.
   function purchaseQuickProduct(button) {
-    purchaseOpenPanel(button, '/purchases/quick-product', { q: button.dataset.q });
+    purchaseOpenPanel(button, '/purchases/quick-product', {
+      q: button.dataset.q,
+      supplier_id: document.querySelector('#purchase-form [name=supplier_id]').value,
+    });
   }
 
   // Agregar el código escaneado a un producto que ya existe.
@@ -86,13 +91,26 @@
     purchaseOpenPanel(button, '/purchases/assign-code', { code: button.dataset.q });
   }
 
-  // Desde el alta rápida: el producto ya existe, solo le falta el código.
-  // Sigue siendo el mismo renglón (purchasePanelRow no cambia).
+  // Desde el alta: el producto ya existe, solo le falta el código. Sigue
+  // siendo el mismo renglón (purchasePanelRow no cambia).
   function purchaseSwitchToAssign() {
     htmx.ajax('GET', '/purchases/assign-code', {
       target: '#form-modal', swap: 'innerHTML',
-      values: { code: document.getElementById('quick-barcode').value },
+      values: { code: document.getElementById('product-barcode').value },
     });
+  }
+
+  // Desde el alta: el código escrito ya es de un producto que se puede
+  // recibir (product_barcode_check.gohtml). Se usa ese en el renglón.
+  function purchaseUseExisting(button) {
+    const row = purchasePanelRow;
+    purchasePanelRow = null;
+    closeModal();
+    if (row && row.isConnected) {
+      purchaseSetProduct(row, {
+        id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
+      });
+    }
   }
 
   // El servidor avisa qué producto elegir (HX-Trigger) y el panel se cierra

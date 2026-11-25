@@ -2,13 +2,9 @@ package web
 
 import (
 	"bytes"
-	"net/http/httptest"
-	"net/url"
 	"regexp"
 	"strings"
 	"testing"
-
-	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 )
@@ -25,49 +21,15 @@ func TestQuickProductPrefill(t *testing.T) {
 		{"000", "000", ""},                     // solo ceros: no es un código válido
 	}
 	for _, tt := range tests {
-		got := quickProductPrefill(tt.q)
-		if got.Name != tt.wantName || got.Barcode != tt.wantCode {
-			t.Errorf("prefill(%q) = name %q, code %q; want %q, %q", tt.q, got.Name, got.Barcode, tt.wantName, tt.wantCode)
+		name, code := quickProductPrefill(tt.q)
+		if name != tt.wantName || code != tt.wantCode {
+			t.Errorf("prefill(%q) = name %q, code %q; want %q, %q", tt.q, name, code, tt.wantName, tt.wantCode)
 		}
 	}
 }
 
-func TestQuickProductFromForm(t *testing.T) {
-	read := func(v url.Values) (quickProduct, *model.Product, string) {
-		r := httptest.NewRequest("POST", "/purchases/quick-product", strings.NewReader(v.Encode()))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		return quickProductFromForm(r)
-	}
-
-	qp, p, errKey := read(url.Values{"name": {"Queso cremoso"}, "category_id": {"4"}, "barcode": {" 123 "},
-		"sold_by": {"kg"}, "controls_batches": {"1"}, "margin_percent": {"35,5"}})
-	if errKey != "" {
-		t.Fatalf("errKey = %q", errKey)
-	}
-	if p.SaleType != model.SaleTypeWeight || p.MeasureUnit != model.MeasureUnitKilogram || !p.ControlsBatches ||
-		p.CategoryID != 4 || !p.MarginPercent.Equal(decimal.RequireFromString("35.5")) {
-		t.Errorf("by kg: got %+v", p)
-	}
-	if qp.Barcode != "123" || !qp.ByWeight {
-		t.Errorf("typed: got %+v", qp)
-	}
-
-	// Por unidad (o sin elegir), margen vacío = 0.
-	_, p, errKey = read(url.Values{"name": {"Alfajor"}, "category_id": {"1"}, "sold_by": {"unit"}})
-	if errKey != "" || p.SaleType != model.SaleTypeUnit || p.MeasureUnit != model.MeasureUnitUnit ||
-		p.ControlsBatches || !p.MarginPercent.IsZero() {
-		t.Errorf("by unit: got %+v, %q", p, errKey)
-	}
-
-	// Margen mal escrito: vuelve con lo escrito y el error.
-	qp, _, errKey = read(url.Values{"name": {"Alfajor"}, "margin_percent": {"treinta"}})
-	if errKey != "error.product_margin" || qp.Margin != "treinta" || qp.Name != "Alfajor" {
-		t.Errorf("bad margin: got %q, %+v", errKey, qp)
-	}
-}
-
-func TestQuickProductTrigger(t *testing.T) {
-	got, err := quickProductTrigger(&model.Product{ID: 42, Name: `QUESO "CREMOSO"`, ControlsBatches: true})
+func TestProductChosenTrigger(t *testing.T) {
+	got, err := productChosenTrigger(&model.Product{ID: 42, Name: `QUESO "CREMOSO"`, ControlsBatches: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,56 +39,96 @@ func TestQuickProductTrigger(t *testing.T) {
 	}
 }
 
-func TestRenderQuickProduct(t *testing.T) {
+// El alta desde una compra es el formulario de Productos en modo compra.
+func TestRenderProductFormForPurchase(t *testing.T) {
 	e := NewTemplateEngine()
-	render := func(t *testing.T, data map[string]any) string {
+	render := func(t *testing.T, name string, data map[string]any) string {
 		t.Helper()
 		var buf bytes.Buffer
-		if err := e.Render(&buf, "es", "purchase_quick_product.gohtml", data); err != nil {
+		if err := e.Render(&buf, "es", name, data); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
 	}
-	cats := []productOption{{ID: 4, Label: "Almacén > Lácteos"}}
+	supplierID := int64(1)
+	base := func() map[string]any {
+		return map[string]any{
+			"Product":    &model.Product{PreferredSupplierID: &supplierID},
+			"Categories": []productOption{{ID: 4, Label: "Almacén > Lácteos"}},
+			"Suppliers":  []productOption{{ID: 1, Label: "Distribuidora del Sur S.A.", Selected: true}},
+			"SaleTypes":  saleTypeOptions(""), "MeasureUnits": model.MeasureUnits,
+		}
+	}
 
 	t.Run("scanned code: focus on the name", func(t *testing.T) {
-		html := render(t, map[string]any{"Product": quickProductPrefill("7790895001611"), "Categories": cats})
-		for _, s := range []string{`hx-post="/purchases/quick-product"`, `name="barcode"`, `value="7790895001611"`,
-			"Almacén &gt; Lácteos", `value="unit" checked`, "Crear y usar en el renglón", "purchaseSwitchToAssign()"} {
+		data := base()
+		data["ForPurchase"], data["Barcode"], data["Focus"] = true, "7790895001611", "name"
+		html := render(t, "product_form.gohtml", data)
+		for _, s := range []string{`hx-post="/purchases/quick-product"`, `value="7790895001611"`,
+			`/products/barcode-check?for=purchase`, "purchaseSwitchToAssign()", "+ Nueva categoría",
+			`value="1" selected`} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
 		}
-		if !regexpMatch(`name="name" required autocomplete="off" value=""\s+autofocus`, html) {
+		if strings.Contains(html, `hx-post="/products/new"`) {
+			t.Error("must not save to /products/new (it redirects out of the purchase)")
+		}
+		if !regexpMatch(`id="product-name" name="name" autofocus`, html) {
 			t.Error("the name should have the focus")
+		}
+		if regexpMatch(`id="product-barcode"[^>]*autofocus`, html) {
+			t.Error("the barcode should not have the focus")
 		}
 	})
 
 	t.Run("typed name: focus on the category", func(t *testing.T) {
-		html := render(t, map[string]any{"Product": quickProductPrefill("queso cremoso"), "Categories": cats})
-		if !strings.Contains(html, `value="queso cremoso"`) || !strings.Contains(html, `name="category_id" required autofocus`) {
-			t.Errorf("got %s", html)
+		data := base()
+		data["Product"].(*model.Product).Name = "QUESO CREMOSO"
+		data["ForPurchase"], data["Focus"] = true, "category"
+		html := render(t, "product_form.gohtml", data)
+		if !regexpMatch(`id="product-category"[^>]*autofocus`, html) {
+			t.Error("the category should have the focus")
 		}
 		// Sin código no hay a qué producto agregárselo.
 		if strings.Contains(html, "purchaseSwitchToAssign") {
-			t.Error("a typed name should not offer to assign a code")
+			t.Error("without a code it should not offer to assign it")
 		}
 	})
 
-	t.Run("error keeps what was typed", func(t *testing.T) {
-		cats := []productOption{{ID: 4, Label: "Lácteos", Selected: true}}
-		html := render(t, map[string]any{"Categories": cats, "Error": "El código ya es de 000003 MORTADELA.",
-			"Product": quickProduct{Name: "QUESO", Barcode: "123", Margin: "35", CategoryID: 4, ByWeight: true, ControlsBatches: true}})
-		for _, s := range []string{`role="alert"`, "000003 MORTADELA", `value="QUESO"`, `value="35"`,
-			`value="4" selected`, `value="kg" checked`, `name="controls_batches" value="1" checked`} {
-			if !strings.Contains(html, s) {
-				t.Errorf("missing %q", s)
+	t.Run("products page is unchanged", func(t *testing.T) {
+		html := render(t, "product_form.gohtml", base())
+		if !strings.Contains(html, `hx-post="/products/new"`) || strings.Contains(html, "?for=purchase") ||
+			!regexpMatch(`id="product-barcode"[^>]*autofocus`, html) {
+			t.Errorf("products page form changed: %s", html)
+		}
+	})
+
+	t.Run("barcode taken: use it from a purchase, edit it from products", func(t *testing.T) {
+		owner := &model.Product{ID: 3, Name: "MORTADELA", ControlsBatches: true}
+		use := render(t, "product_barcode_check.gohtml", map[string]any{"ForPurchase": true,
+			"Message": "Ya es de MORTADELA", "OwnerID": int64(3), "Owner": owner})
+		for _, s := range []string{`data-id="3"`, `data-name="MORTADELA"`, `data-batches="true"`,
+			"purchaseUseExisting(this)", "Usar ese producto en el renglón"} {
+			if !strings.Contains(use, s) {
+				t.Errorf("purchase: missing %q", s)
 			}
+		}
+		if strings.Contains(use, "/products/3/edit") {
+			t.Error("purchase: must not offer to edit (it leaves the purchase)")
+		}
+		// El dueño no se puede recibir (inactivo o combo): solo el aviso.
+		none := render(t, "product_barcode_check.gohtml", map[string]any{"ForPurchase": true,
+			"Message": "Ya es de COMBO", "OwnerID": int64(9)})
+		if strings.Contains(none, "<button") {
+			t.Errorf("purchase, owner not receivable: got %s", none)
+		}
+		edit := render(t, "product_barcode_check.gohtml", map[string]any{"Message": "Ya es de MORTADELA", "OwnerID": int64(3)})
+		if !strings.Contains(edit, `hx-get="/products/3/edit"`) || strings.Contains(edit, "purchaseUseExisting") {
+			t.Errorf("products: got %s", edit)
 		}
 	})
 }
-
-func regexpMatch(pattern, s string) bool { return regexp.MustCompile(pattern).MatchString(s) }
 
 func TestRenderAssignCode(t *testing.T) {
 	e := NewTemplateEngine()
@@ -166,3 +168,5 @@ func TestRenderAssignCode(t *testing.T) {
 		t.Errorf("options: no results: got %s", none)
 	}
 }
+
+func regexpMatch(pattern, s string) bool { return regexp.MustCompile(pattern).MatchString(s) }

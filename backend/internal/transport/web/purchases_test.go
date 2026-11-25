@@ -121,6 +121,27 @@ func TestErrorLine(t *testing.T) {
 	}
 }
 
+func TestPriceCellData(t *testing.T) {
+	d := func(s string) *decimal.Decimal { v := decimal.RequireFromString(s); return &v }
+	tests := []struct {
+		name               string
+		current, suggested *decimal.Decimal
+		wantSame           bool
+	}{
+		{"different", d("1800"), d("1915.83"), false},
+		{"same value, different scale", d("1915.8"), d("1915.80"), true},
+		{"no current price", nil, d("1915.83"), false},
+		{"no suggestion", d("1800"), nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := priceCellData(1, tt.current, tt.suggested, false, "")["Same"]; got != tt.wantSame {
+				t.Errorf("Same: got %v, want %v", got, tt.wantSame)
+			}
+		})
+	}
+}
+
 func TestRenderPurchaseForm(t *testing.T) {
 	e := NewTemplateEngine()
 	render := func(t *testing.T, name string, data map[string]any) string {
@@ -191,6 +212,49 @@ func TestRenderPurchaseForm(t *testing.T) {
 		for _, s := range []string{"Compra recibida", "Compra N° 377 · 2 renglones", "-$ 50,00", `href="/purchases"`} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
+			}
+		}
+	})
+
+	t.Run("received with suggested prices", func(t *testing.T) {
+		d := func(s string) *decimal.Decimal { v := decimal.RequireFromString(s); return &v }
+		html := render(t, "purchase_received.gohtml", map[string]any{
+			"Purchase": &model.Purchase{ID: 377, Items: make([]*model.PurchaseItem, 3)},
+			"Suggestions": purchaseSuggestionRows([]purchases.Suggestion{
+				{ProductID: 1, ProductName: "OREO", UnitCost: decimal.RequireFromString("950"),
+					AvgCost: decimal.RequireFromString("930"), SuggestedPrice: d("1915.83"), CurrentPrice: d("1800")},
+				{ProductID: 2, ProductName: "YERBA", UnitCost: decimal.RequireFromString("2000"),
+					AvgCost: decimal.RequireFromString("2000"), CurrentPrice: d("2500")}, // margen 0
+				{ProductID: 3, ProductName: "QUESO", UnitCost: decimal.RequireFromString("4700"),
+					AvgCost: decimal.RequireFromString("4377.77"), SuggestedPrice: d("7582.67"), CurrentPrice: d("7582.67")},
+			})})
+		for _, s := range []string{"Precios", "OREO", "$ 950,00", "$ 930,00", "$ 1.915,83", "$ 1.800,00",
+			`id="purchase-price-1"`, `hx-post="/purchases/prices/1"`, `value="1915.83"`, "Usar como precio",
+			"Sin margen", "Ya es el precio"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		// Botón solo en OREO: YERBA no tiene sugerido y QUESO ya tiene ese precio.
+		if n := strings.Count(html, `hx-post="/purchases/prices/`); n != 1 {
+			t.Errorf("buttons: got %d, want 1", n)
+		}
+	})
+
+	t.Run("price cell saved and with error", func(t *testing.T) {
+		p := decimal.RequireFromString("1915.83")
+		saved := render(t, "purchase_price_cell.gohtml", priceCellData(1, &p, &p, true, ""))
+		if !strings.Contains(saved, "$ 1.915,83") || !strings.Contains(saved, "Precio actualizado") ||
+			strings.Contains(saved, "hx-post") {
+			t.Errorf("saved: got %s", saved)
+		}
+		cur := decimal.RequireFromString("1800")
+		failed := render(t, "purchase_price_cell.gohtml",
+			priceCellData(1, &cur, &p, false, "El producto está desactivado."))
+		for _, s := range []string{`role="alert"`, "El producto está desactivado.", "$ 1.800,00",
+			`hx-post="/purchases/prices/1"`} {
+			if !strings.Contains(failed, s) {
+				t.Errorf("failed: missing %q", s)
 			}
 		}
 	})

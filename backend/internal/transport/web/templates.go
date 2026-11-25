@@ -54,6 +54,7 @@ var partialFiles = []string{
 	"templates/partials/purchase_line.gohtml",
 	"templates/partials/purchase_product_options.gohtml",
 	"templates/partials/purchase_received.gohtml",
+	"templates/partials/purchase_price_cell.gohtml",
 }
 
 type TemplateEngine struct {

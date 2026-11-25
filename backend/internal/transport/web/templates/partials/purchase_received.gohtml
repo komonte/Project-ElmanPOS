@@ -1,7 +1,10 @@
 {{/* Resultado de una recepción guardada (reemplaza al formulario).
 
      Datos: .Purchase (con .Items), .Difference (total escrito menos la suma
-     de los renglones) y .HasDifference. */}}
+     de los renglones), .HasDifference y .Suggestions (una fila por producto,
+     ver purchaseSuggestionRows: costo nuevo, promedio, sugerido con IVA y la
+     celda del precio actual). Ningún precio cambia solo: cada fila tiene su
+     "Usar como precio". */}}
 <div id="purchase-panel" class="space-y-5">
   <div role="status" class="p-4 bg-surface border-l-8 border-tag rounded-sm">
     <p class="font-display font-bold text-2xl">{{t "purchase.received"}}</p>
@@ -12,5 +15,41 @@
     {{printf (t "purchase.difference_warning") (money .Difference)}}
   </div>
   {{end}}
+
+  {{with .Suggestions}}
+  <section class="space-y-3" aria-labelledby="purchase-prices-title">
+    <div>
+      <h3 id="purchase-prices-title" class="font-display font-bold text-2xl">{{t "purchase.prices"}}</h3>
+      <p class="text-sm text-muted">{{t "purchase.prices_hint"}}</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left">
+        <thead class="border-b-2 border-line text-muted">
+          <tr>
+            <th scope="col" class="px-3 py-3 font-bold">{{t "purchase.product"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "purchase.cost_new"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "product.cost_avg"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "purchase.price_suggested"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "purchase.price_current"}}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {{range .}}
+          <tr>
+            <td class="px-3 py-3 min-w-48 font-bold">{{.ProductName}}</td>
+            <td class="px-3 py-3 whitespace-nowrap text-right tabular">{{money .UnitCost}}</td>
+            <td class="px-3 py-3 whitespace-nowrap text-right tabular">{{money .AvgCost}}</td>
+            <td class="px-3 py-3 whitespace-nowrap text-right tabular">
+              {{with .SuggestedPrice}}{{money .}}{{else}}<span class="text-sm text-muted">{{t "purchase.no_margin"}}</span>{{end}}
+            </td>
+            <td id="purchase-price-{{.ProductID}}" class="px-3 py-3">{{template "purchase_price_cell.gohtml" .Cell}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+
   <a href="/purchases" class="btn-primary">{{t "purchase.receive_another"}}</a>
 </div>

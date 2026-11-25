@@ -27,7 +27,6 @@ var (
 	ErrInvalidPurchaseQuantity = errors.New("purchase line quantity must be greater than 0, up to 999999999.999, with up to 3 decimals")
 	ErrBatchNumberTooLong      = errors.New("batch number cannot exceed 80 characters")
 	ErrInvalidExpiryDate       = errors.New("expiry date must be a valid date (YYYY-MM-DD)")
-	ErrExpiryWithoutBatch      = errors.New("expiry date needs a batch number")
 )
 
 // NUMERIC(12,2), igual que precios y costos.
@@ -135,11 +134,9 @@ func (it *PurchaseItem) Validate() error {
 		if _, err := time.Parse(time.DateOnly, it.ExpiryDate); err != nil {
 			return ErrInvalidExpiryDate
 		}
-		// product_batches.batch_number es NOT NULL: un vencimiento suelto no
-		// tiene dónde guardarse.
-		if it.BatchNumber == "" {
-			return ErrExpiryWithoutBatch
-		}
+		// Un vencimiento sin lote vale: si el producto controla lotes, la
+		// recepción le pone el lote automático (purchases.AutoBatchNumber);
+		// si no, la rechaza (no tiene dónde guardarse).
 	}
 	return nil
 }

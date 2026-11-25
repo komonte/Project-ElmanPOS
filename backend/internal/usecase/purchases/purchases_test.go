@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -258,6 +259,39 @@ func TestReceiveMergesBatches(t *testing.T) {
 	}
 }
 
+func TestReceiveAutoBatch(t *testing.T) {
+	f := newFixture(t)
+
+	res := f.receive(t, "0",
+		batchLine(f.batched, "2", "60", "", ""),
+		batchLine(f.batched, "1", "60", "", ""),           // igual: se junta
+		batchLine(f.batched, "1", "60", "", "2027-03-31"), // con vencimiento: otro lote
+		batchLine(f.batched, "1", "60", "L-9", ""))        // con número: se respeta
+	items := res.Purchase.Items
+	auto := "C-" + strconv.FormatInt(res.Purchase.ID, 10)
+	if AutoBatchNumber(res.Purchase.ID) != auto {
+		t.Fatalf("AutoBatchNumber = %q, want %q", AutoBatchNumber(res.Purchase.ID), auto)
+	}
+
+	for i, want := range []string{auto, auto, auto, "L-9"} {
+		if items[i].BatchNumber != want {
+			t.Errorf("line %d: batch %q, want %q", i+1, items[i].BatchNumber, want)
+		}
+	}
+	if *items[0].BatchID != *items[1].BatchID {
+		t.Error("two lines without batch, same expiry and cost: want one batch")
+	}
+	if *items[2].BatchID == *items[0].BatchID {
+		t.Error("different expiry: merged into the same batch")
+	}
+	var number, expiry string
+	f.scan(t, &number, `SELECT batch_number FROM product_batches WHERE id = $1;`, *items[2].BatchID)
+	f.scan(t, &expiry, `SELECT expiry_date::text FROM product_batches WHERE id = $1;`, *items[2].BatchID)
+	if number != auto || expiry != "2027-03-31" {
+		t.Errorf("saved batch: got %q %q, want %q 2027-03-31", number, expiry, auto)
+	}
+}
+
 func TestReceiveTotalDifferenceIsAWarning(t *testing.T) {
 	f := newFixture(t)
 	res := f.receive(t, "1200", line(f.plain, "10", "100"))
@@ -308,12 +342,13 @@ func TestReceiveErrors(t *testing.T) {
 			id := f.newProduct(t, "COMBO TEST PURCHASES", `'COMPOSITE', 'UNIT', FALSE, 30, TRUE`)
 			return &model.Purchase{SupplierID: f.supplierID, Items: []*model.PurchaseItem{line(id, "1", "1")}}
 		}, ErrCompositeProduct, "line 1: "},
-		{"batch required", func(t *testing.T, f *fixture) *model.Purchase {
-			return &model.Purchase{SupplierID: f.supplierID, Items: []*model.PurchaseItem{line(f.batched, "1", "1")}}
-		}, ErrBatchRequired, "line 1: "},
 		{"batch not allowed", func(t *testing.T, f *fixture) *model.Purchase {
 			return &model.Purchase{SupplierID: f.supplierID,
 				Items: []*model.PurchaseItem{batchLine(f.plain, "1", "1", "L-1", "")}}
+		}, ErrBatchNotAllowed, "line 1: "},
+		{"expiry not allowed", func(t *testing.T, f *fixture) *model.Purchase {
+			return &model.Purchase{SupplierID: f.supplierID,
+				Items: []*model.PurchaseItem{batchLine(f.plain, "1", "1", "", "2027-03-31")}}
 		}, ErrBatchNotAllowed, "line 1: "},
 	}
 	for _, tt := range tests {

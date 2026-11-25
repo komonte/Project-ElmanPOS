@@ -10,6 +10,8 @@
 //     error (Result.TotalDifference).
 //   - Dos renglones con el mismo lote, vencimiento y costo se juntan en un
 //     lote; con distinto costo quedan dos lotes con el mismo número.
+//   - Un producto que controla lotes sin número de lote (fiambres sin lote
+//     claro) recibe uno automático: "C-<n° de compra>" (AutoBatchNumber).
 //   - Sin login todavía: received_by y performed_by quedan NULL (0013).
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
@@ -40,7 +42,6 @@ var (
 	ErrUnknownProduct   = fmt.Errorf("product does not exist: %w", service.ErrValidation)
 	ErrProductInactive  = fmt.Errorf("product is inactive: %w", service.ErrConflict)
 	ErrCompositeProduct = fmt.Errorf("a composite product has no stock of its own: receive its components: %w", service.ErrValidation)
-	ErrBatchRequired    = fmt.Errorf("this product controls batches: the batch number is required: %w", service.ErrValidation)
 	ErrBatchNotAllowed  = fmt.Errorf("this product does not control batches: leave batch and expiry empty: %w", service.ErrValidation)
 )
 
@@ -200,8 +201,11 @@ func (s *Service) receiveLine(ctx context.Context, tx postgres.DBTX, purchaseID,
 		return nil, Suggestion{}, err
 	}
 
-	// Lote: solo si el producto controla lotes.
+	// Lote: solo si el producto controla lotes. Sin número, el automático.
 	if prod.ControlsBatches {
+		if it.BatchNumber == "" {
+			it.BatchNumber = AutoBatchNumber(purchaseID)
+		}
 		batchID, err := receiveBatch(ctx, tx, it, batches)
 		if err != nil {
 			return nil, Suggestion{}, err
@@ -254,6 +258,15 @@ func (s *Service) receiveLine(ctx context.Context, tx postgres.DBTX, purchaseID,
 		SuggestedPrice: suggested,
 		CurrentPrice:   prod.CurrentPrice,
 	}, nil
+}
+
+// AutoBatchNumber es el lote que recibe un producto que controla lotes
+// cuando el renglón no trae número: "C-" y el número de compra. Pensado para
+// lo que llega sin lote claro (fiambres): el lote igual sirve para FIFO y
+// vencimientos, y dice de qué compra vino. Dos renglones así del mismo
+// producto, vencimiento y costo se juntan, como cualquier lote igual.
+func AutoBatchNumber(purchaseID int64) string {
+	return fmt.Sprintf("C-%d", purchaseID)
 }
 
 // receiveBatch crea el lote del renglón, o suma a uno igual de esta misma
@@ -310,8 +323,6 @@ func checkProduct(ctx context.Context, tx postgres.DBTX, it *model.PurchaseItem)
 		return nil, ErrProductInactive
 	case prod.SaleType == model.SaleTypeComposite:
 		return nil, ErrCompositeProduct
-	case prod.ControlsBatches && it.BatchNumber == "":
-		return nil, ErrBatchRequired
 	case !prod.ControlsBatches && (it.BatchNumber != "" || it.ExpiryDate != ""):
 		return nil, ErrBatchNotAllowed
 	}

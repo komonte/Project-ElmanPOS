@@ -161,7 +161,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 			t.Errorf("lines: got %d, want 1", n)
 		}
 		for _, s := range []string{`hx-post="/purchases"`, "Distribuidora del Sur S.A.", "Total sin IVA",
-			`name="product_q"`, `name="batch_number"`, "Confirmar recepción"} {
+			`name="product_q"`, `name="batch_number"`, "Vacío: C-&lt;n° de compra&gt;", "Confirmar recepción"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
@@ -172,7 +172,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 		html := render(t, "purchase_form.gohtml", map[string]any{
 			"Suppliers":     []productOption{{ID: 1, Label: "Distribuidora", Selected: true}},
 			"VoucherNumber": "A-1", "Total": "20800",
-			"Error": "Renglón 2: Este producto controla lotes: falta el número de lote.",
+			"Error": "Renglón 2: Este producto no controla lotes: dejá lote y vencimiento vacíos.",
 			"Lines": []*purchaseLine{
 				{ProductID: "1", ProductQ: "OREO", Quantity: "12", UnitCost: "950"},
 				{ProductID: "3", ProductQ: "QUESO", Quantity: "2,5", UnitCost: "4700", Batches: true, Error: true},

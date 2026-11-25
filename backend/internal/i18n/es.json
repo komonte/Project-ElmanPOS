@@ -213,6 +213,7 @@
   "purchase.no_margin": "Sin margen",
   "purchase.price_same": "Ya es el precio",
   "purchase.price_updated": "Precio actualizado",
+  "purchase.quick_offer": "+ Dar de alta «%s»",
   "purchase.quick_title": "Producto nuevo",
   "purchase.quick_hint": "Lo justo para recibirlo. Marca, proveedor y lo demás se completan después en Productos.",
   "purchase.quick_sold_by": "Se vende",

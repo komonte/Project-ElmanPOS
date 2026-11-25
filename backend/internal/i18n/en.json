@@ -213,6 +213,7 @@
   "purchase.no_margin": "No margin",
   "purchase.price_same": "Already the price",
   "purchase.price_updated": "Price updated",
+  "purchase.quick_offer": "+ Create «%s»",
   "purchase.quick_title": "New product",
   "purchase.quick_hint": "Just enough to receive it. Brand, supplier and the rest can be filled in later in Products.",
   "purchase.quick_sold_by": "Sold",

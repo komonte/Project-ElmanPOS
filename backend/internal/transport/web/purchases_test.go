@@ -201,8 +201,15 @@ func TestRenderPurchaseForm(t *testing.T) {
 			}
 		}
 		empty := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
-		if !strings.Contains(empty, "No hay productos activos") {
-			t.Errorf("no results: got %s", empty)
+		for _, s := range []string{"No hay productos activos", `data-quick-product data-q="zzz"`,
+			"Dar de alta «zzz»", "purchaseQuickProduct(this)"} {
+			if !strings.Contains(empty, s) {
+				t.Errorf("no results: missing %q in %s", s, empty)
+			}
+		}
+		// Con resultados no se ofrece el alta.
+		if strings.Contains(html, "data-quick-product") {
+			t.Error("results: should not offer a quick create")
 		}
 	})
 
@@ -263,7 +270,8 @@ func TestRenderPurchaseForm(t *testing.T) {
 	t.Run("page", func(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}})
-		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`} {
+		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
+			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductCreated'"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}

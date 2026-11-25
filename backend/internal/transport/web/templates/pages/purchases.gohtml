@@ -6,6 +6,10 @@
 
 {{template "purchase_form.gohtml" .}}
 
+{{/* Alta rápida de producto (purchase_quick_product.gohtml). Fuera del form
+     de la compra: no puede haber un form dentro de otro. */}}
+<div id="form-modal"></div>
+
 {{/* Un renglón vacío para clonar con "Agregar renglón" (purchaseAddLine). */}}
 <template id="purchase-line-template">
   {{template "purchase_line.gohtml" (dict)}}
@@ -41,22 +45,47 @@
     });
   }
 
-  // Elegir un producto del buscador: copia el id y el nombre, y muestra lote y
-  // vencimiento solo si el producto controla lotes.
+  // Elegir un producto del buscador.
   function purchasePickProduct(button) {
-    const row = button.closest('[data-purchase-line]');
-    const batches = button.dataset.batches === 'true';
-    row.querySelector('[name=product_id]').value = button.dataset.id;
-    row.querySelector('[name=product_q]').value = button.dataset.name;
-    row.querySelector('[name=batches]').value = batches ? '1' : '';
-    row.querySelector('[data-batch-fields]').hidden = !batches;
-    if (!batches) {
+    purchaseSetProduct(button.closest('[data-purchase-line]'), {
+      id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
+    });
+  }
+
+  // Deja un producto elegido en un renglón: copia el id y el nombre, muestra
+  // lote y vencimiento solo si controla lotes, cierra la lista y pasa a la
+  // cantidad. Lo usan el buscador y el alta rápida.
+  function purchaseSetProduct(row, product) {
+    row.querySelector('[name=product_id]').value = product.id;
+    row.querySelector('[name=product_q]').value = product.name;
+    row.querySelector('[name=batches]').value = product.batches ? '1' : '';
+    row.querySelector('[data-batch-fields]').hidden = !product.batches;
+    if (!product.batches) {
       row.querySelector('[name=batch_number]').value = '';
       row.querySelector('[name=expiry_date]').value = '';
     }
-    button.closest('ul').replaceChildren();
+    row.querySelector('ul[role=listbox]').replaceChildren();
     row.querySelector('[name=quantity]').focus();
   }
+
+  // Alta rápida: abre el panel con lo escrito en el renglón y recuerda qué
+  // renglón la pidió, para elegir ahí el producto creado.
+  let purchaseQuickRow = null;
+  function purchaseQuickProduct(button) {
+    purchaseQuickRow = button.closest('[data-purchase-line]');
+    htmx.ajax('GET', '/purchases/quick-product', {
+      target: '#form-modal', swap: 'innerHTML', values: { q: button.dataset.q },
+    });
+  }
+
+  // El servidor avisa que creó el producto (HX-Trigger) y el panel se cierra
+  // solo (la respuesta es vacía). Si el renglón se quitó mientras tanto, el
+  // producto queda creado pero no se elige en ningún lado.
+  document.body.addEventListener('purchaseProductCreated', function (e) {
+    const row = purchaseQuickRow;
+    purchaseQuickRow = null;
+    if (row && row.isConnected) purchaseSetProduct(row, e.detail);
+  });
 
   // Lee un número como se escribe acá ("1250,50"). Vacío o mal escrito: NaN.
   function purchaseNumber(s) {
@@ -93,8 +122,8 @@
   // Enter en el buscador de un renglón. El lector de códigos lo manda después
   // del código, y sin esto enviaría la compra a medio cargar. Busca al
   // momento (sin esperar el delay del buscador) y, si hay un solo resultado,
-  // lo elige: escanear y pasar a la cantidad. Con varios, se elige de la
-  // lista. La búsqueda con delay que quede pendiente llega después y la
+  // lo elige: escanear y pasar a la cantidad. Sin resultados abre el alta
+  // rápida con lo escrito. Con varios, se elige de la lista. La búsqueda con delay que quede pendiente llega después y la
   // descarta purchaseDropLateSearch (el renglón ya tiene producto).
   function purchaseSearchEnter(e, input) {
     if (e.key !== 'Enter') return;
@@ -106,7 +135,13 @@
       target: list, swap: 'innerHTML', values: { product_q: q },
     }).then(function () {
       const options = list.querySelectorAll('button[data-id]');
-      if (options.length === 1) purchasePickProduct(options[0]);
+      if (options.length === 1) {
+        purchasePickProduct(options[0]);
+        return;
+      }
+      // Nada: escanear un código que no está abre el alta con ese código.
+      const quick = list.querySelector('[data-quick-product]');
+      if (quick) purchaseQuickProduct(quick);
     });
   }
 

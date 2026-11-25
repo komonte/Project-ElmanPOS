@@ -30,7 +30,6 @@
   "common.id": "ID",
   "common.created_at": "Creado",
   "common.updated_at": "Actualizado",
-  "common.status": "Estado",
   "common.status_active": "Activo",
   "common.status_inactive": "Inactivo",
 

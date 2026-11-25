@@ -143,7 +143,7 @@ Index: `(parent_id)`.
 | controls_batches | BOOLEAN | NOT NULL DEFAULT FALSE | When TRUE, stock is tracked per batch (FIFO + expiry). Always FALSE for `COMPOSITE`: a pack has no stock of its own, its components track their batches (§4.6). |
 | reorder_point | NUMERIC(12,3) | NOT NULL DEFAULT 0, CHECK (reorder_point >= 0) | Reorder threshold: when `stock_balances.quantity <= reorder_point`, the product appears in the replenishment report. Expressed in the product's stock unit (count or kg). |
 | max_stock | NUMERIC(12,3) | NULL, CHECK (max_stock IS NULL OR max_stock > reorder_point) | Ceiling to avoid overstocking; upper bound for suggested order quantities. |
-| margin_percent | NUMERIC(5,2) | NOT NULL DEFAULT 0, CHECK (margin_percent >= 0) | Target gross margin (%). PVP suggestion when unit cost changes: `pvp_suggested = unit_cost / (1 - margin_percent/100)`. `0` = no automatic suggestion. The app also requires `margin_percent < 100` (at 100 the formula divides by zero). |
+| margin_percent | NUMERIC(5,2) | NOT NULL DEFAULT 0, CHECK (margin_percent >= 0) | Target gross margin (%). Over the price without IVA. PVP suggestion when unit cost changes: `pvp_suggested = unit_cost × (1 + tax_rate/100) / (1 - margin_percent/100)`, with the category's IVA rate (costs are net, prices include IVA; F-04). `0` = no automatic suggestion. The app also requires `margin_percent < 100` (at 100 the formula divides by zero). |
 | preferred_supplier_id | BIGINT | FK → suppliers.id, NULL | Preferred supplier; the replenishment report shows who to contact. |
 | is_consignment | BOOLEAN | NOT NULL DEFAULT FALSE | Consigned product (owned by supplier until sold). |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |

@@ -110,6 +110,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Actor / Role:** Admin, or triggered automatically by F-06 (purchase reception).
 - **Trigger:** A new `unit_cost` is recorded. **Normally it comes from a purchase (F-06)**, as stock arrives; the manual entry is an extra option (initial costs, a supplier price list, a correction).
 - **Preconditions:** Product exists and is active.
+- **Costs are without IVA.** Sale prices include IVA (§1), so the suggestion adds the IVA rate of the product's category. `unit_cost` and `avg_cost` are net amounts.
 - **Two costs per row** (`model.Cost`):
   - `unit_cost` — the last (replacement) cost. The PVP suggestion uses it, because the sale price follows what the next unit will cost (one price per product, not per batch).
   - `avg_cost` — the weighted average cost of the stock on hand. Values the inventory and the real margin; never typed by the user.
@@ -121,7 +122,12 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - No previous cost, or no stock (`prev_qty_on_hand <= 0`) → `new_avg = new_cost` (nothing to average with).
   - Manual entry (`new_qty = 0`) with stock → `avg_cost` is **kept**: no goods came in at that cost. Only a purchase moves the average.
   - Purchase → the formula.
-- **PVP suggestion** (`model.SuggestPrice`): `pvp_suggested = unit_cost / (1 - margin_percent/100)`, rounded to 2 decimals. The margin is over the sale price: 30% on a cost of 700 → 1000. `margin_percent = 0` → no suggestion (manual pricing). The suggestion is **never saved**: the admin accepts it (which runs F-03) or ignores it.
+- **PVP suggestion** (`model.SuggestPrice`, read through `costs.Service.SuggestedPrice`):
+  ```
+  pvp_suggested = unit_cost × (1 + tax_rate/100) / (1 - margin_percent/100)
+  ```
+  where `tax_rate` is the rate of the product's category (`categories.tax_id → taxes.rate`). Computed in full and rounded once, to 2 decimals (rounding the net price first can move the cents: cost 1000, margin 30%, IVA 21% → 1728.57, not 1428.57 × 1.21 = 1728.67). The margin is over the price **without IVA**: cost 700, margin 30% → 1000 net → 1210 with IVA 21% (1105 with 10.5%). `margin_percent = 0` → no suggestion (manual pricing). The suggestion is **never saved**: the admin accepts it (which runs F-03) or ignores it.
+- **Monotributo note:** a Responsable Inscripto recovers the purchase IVA, so the net cost is the real cost. A Monotributista does not: the real cost includes IVA. The suggestion is the same number either way (`cost × 1.21 / 0.7 = cost / 0.7 × 1.21`), but `avg_cost` would be below what was paid, so the margin reports (R-05, R-07) must account for the store's tax status.
 - **Manual entry, business flow:** open the product's edit panel → "Cost" section (below "Sale price") → enter the new `unit_cost` → "Save cost". It is saved right away and is effective now. The section shows the last and average cost with their start date, the suggested price with the product's **saved** margin and a "Use as price" button (posts it to the price section, F-03), and the last 10 previous costs. With margin 0 it says why there is no suggestion.
 - **Manual entry, DB transaction** (`usecase/costs`, one `TxRunner.InTx`):
   1. Read the product (for its margin): missing → 404; inactive → rejected (409).
@@ -134,7 +140,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Invariants:** rows are only appended; the current cost is the latest `valid_from`; past margins are protected by line-item snapshots (**BR-03**).
 - **Errors / rollback:** invalid cost → 400 / message in the section; if the audit insert fails, the cost is rolled back too.
 - **API:** `GET /api/products/{id}/costs` → `{current, history}` (newest first); `POST /api/products/{id}/costs` with `{"unit_cost": "700"}` (text or number) → 201 `{cost, suggested_price}` (`null` with margin 0). The client cannot send `avg_cost` or `valid_from`.
-- **Edge cases:** cost decreases → the suggestion drops; the admin decides. A cost for a product that never had stock sets the average directly, so a later purchase averages from it.
+- **Edge cases:** cost decreases → the suggestion drops; the admin decides. A category's IVA rate changes → the next suggestion uses the new rate; saved prices do not change. A cost for a product that never had stock sets the average directly, so a later purchase averages from it.
 
 ### F-05: Composite Pack Management
 

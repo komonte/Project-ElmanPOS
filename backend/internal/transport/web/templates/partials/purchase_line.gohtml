@@ -1,0 +1,47 @@
+{{/* Un renglón de la recepción. Todos los renglones tienen los mismos campos
+     (también lote y vencimiento, ocultos si el producto no controla lotes):
+     así el servidor lee las listas product_id, quantity... en el mismo orden.
+
+     product_q es lo que se escribe para buscar; product_id (oculto) es el
+     producto elegido. batches (oculto) recuerda si el producto controla lotes,
+     para volver a mostrar esos campos si el formulario vuelve con un error.
+
+     Datos: .ProductID, .ProductQ, .Quantity, .UnitCost, .BatchNumber,
+     .ExpiryDate, .Batches, y .Error si este renglón falló. Vacío para el
+     renglón que se clona. */}}
+<fieldset data-purchase-line
+          class="p-4 border-2 rounded-md bg-surface {{if .Error}}border-danger{{else}}border-line{{end}}">
+  <legend class="px-2 font-bold">{{t "purchase.line"}} <span data-line-number></span></legend>
+
+  <div class="grid gap-3 md:grid-cols-[1fr_8rem_10rem_auto] md:items-start">
+    <div>
+      <label class="field-label">{{t "purchase.product"}}
+        <input type="search" name="product_q" autocomplete="off" value="{{.ProductQ}}"
+               placeholder="{{t "purchase.product_search"}}"
+               hx-get="/purchases/product-options" hx-trigger="input changed delay:250ms"
+               hx-target="next ul"
+               oninput="const r = this.closest('[data-purchase-line]'); r.querySelector('[name=product_id]').value = '';"
+               class="field">
+      </label>
+      <ul role="listbox" class="mt-1 border-2 border-line rounded-md bg-surface empty:hidden max-h-64 overflow-y-auto"></ul>
+      <input type="hidden" name="product_id" value="{{.ProductID}}">
+      <input type="hidden" name="batches" value="{{if .Batches}}1{{end}}">
+    </div>
+    <label class="field-label">{{t "purchase.quantity"}}
+      <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Quantity}}" class="field tabular">
+    </label>
+    <label class="field-label">{{t "purchase.unit_cost"}}
+      <input type="text" name="unit_cost" inputmode="decimal" autocomplete="off" value="{{.UnitCost}}" class="field tabular">
+    </label>
+    <button type="button" onclick="purchaseRemoveLine(this)" class="btn-secondary md:mt-7">{{t "purchase.line_remove"}}</button>
+  </div>
+
+  <div data-batch-fields class="mt-3 grid gap-3 md:grid-cols-2" {{if not .Batches}}hidden{{end}}>
+    <label class="field-label">{{t "purchase.batch"}}
+      <input type="text" name="batch_number" autocomplete="off" maxlength="80" value="{{.BatchNumber}}" class="field">
+    </label>
+    <label class="field-label">{{t "purchase.expiry"}}
+      <input type="date" name="expiry_date" value="{{.ExpiryDate}}" class="field">
+    </label>
+  </div>
+</fieldset>

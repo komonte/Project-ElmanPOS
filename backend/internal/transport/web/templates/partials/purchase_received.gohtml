@@ -1,0 +1,16 @@
+{{/* Resultado de una recepción guardada (reemplaza al formulario).
+
+     Datos: .Purchase (con .Items), .Difference (total escrito menos la suma
+     de los renglones) y .HasDifference. */}}
+<div id="purchase-panel" class="space-y-5">
+  <div role="status" class="p-4 bg-surface border-l-8 border-tag rounded-sm">
+    <p class="font-display font-bold text-2xl">{{t "purchase.received"}}</p>
+    <p class="text-muted">{{printf (t "purchase.received_detail") .Purchase.ID (len .Purchase.Items)}}</p>
+  </div>
+  {{if .HasDifference}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">
+    {{printf (t "purchase.difference_warning") (money .Difference)}}
+  </div>
+  {{end}}
+  <a href="/purchases" class="btn-primary">{{t "purchase.receive_another"}}</a>
+</div>

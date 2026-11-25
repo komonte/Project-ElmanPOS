@@ -1,0 +1,101 @@
+{{define "content"}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "purchase.title"}}</h1>
+  <p class="mt-2 text-muted max-w-2xl">{{t "purchase.hint"}}</p>
+</header>
+
+{{template "purchase_form.gohtml" .}}
+
+{{/* Un renglón vacío para clonar con "Agregar renglón" (purchaseAddLine). */}}
+<template id="purchase-line-template">
+  {{template "purchase_line.gohtml" (dict)}}
+</template>
+
+<script>
+  // Agrega un renglón vacío al final y le pone el foco en el producto.
+  // htmx.process activa el buscador del renglón nuevo.
+  function purchaseAddLine() {
+    const tpl = document.getElementById('purchase-line-template');
+    const list = document.getElementById('purchase-lines');
+    const row = tpl.content.firstElementChild.cloneNode(true);
+    list.appendChild(row);
+    htmx.process(row);
+    purchaseNumberLines();
+    row.querySelector('[name=product_q]').focus();
+  }
+
+  // Quita un renglón (siempre queda uno).
+  function purchaseRemoveLine(button) {
+    const list = document.getElementById('purchase-lines');
+    if (list.children.length > 1) {
+      button.closest('[data-purchase-line]').remove();
+      purchaseNumberLines();
+      purchaseRecalc();
+    }
+  }
+
+  // Numera los renglones como los nombran los errores ("Renglón 2").
+  function purchaseNumberLines() {
+    document.querySelectorAll('#purchase-lines [data-line-number]').forEach(function (el, i) {
+      el.textContent = i + 1;
+    });
+  }
+
+  // Elegir un producto del buscador: copia el id y el nombre, y muestra lote y
+  // vencimiento solo si el producto controla lotes.
+  function purchasePickProduct(button) {
+    const row = button.closest('[data-purchase-line]');
+    const batches = button.dataset.batches === 'true';
+    row.querySelector('[name=product_id]').value = button.dataset.id;
+    row.querySelector('[name=product_q]').value = button.dataset.name;
+    row.querySelector('[name=batches]').value = batches ? '1' : '';
+    row.querySelector('[data-batch-fields]').hidden = !batches;
+    if (!batches) {
+      row.querySelector('[name=batch_number]').value = '';
+      row.querySelector('[name=expiry_date]').value = '';
+    }
+    button.closest('ul').replaceChildren();
+    row.querySelector('[name=quantity]').focus();
+  }
+
+  // Lee un número como se escribe acá ("1250,50"). Vacío o mal escrito: NaN.
+  function purchaseNumber(s) {
+    s = (s || '').trim().replace(',', '.');
+    return s === '' ? NaN : Number(s);
+  }
+
+  // Suma cantidad × costo de cada renglón (redondeado a centavos, como el
+  // servidor) y la compara con el total escrito. Es solo una ayuda: el
+  // servidor vuelve a calcular al guardar.
+  function purchaseRecalc() {
+    const form = document.getElementById('purchase-form');
+    if (!form) return;
+    const lang = document.documentElement.lang === 'es' ? 'es-AR' : 'en-US';
+    const money = new Intl.NumberFormat(lang, { style: 'currency', currency: lang === 'es-AR' ? 'ARS' : 'USD' });
+    let sum = 0;
+    form.querySelectorAll('[data-purchase-line]').forEach(function (row) {
+      const q = purchaseNumber(row.querySelector('[name=quantity]').value);
+      const c = purchaseNumber(row.querySelector('[name=unit_cost]').value);
+      if (!isNaN(q) && !isNaN(c)) sum += Math.round(q * c * 100) / 100;
+    });
+    document.getElementById('purchase-lines-total').textContent = money.format(sum);
+    const total = purchaseNumber(form.elements.total.value);
+    const diff = document.getElementById('purchase-difference');
+    if (isNaN(total)) {
+      diff.textContent = '';
+      return;
+    }
+    const d = Math.round((total - sum) * 100) / 100;
+    diff.textContent = d === 0 ? diff.dataset.ok : diff.dataset.label + ' ' + money.format(d);
+    diff.classList.toggle('text-danger', d !== 0);
+  }
+
+  document.addEventListener('input', function (e) {
+    if (e.target.closest('#purchase-form')) purchaseRecalc();
+  });
+  document.addEventListener('htmx:afterSwap', function () {
+    purchaseNumberLines();
+    purchaseRecalc();
+  });
+</script>
+{{end}}

@@ -73,15 +73,17 @@ type auditStore interface {
 }
 
 type Service struct {
-	tx postgres.TxRunner
+	db postgres.DBTX     // lecturas sueltas (Get)
+	tx postgres.TxRunner // Receive: todo en una transacción
 
 	// audit es un campo para que el test pueda simular que falla al final y
 	// ver que no queda nada de la compra.
 	audit func(tx postgres.DBTX) auditStore
 }
 
-func New(tx postgres.TxRunner) *Service {
+func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
 	return &Service{
+		db:    db,
 		tx:    tx,
 		audit: func(tx postgres.DBTX) auditStore { return postgres.NewAuditLogStore(tx) },
 	}
@@ -110,7 +112,12 @@ func (s *Service) Receive(ctx context.Context, p *model.Purchase) (*Result, erro
 		}
 		storeID, err := postgres.NewStoreStore(tx).ActiveID(ctx)
 		if err != nil {
-			return err // ErrNoActiveStore / ErrSeveralActiveStores: conflictos
+			// ErrNoActiveStore / ErrSeveralActiveStores cumplen store.ErrConflict;
+			// se envuelven en service.ErrConflict para que la API responda 409.
+			if errors.Is(err, store.ErrConflict) {
+				return fmt.Errorf("%w: %w", service.ErrConflict, err)
+			}
+			return err
 		}
 
 		purchases := postgres.NewPurchaseStore(tx)
@@ -153,6 +160,23 @@ func (s *Service) Receive(ctx context.Context, p *model.Purchase) (*Result, erro
 	}
 	res.TotalDifference = res.Purchase.TotalDifference()
 	return &res, nil
+}
+
+// Get devuelve una compra con sus renglones.
+//   - service.ErrInvalidID: id <= 0.
+//   - service.ErrNotFound: no existe.
+func (s *Service) Get(ctx context.Context, id int64) (*model.Purchase, error) {
+	if id <= 0 {
+		return nil, service.ErrInvalidID
+	}
+	p, err := postgres.NewPurchaseStore(s.db).GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, service.ErrNotFound
+		}
+		return nil, err
+	}
+	return p, nil
 }
 
 // receiveLine guarda un renglón con todo lo que mueve: lote, renglón,

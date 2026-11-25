@@ -26,6 +26,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -107,6 +108,9 @@ func main() {
 	// Costo (F-04, carga manual): costo, promedio y auditoría en una transacción.
 	costSvc := costs.New(db, postgres.NewTxRunner(db))
 	costsH := transport.NewCostsHandler(costSvc)
+	// Recepción de compras (F-06): compra, lotes, stock y costos en una transacción.
+	purchaseSvc := purchases.New(db, postgres.NewTxRunner(db))
+	purchasesH := transport.NewPurchasesHandler(purchaseSvc)
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
@@ -116,7 +120,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH, purchasesH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")

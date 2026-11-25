@@ -12,6 +12,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 )
@@ -48,7 +49,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	t.Cleanup(func() { tx.Rollback() })
 
-	f := &fixture{ctx: context.Background(), tx: tx, svc: New(postgres.NewSavepointRunner(tx))}
+	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test purchases') RETURNING id;`)
 	f.scan(t, &f.supplierID, `INSERT INTO suppliers (name) VALUES ('Proveedor test purchases') RETURNING id;`)
@@ -325,6 +326,10 @@ func TestReceiveErrors(t *testing.T) {
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("got %v, want %v", err, tt.wantErr)
 			}
+			// Todos son de validación o de conflicto: la API responde 400 o 409.
+			if !errors.Is(err, service.ErrValidation) && !errors.Is(err, service.ErrConflict) {
+				t.Errorf("error %v is neither service.ErrValidation nor service.ErrConflict", err)
+			}
 			if tt.wantLine != "" && !strings.HasPrefix(err.Error(), tt.wantLine) {
 				t.Errorf("error %q does not start with %q", err, tt.wantLine)
 			}
@@ -389,5 +394,25 @@ func TestReceiveRollsBackWhenAuditFails(t *testing.T) {
 		if n := f.count(t, `SELECT count(*) FROM product_batches WHERE product_id = $1;`, id); n != 0 {
 			t.Errorf("product %d batches: got %d, want 0", id, n)
 		}
+	}
+}
+
+func TestGet(t *testing.T) {
+	f := newFixture(t)
+	res := f.receive(t, "1000", line(f.plain, "10", "100"))
+
+	got, err := f.svc.Get(f.ctx, res.Purchase.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.ID != res.Purchase.ID || len(got.Items) != 1 || got.Items[0].ProductID != f.plain {
+		t.Errorf("get: got %+v", got)
+	}
+
+	if _, err := f.svc.Get(f.ctx, 999_999_999); !errors.Is(err, service.ErrNotFound) {
+		t.Errorf("missing: got %v, want %v", err, service.ErrNotFound)
+	}
+	if _, err := f.svc.Get(f.ctx, 0); !errors.Is(err, service.ErrInvalidID) {
+		t.Errorf("id 0: got %v, want %v", err, service.ErrInvalidID)
 	}
 }

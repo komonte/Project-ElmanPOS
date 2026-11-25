@@ -88,16 +88,22 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Actor / Role:** Admin.
 - **Trigger:** Admin changes the sale price (PVP) of a product.
 - **Preconditions:** Product exists and is active.
-- **Business flow:** select product → enter new `unit_price` + `valid_from` (default: now) → save.
-- **DB transaction:**
-  1. `INSERT INTO prices (product_id, unit_price, valid_from) ...`
-  2. `INSERT INTO audit_log (user_id, 'prices', 'INSERT', ...)` — price changes are audited (**NFR-03**).
+- **Business flow:** open the product's edit panel → "Sale price" section → enter the new `unit_price` → "Save price". It is saved right away (it does not wait for the product's "Save") and is **effective now**. The section shows the current price, its start date and the last 10 previous prices.
+- **DB transaction** (`usecase/prices`, one `TxRunner.InTx`):
+  1. Read the product: missing → 404; inactive → rejected (409).
+  2. `INSERT INTO prices (product_id, unit_price, valid_from) VALUES (..., clock_timestamp())`.
+  3. `INSERT INTO audit_log (user_id, 'prices', 'INSERT', price_id, new_data)` — price changes are audited (**NFR-03**). `new_data` is the saved price as JSON. `user_id` is `NULL` until there is a login (F-13).
 - **Invariants:**
+  - Rows are only appended: a change never edits or deletes an earlier price.
   - `UNIQUE(product_id, valid_from)` — no overlapping vigencias.
-  - Only one effective price at any moment.
+  - The current price is the row with the latest `valid_from` (one at any moment).
   - Past `sale_items` are never retroactively altered (**BR-03**).
-- **Errors / rollback:** `valid_from` overlapping an existing period → rejected (or the existing period must be closed first).
-- **Edge cases:** cost-driven suggestion flow is F-04; bulk price updates by category are an extension (deferred).
+- **Why `clock_timestamp()`:** `now()` is the transaction's start time, so two prices for the same product in one transaction would share `valid_from` and hit the `UNIQUE`. `clock_timestamp()` is the real time.
+- **Validation:** `unit_price > 0`, at most 2 decimals, fits `NUMERIC(12,2)`. The web form takes a decimal comma (`1750,50`) or point; thousands separators (`1.750,50`) are rejected because `1.750` is ambiguous.
+- **Errors / rollback:** invalid price → 400 (API) / message in the section (web); if the audit insert fails, the price is rolled back too.
+- **Reading:** every product read (list, search, edit, API) carries the current price (`current_price`, `null` without one), from a `LEFT JOIN LATERAL` on the `(product_id, valid_from DESC)` index. The products table shows it in a "Price" column.
+- **API:** `GET /api/products/{id}/prices` → `{current, history}` (newest first); `POST /api/products/{id}/prices` with `{"unit_price": "1500.50"}` (text or number). The client cannot send `valid_from`.
+- **Edge cases:** cost-driven suggestion flow is F-04; bulk price updates by category are an extension (deferred); **scheduled prices** (a `valid_from` in the future) are deferred (§7).
 
 ### F-04: Cost Change → Average Cost & PVP Suggestion
 
@@ -385,3 +391,4 @@ The following are intentionally **out of scope** and must not be assumed to work
 - **Promotions / rule-based discounts** — only a header-level `discount_amount` is supported.
 - **AFIP electronic invoicing** — internal tickets only.
 - **GS1 scale barcode decoding** — manual weight entry only (F-10).
+- **Scheduled prices** — a price always takes effect when it is saved (F-03). Supporting a future `valid_from` needs the "current price" reads to filter `valid_from <= now()`.

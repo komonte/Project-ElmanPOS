@@ -288,3 +288,21 @@ func TestPurchaseLineSearchSwapsInsideItsList(t *testing.T) {
 		t.Errorf(`product_q must set hx-swap="innerHTML", got %s`, input)
 	}
 }
+
+// Si se elige un producto antes de que responda la última búsqueda, esa
+// respuesta llega después y no tiene que volver a abrir la lista. Lo hace el
+// script de la página (purchaseDropLateSearch, en htmx:beforeSwap); este test
+// solo revisa que esté registrado: el comportamiento se probó en un navegador.
+func TestPurchasesPageDropsLateSearches(t *testing.T) {
+	var buf bytes.Buffer
+	if err := NewTemplateEngine().Render(&buf, "es", "purchases.gohtml", map[string]any{
+		"Section": "purchases", "TitleKey": "purchase.title", "Suppliers": []productOption{}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"function purchaseDropLateSearch",
+		"addEventListener('htmx:beforeSwap', purchaseDropLateSearch)"} {
+		if !strings.Contains(buf.String(), s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}

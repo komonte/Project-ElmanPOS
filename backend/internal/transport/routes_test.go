@@ -104,6 +104,7 @@ func newTestMux() *http.ServeMux {
 		transport.NewResourceHandler[model.Category](service.NewService[model.Category](categoryStore, nil), "category"),
 		transport.NewResourceHandler[model.Product](service.NewService[model.Product](productStore, nil), "product"),
 		transport.NewProductCodesHandler(productcodes.New(productStore, newFakeCodes())),
+		transport.NewPricesHandler(newFakePrices()),
 	)
 	return mux
 }

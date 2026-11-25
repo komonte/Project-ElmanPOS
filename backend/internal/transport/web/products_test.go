@@ -186,6 +186,25 @@ func TestRenderProductPartials(t *testing.T) {
 		}
 	})
 
+	t.Run("table shows the current price", func(t *testing.T) {
+		priced := *product
+		priced.ID = 8
+		priced.Name = "QUESO CON PRECIO"
+		priced.CurrentPrice = new(decimal.RequireFromString("1500.5"))
+		var buf bytes.Buffer
+		data := map[string]any{"Products": []*model.Product{&priced, product}, "Shown": 2, "Total": 2}
+		if err := e.Render(&buf, "es", "product_table.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		// El que tiene precio lo muestra; el que no, una raya.
+		for _, s := range []string{">Precio<", "$ 1.500,50", "—"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+
 	t.Run("table complete has no notice", func(t *testing.T) {
 		var buf bytes.Buffer
 		data := map[string]any{"Products": []*model.Product{product}, "Shown": 1, "Total": 1}
@@ -589,4 +608,63 @@ func TestRenderProductFormNewCategory(t *testing.T) {
 	if strings.Contains(html, "category_new") {
 		t.Error("edit form: offers a new category")
 	}
+}
+
+func TestRenderProductPrices(t *testing.T) {
+	e := NewTemplateEngine()
+	history := []*model.Price{
+		{ID: 3, ProductID: 7, UnitPrice: decimal.RequireFromString("1600"), ValidFrom: "2026-11-25T15:00:00Z"},
+		{ID: 2, ProductID: 7, UnitPrice: decimal.RequireFromString("1500.5"), ValidFrom: "2026-11-01T09:30:00Z"},
+	}
+
+	render := func(t *testing.T, data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_prices.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	t.Run("current and history", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history})
+		for _, s := range []string{
+			// Solo el día: la hora depende de la zona en que se muestran las
+			// fechas, y eso no es lo que prueba este test.
+			"$ 1.600,00", "desde 2026-11-25 ", // vigente
+			"Precios anteriores", "$ 1.500,50", // historia
+			`hx-post="/products/7/prices"`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
+			t.Error("plain section: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("one price has no history", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history[:1]})
+		if !strings.Contains(html, "$ 1.600,00") || strings.Contains(html, "Precios anteriores") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("no price", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": []*model.Price{}})
+		if !strings.Contains(html, "todavía no tiene precio") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("error keeps the typed price and the focus", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": []*model.Price{},
+			"PriceError": "El precio tiene que ser un número mayor que 0, con hasta 2 decimales.", "PriceValue": "12,345"})
+		for _, s := range []string{`role="alert"`, "mayor que 0", `value="12,345"`, "autofocus"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
 }

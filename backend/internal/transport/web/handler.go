@@ -13,6 +13,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -28,9 +29,10 @@ type WebHandler struct {
 	// Casos de uso (D-02).
 	createProduct *createproduct.Service
 	productCodes  *productcodes.Service
+	prices        *prices.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -40,6 +42,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		productSvc:    productSvc,
 		createProduct: createProduct,
 		productCodes:  productCodes,
+		prices:        prices,
 	}
 }
 
@@ -157,6 +160,9 @@ var errorKeys = []struct {
 	{model.ErrBarcodeNotDigits, "error.barcode_not_digits"},
 	{model.ErrBarcodeTooLong, "error.barcode_too_long"},
 	{model.ErrBarcodeAllZeros, "error.barcode_all_zeros"},
+
+	{model.ErrInvalidPrice, "error.price_invalid"},
+	{prices.ErrProductInactive, "error.price_product_inactive"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no

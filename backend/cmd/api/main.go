@@ -22,6 +22,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
@@ -103,16 +104,19 @@ func main() {
 	// Precio de venta (F-03): precio y auditoría en una transacción.
 	priceSvc := prices.New(db, postgres.NewTxRunner(db))
 	pricesH := transport.NewPricesHandler(priceSvc)
+	// Costo (F-04, carga manual): costo, promedio y auditoría en una transacción.
+	costSvc := costs.New(db, postgres.NewTxRunner(db))
+	costsH := transport.NewCostsHandler(costSvc)
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -170,6 +174,7 @@ func main() {
 	mux.HandleFunc("POST /products/{id}/codes", webH.ProductCodesAdd)
 	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
 	mux.HandleFunc("POST /products/{id}/prices", webH.ProductPricesSet)
+	mux.HandleFunc("POST /products/{id}/costs", webH.ProductCostsSet)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

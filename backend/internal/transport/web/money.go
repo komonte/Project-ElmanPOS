@@ -32,3 +32,13 @@ func formatMoney(lang string, d decimal.Decimal) string {
 	}
 	return sign + symbol + b.String() + decimalSep + cents
 }
+
+// formatPercent muestra un porcentaje sin ceros de más, con el separador
+// decimal del idioma: "37,5" (es) o "37.5" (en). El "%" lo pone el template.
+func formatPercent(lang string, d decimal.Decimal) string {
+	s := d.String()
+	if lang == "es" {
+		s = strings.Replace(s, ".", ",", 1)
+	}
+	return s
+}

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -211,6 +212,13 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		data["Prices"] = recentPrices(history)
+		costData, err := h.productCostsData(ctx, p.ID)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		data["CostData"] = costData
 	}
 
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
@@ -588,4 +596,72 @@ func (h *WebHandler) ProductPricesSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderProductPrices(w, r, productID, "", "")
+}
+
+// costHistoryShown es cuántos costos muestra la sección, como los precios.
+const costHistoryShown = 10
+
+// productCostsData arma los datos de la sección de costo: los últimos costos,
+// el margen y el precio sugerido. El margen sale del producto guardado, no del
+// formulario: si el formulario vuelve con un error, el margen escrito todavía
+// no se guardó y la sugerencia no tiene que cambiar.
+func (h *WebHandler) productCostsData(ctx context.Context, productID int64) (map[string]any, error) {
+	prod, err := h.productSvc.GetByID(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	history, err := h.costs.History(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	if len(history) > costHistoryShown {
+		history = history[:costHistoryShown]
+	}
+	data := map[string]any{"ProductID": productID, "Costs": history, "Margin": prod.MarginPercent}
+	if len(history) > 0 {
+		if price, ok := model.SuggestPrice(history[0].UnitCost, prod.MarginPercent); ok {
+			data["Suggested"] = &price
+		}
+	}
+	return data, nil
+}
+
+// renderProductCosts redibuja la sección de costo de un producto, con un error
+// (y lo que se escribió) si no se pudo guardar.
+func (h *WebHandler) renderProductCosts(w http.ResponseWriter, r *http.Request, productID int64, errMsg, value string) {
+	data, err := h.productCostsData(r.Context(), productID)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	data["CostError"] = errMsg
+	data["CostValue"] = value
+	h.renderPartial(w, r, "product_costs.gohtml", data)
+}
+
+// ProductCostsSet handles POST /products/{id}/costs. Se guarda al momento,
+// sin esperar al "Guardar" del producto, y rige desde ya (F-04, carga manual).
+func (h *WebHandler) ProductCostsSet(w http.ResponseWriter, r *http.Request) {
+	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	raw := r.FormValue("unit_cost")
+	// Vacío no es "cero", igual que en el precio.
+	unitCost, ok := parseFormDecimal(raw)
+	if !ok || strings.TrimSpace(raw) == "" {
+		h.renderProductCosts(w, r, productID, h.errMsg(r, model.ErrInvalidCost), raw)
+		return
+	}
+	if _, err := h.costs.Set(r.Context(), productID, unitCost); err != nil {
+		// Un producto que no existe no tiene sección que redibujar.
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			h.actionError(w, r, err)
+			return
+		}
+		h.renderProductCosts(w, r, productID, h.errMsg(r, err), raw)
+		return
+	}
+	h.renderProductCosts(w, r, productID, "", "")
 }

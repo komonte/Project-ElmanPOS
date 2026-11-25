@@ -108,23 +108,33 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 ### F-04: Cost Change → Average Cost & PVP Suggestion
 
 - **Actor / Role:** Admin, or triggered automatically by F-06 (purchase reception).
-- **Trigger:** A new `unit_cost` is recorded (from a purchase or a manual entry).
-- **Preconditions:** Product exists.
-- **Business flow:**
-  1. New cost arrives.
-  2. System inserts a `product_costs` row (`unit_cost`, recalculated `avg_cost`).
-  3. If `margin_percent > 0`, the system **suggests** `pvp_suggested = unit_cost / (1 - margin_percent/100)`; admin accepts or overrides it (which runs F-03).
-- **DB transaction:**
-  1. `INSERT INTO product_costs (product_id, unit_cost, avg_cost, valid_from) ...`
-  2. `INSERT INTO audit_log (...)`.
-- **Weighted average cost formula** (running average on each reception):
+- **Trigger:** A new `unit_cost` is recorded. **Normally it comes from a purchase (F-06)**, as stock arrives; the manual entry is an extra option (initial costs, a supplier price list, a correction).
+- **Preconditions:** Product exists and is active.
+- **Two costs per row** (`model.Cost`):
+  - `unit_cost` — the last (replacement) cost. The PVP suggestion uses it, because the sale price follows what the next unit will cost (one price per product, not per batch).
+  - `avg_cost` — the weighted average cost of the stock on hand. Values the inventory and the real margin; never typed by the user.
+- **Weighted average cost** (`model.AverageCost`):
   ```
   new_avg = (prev_avg × prev_qty_on_hand + new_cost × new_qty) / (prev_qty_on_hand + new_qty)
   ```
-  where `prev_qty_on_hand` is the current `stock_balances.quantity` at reception time.
-- **Invariants:** `avg_cost` history is append-only; past margins are protected by line-item snapshots (**BR-03**).
-- **Errors / rollback:** a failed insertion rolls back the cost row; the suggestion is never persisted until the admin confirms the price change.
-- **Edge cases:** `margin_percent = 0` → no suggestion (manual pricing only). Cost decreases → suggestion drops; admin decides.
+  where `prev_qty_on_hand` is the product's stock summed over all stores (`stock_balances`) before the new quantity is added, rounded to 2 decimals. Rules:
+  - No previous cost, or no stock (`prev_qty_on_hand <= 0`) → `new_avg = new_cost` (nothing to average with).
+  - Manual entry (`new_qty = 0`) with stock → `avg_cost` is **kept**: no goods came in at that cost. Only a purchase moves the average.
+  - Purchase → the formula.
+- **PVP suggestion** (`model.SuggestPrice`): `pvp_suggested = unit_cost / (1 - margin_percent/100)`, rounded to 2 decimals. The margin is over the sale price: 30% on a cost of 700 → 1000. `margin_percent = 0` → no suggestion (manual pricing). The suggestion is **never saved**: the admin accepts it (which runs F-03) or ignores it.
+- **Manual entry, business flow:** open the product's edit panel → "Cost" section (below "Sale price") → enter the new `unit_cost` → "Save cost". It is saved right away and is effective now. The section shows the last and average cost with their start date, the suggested price with the product's **saved** margin and a "Use as price" button (posts it to the price section, F-03), and the last 10 previous costs. With margin 0 it says why there is no suggestion.
+- **Manual entry, DB transaction** (`usecase/costs`, one `TxRunner.InTx`):
+  1. Read the product (for its margin): missing → 404; inactive → rejected (409).
+  2. Read the current cost (`CostStore.Current`) and the stock (`StockBalanceStore.OnHand`, `SUM(quantity)` over all stores).
+  3. Compute `avg_cost` with `new_qty = 0`.
+  4. `INSERT INTO product_costs (product_id, unit_cost, avg_cost, valid_from) VALUES (..., clock_timestamp())` — `clock_timestamp()` for the same reason as F-03 (a purchase with two lines of the same product saves two costs in one transaction).
+  5. `INSERT INTO audit_log (user_id, 'product_costs', 'INSERT', cost_id, new_data)`; `user_id` is `NULL` until F-13.
+- **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. The reception must lock the balance before reading it, so two receptions at once do not average against the same old stock (the manual entry does not lock).
+- **Validation:** `unit_cost > 0`, at most 2 decimals, fits `NUMERIC(12,2)`; the web form takes a decimal comma or point, like the price.
+- **Invariants:** rows are only appended; the current cost is the latest `valid_from`; past margins are protected by line-item snapshots (**BR-03**).
+- **Errors / rollback:** invalid cost → 400 / message in the section; if the audit insert fails, the cost is rolled back too.
+- **API:** `GET /api/products/{id}/costs` → `{current, history}` (newest first); `POST /api/products/{id}/costs` with `{"unit_cost": "700"}` (text or number) → 201 `{cost, suggested_price}` (`null` with margin 0). The client cannot send `avg_cost` or `valid_from`.
+- **Edge cases:** cost decreases → the suggestion drops; the admin decides. A cost for a product that never had stock sets the average directly, so a later purchase averages from it.
 
 ### F-05: Composite Pack Management
 

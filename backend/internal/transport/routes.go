@@ -19,7 +19,7 @@ func (h *ResourceHandler[T]) Register(mux *http.ServeMux, base string) {
 
 // RegisterAPIRoutes mounts the JSON API on mux. main.go and the router tests
 // both call it, so tests exercise the exact same routing as production.
-func RegisterAPIRoutes(mux *http.ServeMux, brands *ResourceHandler[model.Brand], taxes *ResourceHandler[model.Tax], suppliers *ResourceHandler[model.Supplier], categories *ResourceHandler[model.Category], products *ResourceHandler[model.Product], productCodes *ProductCodesHandler, prices *PricesHandler) {
+func RegisterAPIRoutes(mux *http.ServeMux, brands *ResourceHandler[model.Brand], taxes *ResourceHandler[model.Tax], suppliers *ResourceHandler[model.Supplier], categories *ResourceHandler[model.Category], products *ResourceHandler[model.Product], productCodes *ProductCodesHandler, prices *PricesHandler, costs *CostsHandler) {
 	brands.Register(mux, "/api/brands")
 	taxes.Register(mux, "/api/taxes")
 	suppliers.Register(mux, "/api/suppliers")
@@ -27,4 +27,5 @@ func RegisterAPIRoutes(mux *http.ServeMux, brands *ResourceHandler[model.Brand],
 	products.Register(mux, "/api/products")
 	productCodes.Register(mux, "/api/products")
 	prices.Register(mux, "/api/products")
+	costs.Register(mux, "/api/products")
 }

@@ -117,7 +117,7 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 			}
 		}
 
-		res.SuggestedPrice, err = suggestedPrice(ctx, tx, prod, unitCost)
+		res.SuggestedPrice, err = Suggest(ctx, tx, prod, unitCost)
 		if err != nil {
 			return err
 		}
@@ -141,12 +141,14 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 // (model.SuggestPrice). nil si no hay sugerencia (margen 0). La pantalla lo
 // usa para el costo vigente; Set, para el costo que guarda.
 func (s *Service) SuggestedPrice(ctx context.Context, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
-	return suggestedPrice(ctx, s.db, prod, unitCost)
+	return Suggest(ctx, s.db, prod, unitCost)
 }
 
-// suggestedPrice busca el IVA del producto (categoría → impuesto) y calcula la
-// sugerencia. Con margen 0 no consulta nada: no hay sugerencia igual.
-func suggestedPrice(ctx context.Context, db postgres.DBTX, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
+// Suggest busca el IVA del producto (categoría → impuesto) y calcula la
+// sugerencia, leyendo con db: la transacción de quien guarda el costo (Set,
+// o la recepción de compras) o el *sql.DB. Con margen 0 no consulta nada: no
+// hay sugerencia igual.
+func Suggest(ctx context.Context, db postgres.DBTX, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
 	if !prod.MarginPercent.IsPositive() {
 		return nil, nil
 	}

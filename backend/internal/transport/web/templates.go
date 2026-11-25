@@ -46,6 +46,7 @@ var partialFiles = []string{
 	"templates/partials/product_brand_options.gohtml",
 	"templates/partials/product_table.gohtml",
 	"templates/partials/product_prices.gohtml",
+	"templates/partials/product_costs.gohtml",
 	"templates/partials/product_codes.gohtml",
 	"templates/partials/product_barcode_check.gohtml",
 }
@@ -86,6 +87,11 @@ func NewTemplateEngine() *TemplateEngine {
 			// "$ 1.500,50" en español, "$1,500.50" en inglés.
 			"money": func(d decimal.Decimal) string {
 				return formatMoney(lang, d)
+			},
+			// percent muestra un margen como se lee en el idioma: "37,5" en
+			// español, "37.5" en inglés.
+			"percent": func(d decimal.Decimal) string {
+				return formatPercent(lang, d)
 			},
 			"formatTime": formatTime,
 		}

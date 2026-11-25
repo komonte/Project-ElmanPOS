@@ -668,3 +668,96 @@ func TestRenderProductPrices(t *testing.T) {
 		}
 	})
 }
+
+func TestRenderProductCosts(t *testing.T) {
+	e := NewTemplateEngine()
+	dec := decimal.RequireFromString
+	history := []*model.Cost{
+		{ID: 5, ProductID: 7, UnitCost: dec("700"), AvgCost: dec("650.5"), ValidFrom: "2026-11-25T15:00:00Z"},
+		{ID: 4, ProductID: 7, UnitCost: dec("600"), AvgCost: dec("600"), ValidFrom: "2026-11-01T09:30:00Z"},
+	}
+	suggested := dec("1076.92")
+
+	render := func(t *testing.T, data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_costs.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	t.Run("costs, suggestion and history", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": history,
+			"Margin": dec("35"), "Suggested": &suggested})
+		for _, s := range []string{
+			"Costo último", "$ 700,00", "Costo promedio", "$ 650,50", "desde 2026-11-25 ", // vigente
+			"Precio sugerido con margen 35%", "$ 1.076,92", // sugerencia
+			// "Usar como precio" manda el número sin formato a la sección de precio.
+			`hx-post="/products/7/prices"`, `hx-target="#product-prices"`, `name="unit_price" value="1076.92"`,
+			`hx-post="/products/7/costs"`,
+			"Costos anteriores", "$ 600,00", // historia
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
+			t.Error("plain section: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("decimal margin uses a comma", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": history[:1],
+			"Margin": dec("37.5"), "Suggested": &suggested})
+		if !strings.Contains(html, "margen 37,5%") || strings.Contains(html, "Costos anteriores") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("margin 0: no suggestion", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": history[:1], "Margin": dec("0")})
+		if strings.Contains(html, "Usar como precio") || !strings.Contains(html, "margen 0") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("no cost", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": []*model.Cost{}, "Margin": dec("30")})
+		if !strings.Contains(html, "todavía no tiene costo") || strings.Contains(html, "Usar como precio") ||
+			strings.Contains(html, "margen 0") {
+			t.Errorf("got %s", html)
+		}
+	})
+
+	t.Run("error keeps the typed cost and the focus", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": []*model.Cost{}, "Margin": dec("30"),
+			"CostError": "El costo tiene que ser un número mayor que 0.", "CostValue": "12,345"})
+		for _, s := range []string{`role="alert"`, "mayor que 0", `value="12,345"`, "autofocus"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+}
+
+// Al editar, el formulario incluye la sección de costo; al dar de alta, no.
+func TestRenderProductFormCostSection(t *testing.T) {
+	e := NewTemplateEngine()
+	render := func(data map[string]any) string {
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	html := render(map[string]any{"Product": &model.Product{ID: 7, Name: "X"},
+		"CostData": map[string]any{"ProductID": int64(7), "Costs": []*model.Cost{}, "Margin": decimal.Zero}})
+	if !strings.Contains(html, `id="product-costs"`) {
+		t.Error("edit form: missing the cost section")
+	}
+	if html := render(map[string]any{"Product": &model.Product{}}); strings.Contains(html, `id="product-costs"`) {
+		t.Error("new product form: has a cost section")
+	}
+}

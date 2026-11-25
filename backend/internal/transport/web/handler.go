@@ -12,6 +12,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
@@ -30,9 +31,10 @@ type WebHandler struct {
 	createProduct *createproduct.Service
 	productCodes  *productcodes.Service
 	prices        *prices.Service
+	costs         *costs.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -43,6 +45,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		createProduct: createProduct,
 		productCodes:  productCodes,
 		prices:        prices,
+		costs:         costs,
 	}
 }
 
@@ -163,6 +166,9 @@ var errorKeys = []struct {
 
 	{model.ErrInvalidPrice, "error.price_invalid"},
 	{prices.ErrProductInactive, "error.price_product_inactive"},
+
+	{model.ErrInvalidCost, "error.cost_invalid"},
+	{costs.ErrProductInactive, "error.cost_product_inactive"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no

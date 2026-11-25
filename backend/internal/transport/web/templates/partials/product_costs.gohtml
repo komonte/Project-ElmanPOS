@@ -1,0 +1,83 @@
+{{/* Costo de un producto (F-04, carga manual), en el panel de edición, debajo
+     del precio. Igual que el precio: va fuera del <form> del producto, se
+     guarda al momento y un costo nuevo no edita el anterior. Guardar devuelve
+     esta misma sección (outerHTML).
+
+     Con el costo último y el margen del producto se sugiere un precio. La
+     sugerencia no se guarda sola: "Usar como precio" la manda a la sección de
+     precio (F-03), que se redibuja con el precio nuevo.
+
+     Datos: .ProductID, .Costs (el más nuevo primero: el vigente es el
+     primero), .Margin (el margen guardado del producto), .Suggested (el
+     precio sugerido, o nil si no hay costo o el margen es 0), y al volver de
+     guardar .CostError y .CostValue (lo que se escribió, si hubo error). */}}
+<section id="product-costs" class="mt-5 pt-6 space-y-5" aria-labelledby="product-costs-title">
+  <div>
+    <h3 id="product-costs-title" class="font-display font-bold text-2xl">{{t "product.costs"}}</h3>
+    <p class="text-sm text-muted">{{t "product.costs_hint"}}</p>
+  </div>
+
+  {{if .CostError}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.CostError}}</div>
+  {{end}}
+
+  {{with .Costs}}
+  {{$current := index . 0}}
+  <dl class="flex flex-wrap gap-x-8 gap-y-2">
+    <div>
+      <dt class="text-sm text-muted">{{t "product.cost_last"}}</dt>
+      <dd class="font-display font-bold text-4xl tabular">{{money $current.UnitCost}}</dd>
+    </div>
+    <div>
+      <dt class="text-sm text-muted">{{t "product.cost_avg"}}</dt>
+      <dd class="font-display font-bold text-4xl tabular">{{money $current.AvgCost}}</dd>
+    </div>
+  </dl>
+  <p class="text-sm text-muted">{{t "product.price_since"}} {{formatTime $current.ValidFrom}}</p>
+  {{else}}
+  <p class="text-muted">{{t "product.costs_empty"}}</p>
+  {{end}}
+
+  {{if .Suggested}}
+  <form hx-post="/products/{{.ProductID}}/prices" hx-target="#product-prices" hx-swap="outerHTML"
+        class="flex flex-wrap items-center gap-3">
+    <input type="hidden" name="unit_price" value="{{.Suggested}}">
+    <p>
+      {{t "product.cost_suggested"}} {{percent .Margin}}%:
+      <span class="font-bold tabular">{{money .Suggested}}</span>
+    </p>
+    <button type="submit" class="btn-secondary">{{t "product.cost_use_price"}}</button>
+  </form>
+  {{else if .Costs}}
+  <p class="text-sm text-muted">{{t "product.cost_no_margin"}}</p>
+  {{end}}
+
+  <form hx-post="/products/{{.ProductID}}/costs" hx-target="#product-costs" hx-swap="outerHTML"
+        class="flex flex-wrap items-end gap-3">
+    <div>
+      <label for="product-cost-new" class="field-label">{{t "product.cost_new"}}</label>
+      <input type="text" id="product-cost-new" name="unit_cost" inputmode="decimal" autocomplete="off" required
+             value="{{.CostValue}}" {{if .CostError}}autofocus{{end}}
+             class="field max-w-40 tabular">
+    </div>
+    <button type="submit" class="btn-secondary">{{t "product.cost_save"}}</button>
+  </form>
+
+  {{/* with primero: sin datos (.Costs nil), len fallaría. */}}
+  {{with .Costs}}{{if gt (len .) 1}}
+  <details>
+    <summary class="font-bold">{{t "product.cost_history"}}</summary>
+    <ul class="mt-4 divide-y-2 divide-line border-2 border-line rounded-md">
+      {{range .}}
+      <li class="flex items-center justify-between gap-4 px-4 py-2">
+        <span class="text-sm text-muted tabular">{{formatTime .ValidFrom}}</span>
+        <span class="tabular">
+          <span class="font-bold">{{money .UnitCost}}</span>
+          <span class="text-sm text-muted"> · {{t "product.cost_avg_short"}} {{money .AvgCost}}</span>
+        </span>
+      </li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}{{end}}
+</section>

@@ -196,6 +196,13 @@ func TestProductValidate(t *testing.T) {
 		{name: "max stock with 4 decimals", modify: func(p *model.Product) { p.MaxStock = decPtr("1.0001") }, wantErr: model.ErrInvalidMaxStock},
 		{name: "max stock too big", modify: func(p *model.Product) { p.MaxStock = decPtr("1000000000") }, wantErr: model.ErrInvalidMaxStock},
 
+		// Días de vida
+		{name: "shelf life 1 day", modify: func(p *model.Product) { p.ShelfLifeDays = new(1) }},
+		{name: "shelf life 10 years", modify: func(p *model.Product) { p.ShelfLifeDays = new(3650) }},
+		{name: "shelf life 0", modify: func(p *model.Product) { p.ShelfLifeDays = new(0) }, wantErr: model.ErrInvalidShelfLife},
+		{name: "shelf life negative", modify: func(p *model.Product) { p.ShelfLifeDays = new(-3) }, wantErr: model.ErrInvalidShelfLife},
+		{name: "shelf life too long", modify: func(p *model.Product) { p.ShelfLifeDays = new(3651) }, wantErr: model.ErrInvalidShelfLife},
+
 		// Margen
 		{name: "negative margin", modify: func(p *model.Product) { p.MarginPercent = dec("-0.01") }, wantErr: model.ErrInvalidMargin},
 		{name: "margin 100 divides by zero", modify: func(p *model.Product) { p.MarginPercent = dec("100") }, wantErr: model.ErrInvalidMargin},

@@ -70,7 +70,12 @@ var (
 	ErrInvalidReorderPoint = errors.New("product reorder point must be between 0 and 999999999.999, with up to 3 decimals")
 	ErrInvalidMaxStock     = errors.New("product max stock must be greater than the reorder point, up to 999999999.999, with up to 3 decimals")
 	ErrInvalidMargin       = errors.New("product margin must be at least 0 and less than 100, with up to 2 decimals")
+	ErrInvalidShelfLife    = errors.New("product shelf life must be between 1 and 3650 days")
 )
+
+// MaxShelfLifeDays es el tope de días de vida (10 años): más que eso no es
+// un perecedero. Igual que el CHECK de la migración 0014.
+const MaxShelfLifeDays = 3650
 
 var (
 	// NUMERIC(12,3): 9 dígitos enteros y 3 decimales.
@@ -83,6 +88,10 @@ var (
 //
 // Los opcionales que son FK (marca, proveedor) y MaxStock son punteros:
 // nil es "sin dato" (NULL en la DB). Description es string: vacío es NULL.
+//
+// ShelfLifeDays: cuántos días suele durar desde que se recibe. La recepción
+// lo usa para precargar el vencimiento (hoy + días). nil: sin dato, no se
+// precarga.
 type Product struct {
 	ID                  int64            `json:"id" db:"id"`
 	SKU                 string           `json:"sku" db:"sku"`
@@ -96,6 +105,7 @@ type Product struct {
 	ReorderPoint        decimal.Decimal  `json:"reorder_point" db:"reorder_point"`
 	MaxStock            *decimal.Decimal `json:"max_stock" db:"max_stock"`
 	MarginPercent       decimal.Decimal  `json:"margin_percent" db:"margin_percent"`
+	ShelfLifeDays       *int             `json:"shelf_life_days" db:"shelf_life_days"` // días de vida, ver abajo
 	PreferredSupplierID *int64           `json:"preferred_supplier_id" db:"preferred_supplier_id"`
 	IsConsignment       bool             `json:"is_consignment" db:"is_consignment"`
 	IsActive            bool             `json:"is_active" db:"is_active"`
@@ -204,6 +214,10 @@ func (p *Product) Validate() error {
 	if p.MarginPercent.IsNegative() || !p.MarginPercent.LessThan(maxMargin) ||
 		!p.MarginPercent.Equal(p.MarginPercent.Round(2)) {
 		return ErrInvalidMargin
+	}
+
+	if p.ShelfLifeDays != nil && (*p.ShelfLifeDays < 1 || *p.ShelfLifeDays > MaxShelfLifeDays) {
+		return ErrInvalidShelfLife
 	}
 
 	return nil

@@ -37,7 +37,7 @@ const productSelect = `
 	       p.brand_id, p.category_id, p.measure_unit, p.sale_type,
 	       p.controls_batches, p.reorder_point, p.max_stock, p.margin_percent,
 	       p.preferred_supplier_id, p.is_consignment, p.is_active,
-	       p.created_at, p.updated_at,
+	       p.shelf_life_days, p.created_at, p.updated_at,
 	       COALESCE(b.name, ''), c.name, COALESCE(s.name, ''),
 	       cp.unit_price
 	FROM products p
@@ -60,7 +60,7 @@ func scanProduct(row rowScanner) (*model.Product, error) {
 		&p.BrandID, &p.CategoryID, &p.MeasureUnit, &p.SaleType,
 		&p.ControlsBatches, &p.ReorderPoint, &p.MaxStock, &p.MarginPercent,
 		&p.PreferredSupplierID, &p.IsConsignment, &p.IsActive,
-		&p.CreatedAt, &p.UpdatedAt,
+		&p.ShelfLifeDays, &p.CreatedAt, &p.UpdatedAt,
 		&p.BrandName, &p.CategoryName, &p.SupplierName,
 		&p.CurrentPrice)
 	if err != nil {
@@ -107,8 +107,8 @@ func (s *ProductStore) Create(ctx context.Context, product *model.Product) (*mod
 	q := `INSERT INTO products (sku, name, description, brand_id, category_id,
 	                            measure_unit, sale_type, controls_batches,
 	                            reorder_point, max_stock, margin_percent,
-	                            preferred_supplier_id, is_consignment)
-	      VALUES (COALESCE(NULLIF($1, ''), next_product_sku()), $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+	                            preferred_supplier_id, is_consignment, shelf_life_days)
+	      VALUES (COALESCE(NULLIF($1, ''), next_product_sku()), $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	      RETURNING id;`
 
 	var id int64
@@ -116,7 +116,7 @@ func (s *ProductStore) Create(ctx context.Context, product *model.Product) (*mod
 		product.SKU, product.Name, product.Description, product.BrandID, product.CategoryID,
 		product.MeasureUnit, product.SaleType, product.ControlsBatches,
 		product.ReorderPoint, product.MaxStock, product.MarginPercent,
-		product.PreferredSupplierID, product.IsConsignment,
+		product.PreferredSupplierID, product.IsConsignment, product.ShelfLifeDays,
 	).Scan(&id)
 	if err != nil {
 		return nil, productWriteError(err)
@@ -223,7 +223,8 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 	      SET sku = COALESCE(NULLIF($1, ''), sku), name = $2, description = NULLIF($3, ''), brand_id = $4,
 	          category_id = $5, measure_unit = $6, sale_type = $7,
 	          controls_batches = $8, reorder_point = $9, max_stock = $10,
-	          margin_percent = $11, preferred_supplier_id = $12, is_consignment = $13
+	          margin_percent = $11, preferred_supplier_id = $12, is_consignment = $13,
+	          shelf_life_days = $15
 	      WHERE id = $14
 	        AND (
 	              (measure_unit = $6 AND sale_type = $7 AND controls_batches = $8)
@@ -239,7 +240,7 @@ func (s *ProductStore) Update(ctx context.Context, id int64, product *model.Prod
 		product.SKU, product.Name, product.Description, product.BrandID, product.CategoryID,
 		product.MeasureUnit, product.SaleType, product.ControlsBatches,
 		product.ReorderPoint, product.MaxStock, product.MarginPercent,
-		product.PreferredSupplierID, product.IsConsignment, id,
+		product.PreferredSupplierID, product.IsConsignment, id, product.ShelfLifeDays,
 	)
 	if err != nil {
 		return nil, productWriteError(err)

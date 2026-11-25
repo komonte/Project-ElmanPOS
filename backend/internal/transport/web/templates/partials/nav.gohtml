@@ -21,6 +21,9 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "taxes"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.taxes"}}</a>
       <a href="/suppliers" {{if eq .Section "suppliers"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "suppliers"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.suppliers"}}</a>
+    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_inventory"}}</p>
+      <a href="/purchases" {{if eq .Section "purchases"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "purchases"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.purchases"}}</a>
   </div>
 
   <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>

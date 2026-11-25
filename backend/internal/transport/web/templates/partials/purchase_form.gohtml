@@ -1,0 +1,56 @@
+{{/* Formulario de recepción (F-06). Al confirmar, la respuesta reemplaza este
+     panel: el resultado si se guardó, o el mismo formulario con lo escrito y
+     el error (y el renglón que falló, marcado).
+
+     Datos: .Suppliers (opciones), .SupplierID, .VoucherNumber, .Total,
+     .Lines (al volver con un error; si no hay, un renglón vacío) y .Error. */}}
+<div id="purchase-panel">
+  <form id="purchase-form" hx-post="/purchases" hx-target="#purchase-panel" hx-swap="outerHTML" class="space-y-6">
+    {{if .Error}}
+    <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+    {{end}}
+
+    <fieldset class="grid gap-4 md:grid-cols-3">
+      <legend class="sr-only">{{t "purchase.header"}}</legend>
+      <div>
+        <label for="purchase-supplier" class="field-label">{{t "purchase.supplier"}}</label>
+        <select id="purchase-supplier" name="supplier_id" required class="field">
+          <option value="">{{t "purchase.supplier_choose"}}</option>
+          {{range .Suppliers}}
+          <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+      </div>
+      <div>
+        <label for="purchase-voucher" class="field-label">{{t "purchase.voucher"}}</label>
+        <input type="text" id="purchase-voucher" name="voucher_number" maxlength="60" autocomplete="off"
+               value="{{.VoucherNumber}}" aria-describedby="purchase-voucher-hint" class="field">
+        <span id="purchase-voucher-hint" class="field-hint">{{t "purchase.voucher_hint"}}</span>
+      </div>
+      <div>
+        <label for="purchase-total" class="field-label">{{t "purchase.total"}}</label>
+        <input type="text" id="purchase-total" name="total" inputmode="decimal" autocomplete="off" required
+               value="{{.Total}}" aria-describedby="purchase-total-hint" class="field tabular">
+        <span id="purchase-total-hint" class="field-hint">{{t "purchase.total_hint"}}</span>
+      </div>
+    </fieldset>
+
+    <section aria-labelledby="purchase-lines-title" class="space-y-4">
+      <h2 id="purchase-lines-title" class="font-display font-bold text-2xl">{{t "purchase.lines"}}</h2>
+      <div id="purchase-lines" class="space-y-4">
+        {{range .Lines}}{{template "purchase_line.gohtml" .}}{{else}}{{template "purchase_line.gohtml" (dict)}}{{end}}
+      </div>
+      <button type="button" onclick="purchaseAddLine()" class="btn-secondary">{{t "purchase.line_add"}}</button>
+    </section>
+
+    <div class="flex flex-wrap items-center justify-between gap-4 p-4 border-2 border-line rounded-md bg-surface">
+      <p>
+        <span class="text-muted">{{t "purchase.lines_total"}}:</span>
+        <span id="purchase-lines-total" class="font-bold tabular"></span>
+        <span id="purchase-difference" class="ml-3 font-bold tabular"
+              data-label="{{t "purchase.difference"}}" data-ok="{{t "purchase.difference_ok"}}"></span>
+      </p>
+      <button type="submit" class="btn-primary">{{t "purchase.receive"}}</button>
+    </div>
+  </form>
+</div>

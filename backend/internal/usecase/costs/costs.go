@@ -86,16 +86,23 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 			return err
 		}
 
+		// Primero traba el stock y después lee el costo: si entra una compra
+		// del mismo producto al mismo tiempo, espera acá a que termine y lee
+		// el costo que dejó. Leyendo el costo antes de trabar, después de
+		// esperar seguiría teniendo el viejo y lo pisaría.
+		onHand, err := postgres.NewStockBalanceStore(tx).LockOnHand(ctx, productID)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return service.ErrNotFound // raro: el producto existía recién
+			}
+			return err
+		}
 		costs := postgres.NewCostStore(tx)
 		prev, err := costs.Current(ctx, productID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
 		// Sin costo previo, prev queda en nil (lo que espera AverageCost).
-		onHand, err := postgres.NewStockBalanceStore(tx).OnHand(ctx, productID)
-		if err != nil {
-			return err
-		}
 		c.AvgCost = model.AverageCost(prev, onHand, unitCost, decimal.Zero)
 
 		res.Cost, err = costs.Create(ctx, c)
@@ -110,7 +117,7 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 			}
 		}
 
-		res.SuggestedPrice, err = suggestedPrice(ctx, tx, prod, unitCost)
+		res.SuggestedPrice, err = Suggest(ctx, tx, prod, unitCost)
 		if err != nil {
 			return err
 		}
@@ -134,12 +141,14 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 // (model.SuggestPrice). nil si no hay sugerencia (margen 0). La pantalla lo
 // usa para el costo vigente; Set, para el costo que guarda.
 func (s *Service) SuggestedPrice(ctx context.Context, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
-	return suggestedPrice(ctx, s.db, prod, unitCost)
+	return Suggest(ctx, s.db, prod, unitCost)
 }
 
-// suggestedPrice busca el IVA del producto (categoría → impuesto) y calcula la
-// sugerencia. Con margen 0 no consulta nada: no hay sugerencia igual.
-func suggestedPrice(ctx context.Context, db postgres.DBTX, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
+// Suggest busca el IVA del producto (categoría → impuesto) y calcula la
+// sugerencia, leyendo con db: la transacción de quien guarda el costo (Set,
+// o la recepción de compras) o el *sql.DB. Con margen 0 no consulta nada: no
+// hay sugerencia igual.
+func Suggest(ctx context.Context, db postgres.DBTX, prod *model.Product, unitCost decimal.Decimal) (*decimal.Decimal, error) {
 	if !prod.MarginPercent.IsPositive() {
 		return nil, nil
 	}

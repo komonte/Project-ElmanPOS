@@ -131,11 +131,11 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Manual entry, business flow:** open the product's edit panel → "Cost" section (below "Sale price") → enter the new `unit_cost` → "Save cost". It is saved right away and is effective now. The section shows the last and average cost with their start date, the suggested price with the product's **saved** margin and a "Use as price" button (posts it to the price section, F-03), and the last 10 previous costs. With margin 0 it says why there is no suggestion.
 - **Manual entry, DB transaction** (`usecase/costs`, one `TxRunner.InTx`):
   1. Read the product (for its margin): missing → 404; inactive → rejected (409).
-  2. Read the current cost (`CostStore.Current`) and the stock (`StockBalanceStore.OnHand`, `SUM(quantity)` over all stores).
+  2. Lock and read the stock (`StockBalanceStore.LockOnHand`: the product row `FOR NO KEY UPDATE` and its balances `FOR UPDATE`, summed over all stores), **then** read the current cost (`CostStore.Current`). Locking first makes a manual entry wait for a reception of the same product in progress and read the cost it left; reading the cost first would keep the old average and save it over the new one.
   3. Compute `avg_cost` with `new_qty = 0`.
   4. `INSERT INTO product_costs (product_id, unit_cost, avg_cost, valid_from) VALUES (..., clock_timestamp())` — `clock_timestamp()` for the same reason as F-03 (a purchase with two lines of the same product saves two costs in one transaction).
   5. `INSERT INTO audit_log (user_id, 'product_costs', 'INSERT', cost_id, new_data)`; `user_id` is `NULL` until F-13.
-- **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. The reception must lock the balance before reading it, so two receptions at once do not average against the same old stock (the manual entry does not lock).
+- **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. It locks the same way before reading the cost and the stock (`LockOnHand`), so two receptions at once, or a reception and a manual entry, do not average against stale data.
 - **Validation:** `unit_cost > 0`, at most 2 decimals, fits `NUMERIC(12,2)`; the web form takes a decimal comma or point, like the price.
 - **Invariants:** rows are only appended; the current cost is the latest `valid_from`; past margins are protected by line-item snapshots (**BR-03**).
 - **Errors / rollback:** invalid cost → 400 / message in the section; if the audit insert fails, the cost is rolled back too.
@@ -162,29 +162,50 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-06: Purchase Reception
 
-- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin.
+- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin. Until F-13 there is no login: `received_by` and `performed_by` stay `NULL` (migration `0013`).
 - **Trigger:** Goods arrive with a supplier invoice / remito.
-- **Preconditions:** Supplier exists; each product exists and is active.
-- **Business flow:**
-  1. Load supplier, voucher number, totals.
-  2. Add lines: product, `quantity`, `unit_cost`.
-  3. For products with `controls_batches = TRUE`: enter `batch_number` and `expiry_date` per line.
-  4. Confirm reception.
-- **DB transaction:**
-  1. `BEGIN;`
-  2. `INSERT INTO purchases (... status='RECEIVED')`
-  3. `INSERT INTO purchase_items` (one per line)
-  4. For each line with `controls_batches`: `INSERT INTO product_batches (original_quantity = qty, remaining_quantity = qty, unit_cost, expiry_date)`; set `purchase_items.batch_id`. Batches with the **same `batch_number` + `expiry_date` merge into one row** (quantities summed).
-  5. `INSERT INTO stock_movements` (type `PURCHASE`, positive, per batch, `purchase_id` reference).
-  6. `UPDATE stock_balances SET quantity = quantity + qty;`
-  7. `INSERT INTO product_costs` (new `unit_cost` + recalculated `avg_cost` per F-04 formula).
-  8. `COMMIT;`
-- **Invariants:** for every received unit, ledger, balance, and batch `remaining_quantity` all increase by the same amount; `avg_cost` is monotonic-correct.
-- **Errors / rollback:** any failure → full rollback (no partial reception). Product missing from catalog → block reception until created.
+- **Preconditions:** the supplier exists and is active; each product exists, is active and is not `COMPOSITE`; there is **exactly one active store** (`stores.is_active`), where the stock goes.
+- **Amounts are without IVA:** `unit_cost` and the typed `total` are net amounts, like every cost (F-04).
+- **Business flow** (Inventory → Purchases, `/purchases`):
+  1. Choose the supplier (active ones only), type the voucher number (optional) and the invoice **subtotal without IVA**.
+  2. Add lines. Each line has a product search (name, SKU or barcode, so a scanner works; combos are not offered), `quantity` and `unit_cost`. "+ Add line" and "Remove" change the lines in the page. Fully empty lines are ignored.
+  3. Batch and expiry fields show up only for products with `controls_batches = TRUE`; there the batch number is required and the expiry optional.
+  4. The page shows the sum of the lines and its difference with the typed total as you type.
+  5. "Confirm reception". On error the form comes back with everything typed, the message names the line ("Line 2: ...") and that line is marked.
+  6. On success: purchase number and line count, a warning if the total does not match (§ decisions), and a **Prices** table (below).
+- **Prices after receiving:** one row per product (in line order; a product on two lines shows the cost of the last one): new cost, average cost, suggested price with IVA (F-04) and current price. "Use as price" saves the suggestion as the new price with F-03 (`prices.Set`, audited) and redraws only that row's price cell. There is no button when the margin is 0 ("No margin") or the suggestion already is the current price. A failed save (e.g. the product was deactivated meanwhile) shows the error in the row and keeps the button. **No price changes on its own.**
+- **DB transaction** (`usecase/purchases.Receive`, one `TxRunner.InTx`). Before it: `Purchase.Validate` (supplier set, voucher ≤ 60 chars, `0 <= total` with 2 decimals, at least one line; per line: product set, `quantity > 0` with ≤ 3 decimals, `unit_cost` with the cost rules, batch ≤ 80 chars, expiry a `YYYY-MM-DD` date and only with a batch number).
+  1. Read the supplier: missing → 400; inactive → 409.
+  2. Find the store: `StoreStore.ActiveID`. None or several active → 409 (stock is never put in a store picked at random).
+  3. `INSERT INTO purchases (supplier_id, voucher_number, total, status='RECEIVED')`.
+  4. For each line, in order (an error names the line: `line N: ...`):
+     1. Read the product: missing → 400; inactive → 409; `COMPOSITE` → 400 (receive its components); batch rules: `controls_batches` without a batch number → 400, a batch or expiry on a product without `controls_batches` → 400.
+     2. **Lock, then read:** `StockBalanceStore.LockOnHand` locks the product row (`FOR NO KEY UPDATE`) and its balances (`FOR UPDATE`) and returns the stock summed over all stores; **then** `CostStore.Current`. The product-row lock covers a product with no balance yet (no rows to lock). Another reception or a manual cost (F-04) of the same product waits and then reads the stock and cost this one left.
+     3. If `controls_batches`: `INSERT INTO product_batches (original_quantity = remaining_quantity = qty, unit_cost, batch_number, expiry_date)`, or add the quantity to a batch already created **in this reception** with the same product, batch number, expiry **and cost**. Same lot at a different cost → a separate batch (each batch keeps one cost for COGS, **P-04**).
+     4. `INSERT INTO purchase_items (..., batch_id)`.
+     5. `INSERT INTO stock_movements (type 'PURCHASE', +qty, unit_cost, batch_id, purchase_id, store_id)`.
+     6. `stock_balances`: add `qty` for (product, store), creating the row if missing.
+     7. `INSERT INTO product_costs (unit_cost, avg_cost)` with the F-04 formula, averaging against the stock read in step 2 (before this line). A product on two lines gets two costs; the second averages against the stock the first one left.
+     8. Compute the suggested price (`costs.Suggest`, never saved).
+  5. `INSERT INTO audit_log (user_id NULL, 'purchases', 'INSERT', purchase_id, new_data)` with the saved purchase and its lines.
+  6. `COMMIT`.
+- **Decisions:**
+  - **One active store.** A purchase does not say which store it goes to; with one store there is nothing to choose. With two, the purchase will have to say it (and this check fails until then, on purpose).
+  - **The typed total is a check, not a rule.** `total` is the invoice subtotal without IVA. If it does not match the sum of `quantity × unit_cost` (each line rounded to cents), the purchase is saved anyway and the screen/API warns with the difference (`total - sum`). Invoices round, add freight or discounts; blocking would stop the delivery at the door.
+  - **Batch merging** only within one reception, and only with the same cost (see step 4.3). The same lot received in two purchases is two batches.
+  - **Combos are not received:** they have no stock of their own (F-05).
+  - **Costs come from the purchase.** Each line saves a cost (F-04); prices never change on their own (see "Prices after receiving").
+- **Invariants:** for every received unit, ledger, balance and batch `remaining_quantity` all increase by the same amount; `stock_movements` rows are never edited or deleted (trigger), so a received purchase cannot be undone by deleting it (a correction will be a count/adjustment, F-09).
+- **Errors / rollback:** any failure → full rollback (no partial reception, no cost, no batch, no audit row). Validation → 400; inactive supplier/product, no/several active stores → 409; the message names the line when it is a line's fault.
+- **API:**
+  - `POST /api/purchases` with `{supplier_id, voucher_number, total, items: [{product_id, quantity, unit_cost, batch_number, expiry_date}]}` (numbers as text or number). Only what the user types: unknown fields (`status`, `batch_id`, `avg_cost`...) are rejected. → 201 `{purchase, total_difference, suggestions: [{product_id, product_name, unit_cost, avg_cost, suggested_price, current_price}]}` (`suggested_price` is `null` with margin 0; `total_difference` other than `"0"` is the warning).
+  - `GET /api/purchases/{id}` → the purchase with its lines (batch number and expiry included). Missing → 404; bad id → 400.
+- **Web routes:** `GET /purchases` (page), `POST /purchases` (receive; returns the result or the form with the error), `GET /purchases/product-options` (line search), `POST /purchases/prices/{id}` ("Use as price": runs `prices.Set` and returns the row's price cell; a separate route from `POST /products/{id}/prices` only because it renders a table cell instead of the product's price section).
 - **Edge cases:**
   - Non-batch products (soda): no `product_batches` row, no batch friction at reception.
-  - Same lot received across two vouchers: they are separate `product_batches` rows unless the clerk consolidates the batch entry (merge only applies within the same reception line group).
-  - Consignment reception: **deferred** (§7).
+  - Product missing from the catalog → it has to be created first (a quick create from the line is planned).
+  - Purchase with a total of 0 (a free sample) is allowed; each line's cost still has to be > 0.
+  - Consignment reception, returns to supplier and purchase orders: **deferred** (§7).
 
 ### F-07: Atomic Sale (Core Flow)
 
@@ -403,6 +424,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 The following are intentionally **out of scope** and must not be assumed to work:
 - **Partial returns** (refund of a single line item) — v1 is full void only (F-08).
 - **Consignment settlement** — `is_consignment` flag exists; payment/stock accounting for consigned goods is undefined in v1.
+- **Purchase orders, returns to supplier, editing or voiding a received purchase** — a reception is final (F-06); a mistake is corrected with a stock count/adjustment (F-09) and a new cost.
 - **Inter-store transfers** — `TRANSFER` movement type exists in the enum but has no flow or tables.
 - **Promotions / rule-based discounts** — only a header-level `discount_amount` is supported.
 - **AFIP electronic invoicing** — internal tickets only.

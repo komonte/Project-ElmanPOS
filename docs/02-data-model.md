@@ -264,7 +264,7 @@ Rows are only appended (F-04): a new cost gets `valid_from = clock_timestamp()` 
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
-| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Same number + same expiry merge into one row. |
+| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Within one reception, lines with the same product, number, expiry and cost merge into one row; a different cost is a separate row (F-06). |
 | expiry_date | DATE | NULL | NULL allowed for non-perishable batches. |
 | original_quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | Received quantity. Immutable. |
 | remaining_quantity | NUMERIC(12,3) | NOT NULL | Decremented on each FIFO allocation. |
@@ -296,7 +296,7 @@ Indexes: `(product_id, remaining_quantity, expiry_date)` — FIFO scan picks old
 | sale_id | BIGINT | FK → sales.id, NULL | |
 | purchase_id | BIGINT | FK → purchases.id, NULL | |
 | count_id | BIGINT | FK → stock_counts.id, NULL | |
-| performed_by | BIGINT | FK → users.id, NOT NULL | |
+| performed_by | BIGINT | FK → users.id, NULL | Who made the movement. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
 | notes | VARCHAR(500) | NULL | Free-text context. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -450,9 +450,9 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | supplier_id | BIGINT | FK → suppliers.id, NOT NULL | |
 | voucher_number | VARCHAR(60) | NULL | Supplier invoice/remito number. |
 | status | purchase_status | NOT NULL DEFAULT 'RECEIVED' | |
-| total | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | |
+| total | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Invoice subtotal **without IVA**, as typed. If it does not match the sum of the lines, the purchase is saved anyway with a warning (F-06). |
 | received_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
-| received_by | BIGINT | FK → users.id, NOT NULL | |
+| received_by | BIGINT | FK → users.id, NULL | Who received the purchase. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -548,10 +548,12 @@ UNIQUE `(cashier_session_id, sale_number)`.
 9. `COMMIT`. Any failure → full rollback (**BR-04**).
 
 ### 6.2 Purchase reception
-1. Insert `purchases` + `purchase_items`.
-2. For each item, if `controls_batches`: create `product_batches` (set `original_quantity`, `remaining_quantity`, `unit_cost`, expiry) and link `batch_id`.
-3. Insert `stock_movements` (type `PURCHASE`, positive, per batch).
-4. Update `stock_balances`; insert `product_costs` (new `avg_cost` recalculation).
+1. Insert `purchases`. The stock goes to the only active store.
+2. For each item: lock the product and its `stock_balances` (`LockOnHand`), **then** read the current cost.
+3. If `controls_batches`: create `product_batches` (set `original_quantity`, `remaining_quantity`, `unit_cost`, expiry) or add to one of this reception with the same number, expiry and cost; link `batch_id`.
+4. Insert `purchase_items`, `stock_movements` (type `PURCHASE`, positive, per batch).
+5. Update `stock_balances`; insert `product_costs` (new `avg_cost` recalculation).
+6. Insert the `audit_log` row. Full detail in `03-flows-and-transactions.md` F-06.
 
 ### 6.3 Stock count (see §7.3)
 

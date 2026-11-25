@@ -16,6 +16,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
 	"github.com/shopspring/decimal"
 )
 
@@ -32,9 +33,10 @@ type WebHandler struct {
 	productCodes  *productcodes.Service
 	prices        *prices.Service
 	costs         *costs.Service
+	purchases     *purchases.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -46,6 +48,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		productCodes:  productCodes,
 		prices:        prices,
 		costs:         costs,
+		purchases:     purchases,
 	}
 }
 
@@ -169,6 +172,27 @@ var errorKeys = []struct {
 
 	{model.ErrInvalidCost, "error.cost_invalid"},
 	{costs.ErrProductInactive, "error.cost_product_inactive"},
+
+	// Recepción de compras (F-06). Los de un renglón se muestran con
+	// "Renglón N:" adelante (purchaseErrMsg).
+	{model.ErrPurchaseSupplierMissing, "error.purchase_supplier_missing"},
+	{model.ErrPurchaseVoucherTooLong, "error.purchase_voucher_too_long"},
+	{model.ErrInvalidPurchaseTotal, "error.purchase_total_invalid"},
+	{model.ErrPurchaseNoItems, "error.purchase_no_items"},
+	{model.ErrPurchaseItemProduct, "error.purchase_item_product"},
+	{model.ErrInvalidPurchaseQuantity, "error.purchase_quantity_invalid"},
+	{model.ErrBatchNumberTooLong, "error.batch_number_too_long"},
+	{model.ErrInvalidExpiryDate, "error.expiry_invalid"},
+	{model.ErrExpiryWithoutBatch, "error.expiry_without_batch"},
+	{purchases.ErrUnknownSupplier, "error.supplier_unknown"},
+	{purchases.ErrSupplierInactive, "error.supplier_inactive"},
+	{purchases.ErrUnknownProduct, "error.product_unknown"},
+	{purchases.ErrProductInactive, "error.purchase_product_inactive"},
+	{purchases.ErrCompositeProduct, "error.purchase_composite"},
+	{purchases.ErrBatchRequired, "error.batch_required"},
+	{purchases.ErrBatchNotAllowed, "error.batch_not_allowed"},
+	{store.ErrNoActiveStore, "error.no_active_store"},
+	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }
 
 // errMsg devuelve el mensaje para el usuario, en su idioma. Un error que no

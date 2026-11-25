@@ -45,6 +45,11 @@ var (
 	// F-01: con historial (movimientos, ventas, compras o lotes), cambiar
 	// cómo se vende o se mide el producto falsearía lo ya registrado.
 	ErrProductHasHistory = conflictError("product sale type, measure unit and batch control cannot change once it has stock history")
+
+	// Locales (02 4.8). Una compra no dice a qué local entra: entra al único
+	// activo. Sin local activo, o con más de uno, no se adivina.
+	ErrNoActiveStore       = conflictError("there is no active store")
+	ErrSeveralActiveStores = conflictError("there is more than one active store: stock cannot be assigned to one")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

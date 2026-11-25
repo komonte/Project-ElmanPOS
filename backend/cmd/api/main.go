@@ -26,6 +26,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -107,16 +108,19 @@ func main() {
 	// Costo (F-04, carga manual): costo, promedio y auditoría en una transacción.
 	costSvc := costs.New(db, postgres.NewTxRunner(db))
 	costsH := transport.NewCostsHandler(costSvc)
+	// Recepción de compras (F-06): compra, lotes, stock y costos en una transacción.
+	purchaseSvc := purchases.New(db, postgres.NewTxRunner(db))
+	purchasesH := transport.NewPurchasesHandler(purchaseSvc)
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
 
 	// API routes
-	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH)
+	transport.RegisterAPIRoutes(mux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH, purchasesH)
 
 	// Web UI routes
 	staticSub, err := fs.Sub(staticFS, "static")
@@ -175,6 +179,10 @@ func main() {
 	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
 	mux.HandleFunc("POST /products/{id}/prices", webH.ProductPricesSet)
 	mux.HandleFunc("POST /products/{id}/costs", webH.ProductCostsSet)
+	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
+	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
+	mux.HandleFunc("GET /purchases/product-options", webH.PurchasesProductOptions)
+	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

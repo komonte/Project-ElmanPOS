@@ -131,11 +131,11 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Manual entry, business flow:** open the product's edit panel → "Cost" section (below "Sale price") → enter the new `unit_cost` → "Save cost". It is saved right away and is effective now. The section shows the last and average cost with their start date, the suggested price with the product's **saved** margin and a "Use as price" button (posts it to the price section, F-03), and the last 10 previous costs. With margin 0 it says why there is no suggestion.
 - **Manual entry, DB transaction** (`usecase/costs`, one `TxRunner.InTx`):
   1. Read the product (for its margin): missing → 404; inactive → rejected (409).
-  2. Read the current cost (`CostStore.Current`) and the stock (`StockBalanceStore.OnHand`, `SUM(quantity)` over all stores).
+  2. Lock and read the stock (`StockBalanceStore.LockOnHand`: the product row `FOR NO KEY UPDATE` and its balances `FOR UPDATE`, summed over all stores), **then** read the current cost (`CostStore.Current`). Locking first makes a manual entry wait for a reception of the same product in progress and read the cost it left; reading the cost first would keep the old average and save it over the new one.
   3. Compute `avg_cost` with `new_qty = 0`.
   4. `INSERT INTO product_costs (product_id, unit_cost, avg_cost, valid_from) VALUES (..., clock_timestamp())` — `clock_timestamp()` for the same reason as F-03 (a purchase with two lines of the same product saves two costs in one transaction).
   5. `INSERT INTO audit_log (user_id, 'product_costs', 'INSERT', cost_id, new_data)`; `user_id` is `NULL` until F-13.
-- **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. The reception must lock the balance before reading it, so two receptions at once do not average against the same old stock (the manual entry does not lock).
+- **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. It locks the same way before reading the cost and the stock (`LockOnHand`), so two receptions at once, or a reception and a manual entry, do not average against stale data.
 - **Validation:** `unit_cost > 0`, at most 2 decimals, fits `NUMERIC(12,2)`; the web form takes a decimal comma or point, like the price.
 - **Invariants:** rows are only appended; the current cost is the latest `valid_from`; past margins are protected by line-item snapshots (**BR-03**).
 - **Errors / rollback:** invalid cost → 400 / message in the section; if the audit insert fails, the cost is rolled back too.

@@ -86,16 +86,23 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 			return err
 		}
 
+		// Primero traba el stock y después lee el costo: si entra una compra
+		// del mismo producto al mismo tiempo, espera acá a que termine y lee
+		// el costo que dejó. Leyendo el costo antes de trabar, después de
+		// esperar seguiría teniendo el viejo y lo pisaría.
+		onHand, err := postgres.NewStockBalanceStore(tx).LockOnHand(ctx, productID)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				return service.ErrNotFound // raro: el producto existía recién
+			}
+			return err
+		}
 		costs := postgres.NewCostStore(tx)
 		prev, err := costs.Current(ctx, productID)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
 		// Sin costo previo, prev queda en nil (lo que espera AverageCost).
-		onHand, err := postgres.NewStockBalanceStore(tx).OnHand(ctx, productID)
-		if err != nil {
-			return err
-		}
 		c.AvgCost = model.AverageCost(prev, onHand, unitCost, decimal.Zero)
 
 		res.Cost, err = costs.Create(ctx, c)

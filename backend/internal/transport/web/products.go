@@ -204,6 +204,13 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		data["Codes"] = codes
+		history, err := h.prices.History(ctx, p.ID)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+			h.renderPartial(w, r, "product_form.gohtml", data)
+			return
+		}
+		data["Prices"] = recentPrices(history)
 	}
 
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
@@ -529,4 +536,56 @@ func (h *WebHandler) ProductCodesRemove(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	h.renderProductCodes(w, r, productID, "", "", false)
+}
+
+// priceHistoryShown es cuántos precios muestra la sección: el vigente y los
+// anteriores. La historia completa queda en la DB (y en la API).
+const priceHistoryShown = 10
+
+func recentPrices(history []*model.Price) []*model.Price {
+	if len(history) > priceHistoryShown {
+		return history[:priceHistoryShown]
+	}
+	return history
+}
+
+// renderProductPrices redibuja la sección de precio de un producto, con un
+// error (y lo que se escribió) si no se pudo guardar.
+func (h *WebHandler) renderProductPrices(w http.ResponseWriter, r *http.Request, productID int64, errMsg, value string) {
+	history, err := h.prices.History(r.Context(), productID)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	data := map[string]any{"ProductID": productID, "Prices": recentPrices(history),
+		"PriceError": errMsg, "PriceValue": value}
+	h.renderPartial(w, r, "product_prices.gohtml", data)
+}
+
+// ProductPricesSet handles POST /products/{id}/prices. Se guarda al momento,
+// sin esperar al "Guardar" del producto, y rige desde ya (F-03).
+func (h *WebHandler) ProductPricesSet(w http.ResponseWriter, r *http.Request) {
+	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	raw := r.FormValue("unit_price")
+	// Vacío no es "cero": parseFormDecimal lo daría por válido, pero un precio
+	// en blanco es un error de carga.
+	unitPrice, ok := parseFormDecimal(raw)
+	if !ok || strings.TrimSpace(raw) == "" {
+		h.renderProductPrices(w, r, productID, h.errMsg(r, model.ErrInvalidPrice), raw)
+		return
+	}
+	if _, err := h.prices.Set(r.Context(), productID, unitPrice); err != nil {
+		// Un producto que no existe no tiene sección que redibujar.
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			h.actionError(w, r, err)
+			return
+		}
+		h.renderProductPrices(w, r, productID, h.errMsg(r, err), raw)
+		return
+	}
+	h.renderProductPrices(w, r, productID, "", "")
 }

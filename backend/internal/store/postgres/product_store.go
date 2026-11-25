@@ -27,20 +27,33 @@ func NewProductStore(db DBTX) *ProductStore {
 // productSelect es el SELECT de todas las lecturas. Trae además los nombres de
 // la marca y el proveedor (LEFT JOIN: son opcionales) y el de la categoría
 // (JOIN: es obligatoria). Una description NULL vuelve como "".
+//
+// El precio vigente (F-03) sale de un LATERAL: el último de prices, con el
+// índice (product_id, valid_from DESC). Postgres lo calcula solo para las
+// filas que devuelve: medido con el catálogo real (64.602 productos, 3
+// precios cada uno), la lista de 50 pasa de 0,14 a 0,40 ms.
 const productSelect = `
 	SELECT p.id, p.sku, p.name, COALESCE(p.description, ''),
 	       p.brand_id, p.category_id, p.measure_unit, p.sale_type,
 	       p.controls_batches, p.reorder_point, p.max_stock, p.margin_percent,
 	       p.preferred_supplier_id, p.is_consignment, p.is_active,
 	       p.created_at, p.updated_at,
-	       COALESCE(b.name, ''), c.name, COALESCE(s.name, '')
+	       COALESCE(b.name, ''), c.name, COALESCE(s.name, ''),
+	       cp.unit_price
 	FROM products p
 	LEFT JOIN brands b ON b.id = p.brand_id
 	JOIN categories c ON c.id = p.category_id
-	LEFT JOIN suppliers s ON s.id = p.preferred_supplier_id`
+	LEFT JOIN suppliers s ON s.id = p.preferred_supplier_id
+	LEFT JOIN LATERAL (
+	    SELECT pr.unit_price FROM prices pr
+	    WHERE pr.product_id = p.id
+	    ORDER BY pr.valid_from DESC
+	    LIMIT 1
+	) cp ON true`
 
 // scanProduct lee una fila de productSelect. Los punteros (brand_id,
-// max_stock, preferred_supplier_id) quedan en nil si la columna es NULL.
+// max_stock, preferred_supplier_id, el precio vigente) quedan en nil si la
+// columna es NULL.
 func scanProduct(row rowScanner) (*model.Product, error) {
 	p := new(model.Product)
 	err := row.Scan(&p.ID, &p.SKU, &p.Name, &p.Description,
@@ -48,7 +61,8 @@ func scanProduct(row rowScanner) (*model.Product, error) {
 		&p.ControlsBatches, &p.ReorderPoint, &p.MaxStock, &p.MarginPercent,
 		&p.PreferredSupplierID, &p.IsConsignment, &p.IsActive,
 		&p.CreatedAt, &p.UpdatedAt,
-		&p.BrandName, &p.CategoryName, &p.SupplierName)
+		&p.BrandName, &p.CategoryName, &p.SupplierName,
+		&p.CurrentPrice)
 	if err != nil {
 		return nil, err
 	}

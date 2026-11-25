@@ -200,6 +200,8 @@ CHECK: `pack_id <> component_id`. Index: `(pack_id)`.
 
 Constraint: `UNIQUE (product_id, valid_from)` — no overlapping vigencias. Index `(product_id, valid_from DESC)` for "current price".
 
+Rows are only appended (F-03): a new price gets `valid_from = clock_timestamp()` and the current price is the latest `valid_from`. Product reads get it with `LEFT JOIN LATERAL (... ORDER BY valid_from DESC LIMIT 1)`, which Postgres runs only for the rows it returns (measured on the real catalog, 64,602 products with 3 prices each: the 50-row list goes from 0.14 to 0.40 ms). No future prices exist yet, so the reads do not filter `valid_from <= now()`.
+
 `product_costs`:
 | Column | Type | Constraints | Description |
 |---|---|---|---|
@@ -493,6 +495,8 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > Required actions logged: price/cost changes, stock overrides, voided sales, cash discrepancies (**NFR-03**).
+>
+> Written today: price changes (F-03, `table_name = 'prices'`, `action = 'INSERT'`, `new_data` = the price). `user_id` stays `NULL` until there is a login (F-13).
 
 ### 4.25 `app_settings` — global business configuration
 

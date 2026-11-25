@@ -91,12 +91,23 @@
     row.querySelector('[name=quantity]').focus();
   }
 
-  // Los paneles que salen de un renglón (alta rápida, agregar código)
-  // recuerdan qué renglón los abrió, para elegir ahí el producto.
+  // Los paneles que salen de un renglón (alta, agregar código) recuerdan qué
+  // renglón los abrió, para elegir ahí el producto. Su buscador queda marcado
+  // (data-modal-return): si el panel se cierra sin elegir nada, closeModal
+  // vuelve ahí.
   let purchasePanelRow = null;
   function purchaseOpenPanel(button, url, values) {
     purchasePanelRow = button.closest('[data-purchase-line]');
+    purchaseClearModalReturn();
+    purchasePanelRow.querySelector('[name=product_q]').setAttribute('data-modal-return', '');
     htmx.ajax('GET', url, { target: '#form-modal', swap: 'innerHTML', values: values });
+  }
+
+  // Con el producto elegido el cursor va a la cantidad: la marca ya no sirve.
+  function purchaseClearModalReturn() {
+    document.querySelectorAll('[data-modal-return]').forEach(function (el) {
+      el.removeAttribute('data-modal-return');
+    });
   }
 
   // Alta de producto (el formulario de Productos), con lo escrito en el
@@ -137,6 +148,7 @@
   document.body.addEventListener('purchaseProductChosen', function (e) {
     const row = purchasePanelRow;
     purchasePanelRow = null;
+    purchaseClearModalReturn();
     if (row && row.isConnected) purchaseSetProduct(row, e.detail);
   });
 

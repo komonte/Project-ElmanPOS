@@ -194,8 +194,10 @@ func TestRenderPurchaseForm(t *testing.T) {
 
 	t.Run("product options", func(t *testing.T) {
 		html := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "que",
-			"Products": []*model.Product{{ID: 3, SKU: "000003", Name: "QUESO", ControlsBatches: true}}})
-		for _, s := range []string{`data-id="3"`, `data-name="QUESO"`, `data-batches="true"`, "con lote"} {
+			"Products": []*model.Product{{ID: 3, SKU: "000003", Name: "QUESO", ControlsBatches: true, ShelfLifeDays: new(21)},
+				{ID: 4, SKU: "000004", Name: "QUESO RALLADO"}}})
+		for _, s := range []string{`data-id="3"`, `data-name="QUESO"`, `data-batches="true"`, `data-shelf-life="21"`,
+			`data-shelf-life=""`, "con lote"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
@@ -283,7 +285,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}})
 		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
-			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign", "function purchaseUseExisting"} {
+			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign", "function purchaseUseExisting", "function purchaseExpiryFrom"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}

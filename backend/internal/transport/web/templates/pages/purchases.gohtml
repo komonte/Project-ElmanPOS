@@ -48,23 +48,45 @@
 
   // Elegir un producto del buscador.
   function purchasePickProduct(button) {
-    purchaseSetProduct(button.closest('[data-purchase-line]'), {
+    purchaseSetProduct(button.closest('[data-purchase-line]'), purchaseProductFrom(button));
+  }
+
+  // Los datos de un producto en un botón (buscador, "usar ese producto").
+  function purchaseProductFrom(button) {
+    return {
       id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
-    });
+      shelf_life: button.dataset.shelfLife ? Number(button.dataset.shelfLife) : null,
+    };
+  }
+
+  // Hoy + días, como "AAAA-MM-DD" con la fecha de esta PC (la del almacén).
+  function purchaseExpiryFrom(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
   // Deja un producto elegido en un renglón: copia el id y el nombre, muestra
   // lote y vencimiento solo si controla lotes, cierra la lista y pasa a la
-  // cantidad. Lo usan el buscador y el alta rápida.
+  // cantidad. Lo usan el buscador, el alta y "agregar código".
+  //
+  // Con días de vida (shelf_life) precarga el vencimiento: hoy + días. Solo
+  // si está vacío o si lo había precargado otro producto (se cambió de
+  // producto): un vencimiento escrito a mano no se toca.
   function purchaseSetProduct(row, product) {
     row.querySelector('[name=product_id]').value = product.id;
     row.querySelector('[name=product_q]').value = product.name;
     row.querySelector('[name=batches]').value = product.batches ? '1' : '';
     row.querySelector('[data-batch-fields]').hidden = !product.batches;
+    const expiry = row.querySelector('[name=expiry_date]');
     if (!product.batches) {
       row.querySelector('[name=batch_number]').value = '';
-      row.querySelector('[name=expiry_date]').value = '';
+      expiry.value = '';
+    } else if (expiry.value === '' || expiry.value === row.dataset.autoExpiry) {
+      expiry.value = product.shelf_life ? purchaseExpiryFrom(product.shelf_life) : '';
     }
+    row.dataset.autoExpiry = expiry.value;
     row.querySelector('ul[role=listbox]').replaceChildren();
     row.querySelector('[name=quantity]').focus();
   }
@@ -106,11 +128,7 @@
     const row = purchasePanelRow;
     purchasePanelRow = null;
     closeModal();
-    if (row && row.isConnected) {
-      purchaseSetProduct(row, {
-        id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
-      });
-    }
+    if (row && row.isConnected) purchaseSetProduct(row, purchaseProductFrom(button));
   }
 
   // El servidor avisa qué producto elegir (HX-Trigger) y el panel se cierra

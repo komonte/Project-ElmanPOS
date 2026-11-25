@@ -6,6 +6,7 @@
 {{- range .Products}}
 <li role="option">
   <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}"
+          data-shelf-life="{{with .ShelfLifeDays}}{{.}}{{end}}"
           onclick="purchasePickProduct(this)"
           class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
     {{.Name}} <span class="text-sm text-muted">· {{.SKU}}{{if .ControlsBatches}} · {{t "purchase.controls_batches"}}{{end}}</span>

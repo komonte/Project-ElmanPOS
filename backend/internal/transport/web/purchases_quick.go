@@ -88,10 +88,11 @@ func (h *WebHandler) PurchasesQuickProductCreate(w http.ResponseWriter, r *http.
 
 // productChosenTrigger arma el header HX-Trigger que elige un producto en el
 // renglón que lo pidió (producto creado, o al que se le agregó el código).
-// Los mismos datos que un resultado del buscador (purchasePickProduct).
+// Los mismos datos que un resultado del buscador (purchasePickProduct);
+// shelf_life es null sin días de vida.
 func productChosenTrigger(p *model.Product) (string, error) {
 	b, err := json.Marshal(map[string]any{"purchaseProductChosen": map[string]any{
-		"id": p.ID, "name": p.Name, "batches": p.ControlsBatches}})
+		"id": p.ID, "name": p.Name, "batches": p.ControlsBatches, "shelf_life": p.ShelfLifeDays}})
 	return string(b), err
 }
 

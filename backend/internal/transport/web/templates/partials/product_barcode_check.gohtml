@@ -11,6 +11,7 @@
   {{if .ForPurchase}}
   {{with .Owner}}
   <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}"
+          data-shelf-life="{{with .ShelfLifeDays}}{{.}}{{end}}"
           onclick="purchaseUseExisting(this)" class="btn-secondary">{{t "product.barcode_exists_use"}}</button>
   {{end}}
   {{else if .OwnerID}}

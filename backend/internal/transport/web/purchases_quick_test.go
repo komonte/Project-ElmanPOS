@@ -29,13 +29,19 @@ func TestQuickProductPrefill(t *testing.T) {
 }
 
 func TestProductChosenTrigger(t *testing.T) {
-	got, err := productChosenTrigger(&model.Product{ID: 42, Name: `QUESO "CREMOSO"`, ControlsBatches: true})
+	got, err := productChosenTrigger(&model.Product{ID: 42, Name: `QUESO "CREMOSO"`, ControlsBatches: true,
+		ShelfLifeDays: new(21)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"purchaseProductChosen":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\""}}`
+	want := `{"purchaseProductChosen":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\"","shelf_life":21}}`
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)
+	}
+	// Sin días de vida: null (no se precarga el vencimiento).
+	got, _ = productChosenTrigger(&model.Product{ID: 1, Name: "SODA"})
+	if !strings.Contains(got, `"shelf_life":null`) {
+		t.Errorf("no shelf life: got %s", got)
 	}
 }
 
@@ -105,10 +111,10 @@ func TestRenderProductFormForPurchase(t *testing.T) {
 	})
 
 	t.Run("barcode taken: use it from a purchase, edit it from products", func(t *testing.T) {
-		owner := &model.Product{ID: 3, Name: "MORTADELA", ControlsBatches: true}
+		owner := &model.Product{ID: 3, Name: "MORTADELA", ControlsBatches: true, ShelfLifeDays: new(21)}
 		use := render(t, "product_barcode_check.gohtml", map[string]any{"ForPurchase": true,
 			"Message": "Ya es de MORTADELA", "OwnerID": int64(3), "Owner": owner})
-		for _, s := range []string{`data-id="3"`, `data-name="MORTADELA"`, `data-batches="true"`,
+		for _, s := range []string{`data-id="3"`, `data-name="MORTADELA"`, `data-batches="true"`, `data-shelf-life="21"`,
 			"purchaseUseExisting(this)", "Usar ese producto en el renglón"} {
 			if !strings.Contains(use, s) {
 				t.Errorf("purchase: missing %q", s)

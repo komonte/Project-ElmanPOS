@@ -62,6 +62,9 @@ var (
 	ErrSessionNotOpen         = conflictError("cashier session is not open")
 	ErrSeveralActiveRegisters = conflictError("there is more than one active cash register in the store")
 
+	// Ventas (F-08): solo se anula una venta completada, una vez.
+	ErrSaleNotCompleted = conflictError("sale is not completed")
+
 	// Saldos (02 4.13): el stock de un local nunca queda negativo.
 	ErrNegativeStock = conflictError("stock cannot go below zero")
 )

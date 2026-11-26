@@ -144,6 +144,28 @@ func (s *BatchStore) TakeFIFO(ctx context.Context, productID int64, qty decimal.
 	return takes, left, nil
 }
 
+// Restore devuelve cantidad a un lote del que salió (F-08, anular una
+// venta): suma a lo que queda, no a lo que entró, y el lote deja de estar
+// consumido. Quien llama lo trabó antes (TakeFIFO lo hace al vender, y al
+// anular se traba el stock del producto). ErrNotFound si no existe.
+//
+// Si devolviera más de lo que entró, el CHECK de la DB lo rechaza: es un
+// error del programa (solo se devuelve lo que salió).
+func (s *BatchStore) Restore(ctx context.Context, id int64, qty decimal.Decimal) (*model.ProductBatch, error) {
+	got, err := scanBatch(s.db.QueryRowContext(ctx, `
+		UPDATE product_batches
+		SET remaining_quantity = remaining_quantity + $2, is_consumed = FALSE
+		WHERE id = $1
+		RETURNING `+batchColumns+`;`, id, qty))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
+		return nil, err
+	}
+	return got, nil
+}
+
 // OpenBatches devuelve los lotes de un producto que todavía tienen
 // mercadería, en orden FIFO (el que vence antes primero; sin vencimiento al
 // final). Vacía, no nil, si no tiene. Para elegir de qué lote sale una salida

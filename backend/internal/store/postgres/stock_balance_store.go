@@ -107,11 +107,16 @@ func (s *StockBalanceStore) LockOnHand(ctx context.Context, productID int64) (de
 }
 
 // Add suma qty al saldo del producto en un local y devuelve el saldo nuevo.
-// Si todavía no hay fila (primera vez que entra stock ahí), la crea. Solo
-// para sumar: las salidas (ventas, mermas) van a tener su propio método, que
-// revise que no quede negativo.
+// Si todavía no hay fila (primera vez que entra stock ahí), la crea. qty
+// puede ser negativa (el ajuste de un conteo que encontró menos).
 //   - ErrInvalidReference: el producto o el local no existen.
+//   - ErrNegativeStock: el saldo quedaría negativo (CHECK quantity >= 0). Quien
+//     resta lo revisa antes con el stock trabado (LockOnHand) para dar un
+//     mensaje claro; esto es la red de la DB.
 func (s *StockBalanceStore) Add(ctx context.Context, productID, storeID int64, qty decimal.Decimal) (decimal.Decimal, error) {
+	if qty.IsNegative() {
+		return s.subtract(ctx, productID, storeID, qty)
+	}
 	var balance decimal.Decimal
 	err := s.db.QueryRowContext(ctx, `
 		INSERT INTO stock_balances (product_id, store_id, quantity)
@@ -122,6 +127,25 @@ func (s *StockBalanceStore) Add(ctx context.Context, productID, storeID int64, q
 	if err != nil {
 		if isForeignKeyViolation(err) {
 			return decimal.Zero, store.ErrInvalidReference
+		}
+		return decimal.Zero, err
+	}
+	return balance, nil
+}
+
+// subtract resta del saldo con un UPDATE: el INSERT ... ON CONFLICT de Add no
+// sirve para restar, porque Postgres revisa el CHECK (quantity >= 0) sobre la
+// fila que intenta insertar (la cantidad negativa) antes de ver que ya existe.
+// Sin fila no hay de dónde restar: 0 menos algo es negativo.
+func (s *StockBalanceStore) subtract(ctx context.Context, productID, storeID int64, qty decimal.Decimal) (decimal.Decimal, error) {
+	var balance decimal.Decimal
+	err := s.db.QueryRowContext(ctx, `
+		UPDATE stock_balances SET quantity = quantity + $3
+		WHERE product_id = $1 AND store_id = $2
+		RETURNING quantity;`, productID, storeID, qty).Scan(&balance)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || isCheckViolation(err) {
+			return decimal.Zero, store.ErrNegativeStock
 		}
 		return decimal.Zero, err
 	}

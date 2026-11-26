@@ -55,6 +55,9 @@ var (
 	// stock y no se toca más.
 	ErrCountDraftExists = conflictError("there is already a stock count in progress")
 	ErrCountNotDraft    = conflictError("stock count is already confirmed")
+
+	// Saldos (02 4.13): el stock de un local nunca queda negativo.
+	ErrNegativeStock = conflictError("stock cannot go below zero")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

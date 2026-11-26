@@ -221,3 +221,34 @@ func TestStockBalanceStore_OnHandAt(t *testing.T) {
 		t.Errorf("with balance: got %s, %v; want 2.5", got, err)
 	}
 }
+
+// Add con cantidad negativa resta; no deja el saldo negativo ni resta de un
+// saldo que no existe.
+func TestStockBalanceStore_AddNegative(t *testing.T) {
+	f := newProductFixture(t)
+	balances := postgres.NewStockBalanceStore(f.tx)
+	p := f.create(t, "TEST-SB-10", "SALDO RESTA TEST")
+	storeID := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test resta') RETURNING id;`)
+
+	err := f.failing(t, func() error { _, err := balances.Add(f.ctx, p.ID, storeID, decimal.NewFromInt(-1)); return err })
+	if !errors.Is(err, store.ErrNegativeStock) {
+		t.Errorf("without balance: got %v, want %v", err, store.ErrNegativeStock)
+	}
+	if _, err := balances.Add(f.ctx, p.ID, storeID, decimal.NewFromInt(10)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := balances.Add(f.ctx, p.ID, storeID, decimal.RequireFromString("-3.5"))
+	if err != nil || !got.Equal(decimal.RequireFromString("6.5")) {
+		t.Errorf("subtract: got %s, %v; want 6.5", got, err)
+	}
+	err = f.failing(t, func() error { _, err := balances.Add(f.ctx, p.ID, storeID, decimal.NewFromInt(-7)); return err })
+	if !errors.Is(err, store.ErrNegativeStock) || !errors.Is(err, store.ErrConflict) {
+		t.Errorf("below zero: got %v, want %v", err, store.ErrNegativeStock)
+	}
+	if got, _ := balances.OnHandAt(f.ctx, p.ID, storeID); !got.Equal(decimal.RequireFromString("6.5")) {
+		t.Errorf("after failed subtract: got %s, want 6.5", got)
+	}
+	if got, err := balances.Add(f.ctx, p.ID, storeID, decimal.RequireFromString("-6.5")); err != nil || !got.IsZero() {
+		t.Errorf("to zero: got %s, %v", got, err)
+	}
+}

@@ -40,15 +40,32 @@ var (
 	ErrProductInactive  = fmt.Errorf("product is inactive: activate it before counting it: %w", service.ErrConflict)
 	ErrCompositeProduct = fmt.Errorf("a composite product has no stock of its own: count its components: %w", service.ErrValidation)
 	ErrExpiryNotAllowed = fmt.Errorf("this product does not control batches: leave the expiry empty: %w", service.ErrValidation)
+
+	// Al confirmar: la diferencia dejaría el saldo del local en negativo (el
+	// stock bajó por otro lado después de la foto). Se recuenta el producto.
+	ErrNegativeStock = fmt.Errorf("the adjustment would leave negative stock: count the product again: %w", service.ErrConflict)
 )
+
+// auditStore es lo que el caso de uso usa del registro de auditoría.
+type auditStore interface {
+	Create(ctx context.Context, e postgres.AuditEntry) (int64, error)
+}
 
 type Service struct {
 	db postgres.DBTX     // lecturas sueltas
 	tx postgres.TxRunner // todo lo que escribe
+
+	// audit es un campo para que el test pueda simular que falla al final y
+	// ver que la confirmación no deja nada.
+	audit func(tx postgres.DBTX) auditStore
 }
 
 func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
-	return &Service{db: db, tx: tx}
+	return &Service{
+		db:    db,
+		tx:    tx,
+		audit: func(tx postgres.DBTX) auditStore { return postgres.NewAuditLogStore(tx) },
+	}
 }
 
 // Open devuelve el conteo en borrador del local activo, con sus renglones, y
@@ -246,6 +263,196 @@ func (s *Service) Discard(ctx context.Context, countID int64) error {
 		return counts.DeleteDraft(ctx, countID)
 	})
 	return translate(err)
+}
+
+// AutoBatchNumber es el lote que recibe la mercadería que sobra en un conteo
+// de un producto que controla lotes: "I-" (inventario) y el número de conteo.
+// En el inventario inicial es el lote de todo lo que ya estaba en el local.
+func AutoBatchNumber(countID int64) string {
+	return fmt.Sprintf("I-%d", countID)
+}
+
+// Result es lo que devuelve Confirm.
+type Result struct {
+	Count *model.StockCount `json:"count"` // ya confirmado, con sus renglones
+	// Adjusted: cuántos productos tuvieron diferencia (y movimiento). Los
+	// demás coincidían con el sistema.
+	Adjusted int `json:"adjusted"`
+}
+
+// Confirm confirma un conteo en borrador: por cada producto contado cuya
+// cantidad difiere de la foto, un movimiento ADJUSTMENT/COUNT con la
+// diferencia, y el saldo del local se mueve lo mismo. Todo en una
+// transacción, con auditoría; si algo falla no queda nada.
+//
+// Si sobra mercadería (diferencia positiva):
+//   - Con costo escrito, el movimiento va a ese costo y el costo entra al
+//     promedio (F-04), igual que una compra. Sin costo, va al promedio
+//     vigente (0 si el producto nunca tuvo costo) y el promedio no cambia.
+//   - Si el producto controla lotes, lo que sobra va a un lote nuevo
+//     (AutoBatchNumber) con el vencimiento escrito.
+//
+// Si falta (diferencia negativa):
+//   - Si el producto controla lotes, se descuenta de los lotes, primero el
+//     que vence antes; cada lote es un movimiento a su costo. Lo que los
+//     lotes no cubren va sin lote, al promedio vigente.
+//   - Si no, un movimiento al promedio vigente.
+//
+// El costo y el vencimiento de un producto sin diferencia, o al que le falta
+// mercadería, no se usan.
+//
+//   - service.ErrNotFound: el conteo no existe.
+//   - service.ErrConflict: ya está confirmado, o un ajuste dejaría el saldo
+//     negativo (ErrNegativeStock, dice el producto).
+func (s *Service) Confirm(ctx context.Context, countID int64) (*Result, error) {
+	if countID <= 0 {
+		return nil, service.ErrInvalidID
+	}
+	var res Result
+	err := s.tx.InTx(ctx, func(tx postgres.DBTX) error {
+		counts := postgres.NewStockCountStore(tx)
+		if _, err := counts.LockDraft(ctx, countID); err != nil {
+			return err
+		}
+		c, err := counts.GetByID(ctx, countID)
+		if err != nil {
+			return err
+		}
+		for _, it := range c.Items {
+			if it.Difference().IsZero() {
+				continue
+			}
+			if err := adjust(ctx, tx, c, it); err != nil {
+				return fmt.Errorf("%s: %w", it.ProductName, err)
+			}
+			res.Adjusted++
+		}
+
+		confirmed, err := counts.Confirm(ctx, countID)
+		if err != nil {
+			return err
+		}
+		confirmed.Items = c.Items
+		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
+			Table:    "stock_counts",
+			Action:   "UPDATE",
+			RecordID: countID,
+			NewData:  confirmed,
+		})
+		if err != nil {
+			return err
+		}
+		res.Count = confirmed
+		return nil
+	})
+	if err != nil {
+		return nil, translate(err)
+	}
+	return &res, nil
+}
+
+// adjust mueve el stock de un producto del conteo por su diferencia.
+func adjust(ctx context.Context, tx postgres.DBTX, c *model.StockCount, it *model.StockCountItem) error {
+	diff := it.Difference()
+
+	// Primero traba el stock del producto y después lee costo y saldo (igual
+	// que la recepción): una compra del mismo producto espera a este ajuste.
+	balances := postgres.NewStockBalanceStore(tx)
+	onHand, err := balances.LockOnHand(ctx, it.ProductID)
+	if err != nil {
+		return err
+	}
+	atStore, err := balances.OnHandAt(ctx, it.ProductID, c.StoreID)
+	if err != nil {
+		return err
+	}
+	if atStore.Add(diff).IsNegative() {
+		return ErrNegativeStock
+	}
+	prod, err := postgres.NewProductStore(tx).GetByID(ctx, it.ProductID)
+	if err != nil {
+		return err
+	}
+	costStore := postgres.NewCostStore(tx)
+	prev, err := costStore.Current(ctx, it.ProductID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	avg := decimal.Zero
+	if prev != nil {
+		avg = prev.AvgCost
+	}
+
+	movements := postgres.NewStockMovementStore(tx)
+	move := func(batchID *int64, qty, unitCost decimal.Decimal) error {
+		_, err := movements.Create(ctx, &model.StockMovement{
+			ProductID:    it.ProductID,
+			StoreID:      c.StoreID,
+			BatchID:      batchID,
+			MovementType: model.MovementAdjustment,
+			Reason:       model.ReasonCount,
+			Quantity:     qty,
+			UnitCost:     unitCost,
+			CountID:      &c.ID,
+		})
+		return err
+	}
+
+	if diff.IsPositive() {
+		unitCost := avg
+		if it.UnitCost != nil {
+			unitCost = *it.UnitCost
+		}
+		var batchID *int64
+		if prod.ControlsBatches {
+			b, err := postgres.NewBatchStore(tx).Create(ctx, &model.ProductBatch{
+				ProductID:        it.ProductID,
+				BatchNumber:      AutoBatchNumber(c.ID),
+				ExpiryDate:       it.ExpiryDate,
+				OriginalQuantity: diff,
+				UnitCost:         unitCost,
+			})
+			if err != nil {
+				return err
+			}
+			batchID = &b.ID
+		}
+		if err := move(batchID, diff, unitCost); err != nil {
+			return err
+		}
+		if it.UnitCost != nil {
+			// Promedio contra todo el stock de antes del ajuste (onHand).
+			if _, err := costStore.Create(ctx, &model.Cost{
+				ProductID: it.ProductID,
+				UnitCost:  *it.UnitCost,
+				AvgCost:   model.AverageCost(prev, onHand, *it.UnitCost, diff),
+			}); err != nil {
+				return err
+			}
+		}
+	} else {
+		left := diff.Neg()
+		if prod.ControlsBatches {
+			var takes []model.BatchTake
+			takes, left, err = postgres.NewBatchStore(tx).TakeFIFO(ctx, it.ProductID, left)
+			if err != nil {
+				return err
+			}
+			for _, t := range takes {
+				if err := move(&t.BatchID, t.Quantity.Neg(), t.UnitCost); err != nil {
+					return err
+				}
+			}
+		}
+		if left.IsPositive() {
+			if err := move(nil, left.Neg(), avg); err != nil {
+				return err
+			}
+		}
+	}
+
+	_, err = balances.Add(ctx, it.ProductID, c.StoreID, diff)
+	return err
 }
 
 // activeStore es el local donde se cuenta: el único activo.

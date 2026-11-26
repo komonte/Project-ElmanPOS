@@ -100,18 +100,20 @@ func (s *SaleStore) create(ctx context.Context, sale *model.Sale) error {
 }
 
 // Get devuelve una venta con sus renglones (con nombre y tipo de venta del
-// producto, en el orden en que se guardaron), sus pagos y el nombre de la
-// caja: lo que lleva el ticket. No trae los lotes. ErrNotFound si no existe.
+// producto, en el orden en que se guardaron), sus pagos, el nombre de la
+// caja y el nombre y la dirección del local: lo que lleva el ticket. No trae los lotes. ErrNotFound si no existe.
 func (s *SaleStore) Get(ctx context.Context, id int64) (*model.Sale, error) {
 	sale := new(model.Sale)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT s.id, s.cashier_session_id, s.sale_number, s.status, s.subtotal, s.tax_amount,
-		       s.discount_amount, s.total, s.created_at, r.name
+		       s.discount_amount, s.total, s.created_at, r.name, st.name, COALESCE(st.address, '')
 		FROM sales s
 		JOIN cashier_sessions cs ON cs.id = s.cashier_session_id
 		JOIN cash_registers r ON r.id = cs.cash_register_id
+		JOIN stores st ON st.id = r.store_id
 		WHERE s.id = $1;`, id).Scan(&sale.ID, &sale.CashierSessionID, &sale.SaleNumber, &sale.Status,
-		&sale.Subtotal, &sale.TaxAmount, &sale.DiscountAmount, &sale.Total, &sale.CreatedAt, &sale.RegisterName)
+		&sale.Subtotal, &sale.TaxAmount, &sale.DiscountAmount, &sale.Total, &sale.CreatedAt, &sale.RegisterName,
+		&sale.StoreName, &sale.StoreAddress)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound

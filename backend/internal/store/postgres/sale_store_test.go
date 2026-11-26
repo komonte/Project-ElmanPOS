@@ -16,7 +16,7 @@ func d(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 // openSession crea un local con una caja y le abre una sesión.
 func (f *productFixture) openSession(t *testing.T) *model.CashierSession {
 	t.Helper()
-	storeID := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test venta') RETURNING id;`)
+	storeID := f.insertID(t, `INSERT INTO stores (name, address) VALUES ('Local test venta', 'Calle Test 123') RETURNING id;`)
 	r, err := postgres.NewCashRegisterStore(f.tx).Create(f.ctx, storeID, "Caja test")
 	if err != nil {
 		t.Fatalf("fixture register: %v", err)
@@ -163,7 +163,8 @@ func TestSaleStore_CreateAndGet(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	if got.SaleNumber != 1 || !got.Total.Equal(d("2875")) || !got.TaxAmount.Equal(d("498.97")) ||
-		got.RegisterName != "Caja test" || len(got.Items) != 2 || len(got.Payments) != 2 {
+		got.RegisterName != "Caja test" || got.StoreName != "Local test venta" ||
+		got.StoreAddress != "Calle Test 123" || len(got.Items) != 2 || len(got.Payments) != 2 {
 		t.Fatalf("get: got %+v", got)
 	}
 	if it := got.Items[1]; it.ProductName != "MORTADELA VENTA TEST" || !it.Quantity.Equal(d("0.350")) ||
@@ -172,6 +173,16 @@ func TestSaleStore_CreateAndGet(t *testing.T) {
 	}
 	if p := got.Payments[1]; p.Method != model.PaymentTransfer || p.Reference != "op 77" || !p.Amount.Equal(d("1000")) {
 		t.Errorf("get payment: got %+v", p)
+	}
+
+	// Un local sin dirección (NULL) sale con la dirección vacía.
+	if _, err := f.tx.ExecContext(f.ctx, `
+		UPDATE stores SET address = NULL
+		WHERE id = (SELECT store_id FROM cash_registers WHERE id = $1);`, s.CashRegisterID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := sales.Get(f.ctx, sale.ID); err != nil || got.StoreAddress != "" {
+		t.Errorf("get without address: got %q, %v", got.StoreAddress, err)
 	}
 	if _, err := sales.Get(f.ctx, -1); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("get unknown: got %v, want %v", err, store.ErrNotFound)

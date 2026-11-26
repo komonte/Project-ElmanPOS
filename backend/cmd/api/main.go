@@ -32,6 +32,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/users"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -144,7 +145,8 @@ func main() {
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
 	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc, sessionSvc, saleSvc).
-		WithAuth(authSvc, cfg.HTTPS())
+		WithAuth(authSvc, cfg.HTTPS()).
+		WithUsers(users.New(db, postgres.NewTxRunner(db)))
 
 	// Configurar rutas
 	mux := http.NewServeMux()

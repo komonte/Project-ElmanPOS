@@ -1,0 +1,75 @@
+{{/* Alta o edición de un usuario (F-13), en el panel lateral como las
+     marcas. El usuario con que se entra solo se elige en el alta. En la
+     edición de uno mismo el rol no se cambia: el <select> queda
+     deshabilitado y el valor viaja en un campo oculto (un campo
+     deshabilitado no se manda). La contraseña inicial va dos veces. */}}
+{{$editing := and .User .User.ID}}
+<div class="fixed inset-0 z-50 flex justify-end bg-ink/40" onclick="if (event.target === this) closeModal()">
+  <div class="h-full w-full sm:max-w-lg bg-surface border-l-8 border-tag overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
+    <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b-2 border-line">
+      <h2 id="form-title" class="font-display font-bold text-3xl leading-tight">{{if $editing}}{{t "user.edit"}}{{else}}{{t "user.create"}}{{end}}</h2>
+      <button type="button" onclick="closeModal()" aria-label="{{t "common.close"}}"
+              class="-mr-2 px-2 text-3xl leading-none text-muted hover:text-ink">&times;</button>
+    </div>
+    <div class="px-6 py-6">
+      {{if .Error}}
+      <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+      {{end}}
+      <form id="user-form" hx-post="{{if $editing}}/users/{{.User.ID}}/edit{{else}}/users/new{{end}}"
+            hx-target="#form-modal" hx-swap="innerHTML"
+            class="space-y-5">
+        {{if $editing}}
+        <div>
+          <p class="field-label">{{t "user.username"}}</p>
+          <p id="user-username" class="text-lg">{{.User.Username}}</p>
+          <span class="field-hint">{{t "user.username_fixed"}}</span>
+        </div>
+        {{else}}
+        <div>
+          <label for="user-username" class="field-label">{{t "user.username"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+          <input type="text" id="user-username" name="username" autofocus required minlength="3" maxlength="60"
+                 autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="user-username-hint"
+                 value="{{if .User}}{{.User.Username}}{{end}}" class="field">
+          <span id="user-username-hint" class="field-hint">{{t "user.username_hint"}}</span>
+        </div>
+        {{end}}
+        <div>
+          <label for="user-name" class="field-label">{{t "user.name"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+          <input type="text" id="user-name" name="name" required maxlength="120" {{if $editing}}autofocus{{end}}
+                 aria-describedby="user-name-hint" value="{{if .User}}{{.User.Name}}{{end}}" class="field">
+          <span id="user-name-hint" class="field-hint">{{t "user.name_hint"}}</span>
+        </div>
+        <div>
+          <label for="user-role" class="field-label">{{t "user.role"}}</label>
+          {{$role := ""}}{{if .User}}{{$role = .User.Role}}{{end}}
+          <select id="user-role" {{if .Self}}disabled aria-describedby="user-role-self"{{else}}name="role"{{end}} class="field">
+            {{range .Roles}}
+            <option value="{{.}}" {{if eq . $role}}selected{{end}}>{{t (printf "role.%s" .)}}</option>
+            {{end}}
+          </select>
+          {{if .Self}}
+          <input type="hidden" name="role" value="{{$role}}">
+          <span id="user-role-self" class="field-hint">{{t "user.role_self"}}</span>
+          {{end}}
+        </div>
+        {{if not $editing}}
+        <div>
+          <label for="user-password" class="field-label">{{t "user.initial_password"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+          <input type="password" id="user-password" name="password" required minlength="{{.PasswordMinLen}}"
+                 autocomplete="new-password" aria-describedby="user-password-hint" class="field">
+          <span id="user-password-hint" class="field-hint">{{printf (t "user.password_hint") .PasswordMinLen}}</span>
+        </div>
+        <div>
+          <label for="user-password-again" class="field-label">{{t "user.password_again"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+          <input type="password" id="user-password-again" name="password_again" required minlength="{{.PasswordMinLen}}"
+                 autocomplete="new-password" class="field">
+        </div>
+        {{end}}
+        <div class="flex flex-wrap gap-3 pt-4">
+          <button type="submit" class="btn-primary">{{t "common.save"}}</button>
+          <button type="button" onclick="closeModal()" class="btn-secondary">{{t "common.cancel"}}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

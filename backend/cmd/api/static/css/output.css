@@ -584,6 +584,9 @@
   .border-muted {
     border-color: var(--color-muted);
   }
+  .border-stock {
+    border-color: var(--color-stock);
+  }
   .border-tag {
     border-color: var(--color-tag);
   }

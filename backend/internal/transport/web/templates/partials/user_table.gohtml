@@ -1,0 +1,44 @@
+{{/* Usuarios (F-13): activos primero. Los inactivos en gris, para poder
+     reactivarlos. En la fila propia no se ofrece "Desactivar": el server
+     lo rechaza igual. No hay "Eliminar": ventas y movimientos los nombran. */}}
+<table class="min-w-full text-left">
+  <thead class="border-b-2 border-line text-muted">
+    <tr>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "common.name"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "user.username"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "user.role"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "common.status"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "common.actions"}}</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line">
+    {{range .Users}}
+    <tr id="user-{{.ID}}" class="hover:bg-paper {{if not .IsActive}}text-muted{{end}}">
+      <td class="px-3 py-3 font-bold min-w-48">{{.Name}}{{if .Self}} <span class="font-normal text-muted">{{t "user.you"}}</span>{{end}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">{{.Username}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">{{t (printf "role.%s" .Role)}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">
+        <span class="inline-flex items-center gap-2">
+          <span aria-hidden="true" class="size-3 rounded-full {{if .IsActive}}bg-stock{{else}}border-2 border-muted{{end}}"></span>
+          {{if .IsActive}}{{t "common.status_active"}}{{else}}{{t "common.status_inactive"}}{{end}}
+        </span>
+      </td>
+      <td class="px-2 py-2">
+        <div class="flex flex-wrap justify-end">
+        <button hx-get="/users/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML" data-action="edit"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-ink underline-offset-4 hover:underline">{{t "common.edit"}}</button>
+        <button hx-get="/users/{{.ID}}/password" hx-target="#form-modal" hx-swap="innerHTML" data-action="password"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-ink underline-offset-4 hover:underline">{{t "user.password_action"}}</button>
+        {{if .IsActive}}{{if not .Self}}
+        <button hx-patch="/users/{{.ID}}/deactivate" hx-confirm="{{t "user.deactivate_confirm"}}" hx-target="#users-table" hx-swap="innerHTML" data-action="deactivate"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-muted underline-offset-4 hover:underline hover:text-ink">{{t "user.deactivate"}}</button>
+        {{end}}{{else}}
+        <button hx-patch="/users/{{.ID}}/reactivate" hx-target="#users-table" hx-swap="innerHTML" data-action="reactivate"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-stock underline-offset-4 hover:underline">{{t "user.reactivate"}}</button>
+        {{end}}
+        </div>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>

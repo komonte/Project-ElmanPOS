@@ -37,6 +37,7 @@ var pageFiles = []string{
 	"templates/pages/cash_session.gohtml",
 	"templates/pages/login.gohtml",
 	"templates/pages/forbidden.gohtml",
+	"templates/pages/users.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -76,6 +77,9 @@ var partialFiles = []string{
 	"templates/partials/pos_options.gohtml",
 	"templates/partials/pos_result.gohtml",
 	"templates/partials/ticket.gohtml",
+	"templates/partials/user_table.gohtml",
+	"templates/partials/user_form.gohtml",
+	"templates/partials/user_password.gohtml",
 }
 
 type TemplateEngine struct {

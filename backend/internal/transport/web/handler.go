@@ -20,6 +20,8 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 	"github.com/shopspring/decimal"
 )
@@ -40,9 +42,11 @@ type WebHandler struct {
 	purchases     *purchases.Service
 	stockCounts   *stockcounts.Service
 	adjustments   *adjustments.Service
+	sessions      *sessions.Service
+	sales         *sales.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service, adjustments *adjustments.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service, adjustments *adjustments.Service, sessions *sessions.Service, sales *sales.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -57,6 +61,8 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		purchases:     purchases,
 		stockCounts:   stockCounts,
 		adjustments:   adjustments,
+		sessions:      sessions,
+		sales:         sales,
 	}
 }
 
@@ -238,6 +244,33 @@ var errorKeys = []struct {
 	{csv.ErrBareQuote, "error.import_bad_row"},
 	{stockcounts.ErrCodeNotFound, "error.import_code_not_found"},
 	{stockcounts.ErrImportSectorRequired, "error.count_sector_required"},
+	// Caja (F-11).
+	{model.ErrInvalidOpeningAmount, "error.cash_opening_invalid"},
+	{sessions.ErrNoRegister, "error.cash_no_register"},
+	{store.ErrSessionAlreadyOpen, "error.cash_already_open"},
+	{store.ErrSeveralActiveRegisters, "error.cash_several_registers"},
+	// Venta (F-07, F-10). Los de un renglón llevan el producto adelante y la
+	// falta de stock dice cuánto hay (posErrMsg).
+	{sales.ErrRegisterClosed, "error.sale_register_closed"},
+	{sales.ErrUnknownProduct, "error.product_unknown"},
+	{sales.ErrProductInactive, "error.line_product_inactive"},
+	{sales.ErrCompositeProduct, "error.sale_composite"},
+	{sales.ErrNoPrice, "error.sale_no_price"},
+	{model.ErrSaleNoItems, "error.sale_no_items"},
+	{model.ErrSaleItemProduct, "error.sale_no_items"},
+	{model.ErrSaleDuplicateProduct, "error.sale_duplicate_product"},
+	{model.ErrInvalidSaleQuantity, "error.sale_quantity_invalid"},
+	{model.ErrSaleQuantityNotWhole, "error.sale_quantity_not_whole"},
+	{model.ErrSaleWeightTooLarge, "error.sale_weight_too_large"},
+	{model.ErrSaleLineTotalZero, "error.sale_line_zero"},
+	{model.ErrSaleTotalTooLarge, "error.sale_total_too_large"},
+	{model.ErrSaleNoPayments, "error.sale_no_payments"},
+	{model.ErrInvalidPaymentMethod, "error.sale_payment_method"},
+	{model.ErrInvalidPaymentAmount, "error.sale_payment_amount"},
+	{model.ErrPaymentReferenceTooLong, "error.sale_payment_reference"},
+	{model.ErrSaleTwoCashPayments, "error.sale_two_cash"},
+	{model.ErrPaymentsShort, "error.sale_payments_short"},
+	{model.ErrPaymentsOverTotal, "error.sale_payments_over"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

@@ -1,0 +1,442 @@
+{{define "content"}}
+{{/* Vender (F-07, F-10). Datos: .State (sessions.State), .Methods (medios
+     de pago, en orden) y .Error.
+
+     El carrito vive en la página hasta cobrar: cada renglón es una fila con
+     product_id (oculto) y quantity, y cada pago tiene pay_method, pay_amount
+     y pay_ref; todo es de #pos-form (los pagos, que se ven a la derecha, con
+     el atributo form=), que se manda entero a /pos/checkout. Los totales de la pantalla son una cuenta para el cajero:
+     los que valen los calcula el servidor al cobrar. */}}
+<header class="mb-6 flex flex-wrap items-end justify-between gap-4">
+  <h1 class="shelf-title text-5xl">{{t "pos.title"}}</h1>
+  {{with .State}}{{with .Session}}
+  <p class="text-muted">{{printf (t "pos.register_open") $.State.Register.Name}}</p>
+  {{end}}{{end}}
+</header>
+
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+{{end}}
+
+{{with .State}}
+{{if not .Session}}
+<section id="pos-closed" class="p-6 border-2 border-line rounded-md bg-surface max-w-2xl space-y-4">
+  <h2 class="font-display font-bold text-2xl">{{t "pos.closed_title"}}</h2>
+  <p class="text-muted">{{t "pos.closed_hint"}}</p>
+  <a href="/cash" class="btn-primary">{{t "pos.go_open"}}</a>
+</section>
+{{else}}
+<div class="grid gap-6 lg:grid-cols-[1fr_24rem] lg:items-start">
+  {{/* Izquierda: buscador y carrito. */}}
+  <div class="space-y-4 min-w-0">
+    <div class="relative">
+      <label for="pos-scan" class="field-label">{{t "pos.scan"}}</label>
+      <input id="pos-scan" type="search" name="q" autocomplete="off" autofocus
+             placeholder="{{t "pos.scan_placeholder"}}"
+             hx-get="/pos/search" hx-trigger="input changed delay:250ms" hx-target="#pos-options" hx-swap="innerHTML"
+             onkeydown="posScanKey(event, this)"
+             class="field text-2xl py-3 border-ink">
+      <ul id="pos-options" role="listbox" aria-label="{{t "pos.results"}}"
+          class="absolute z-10 left-0 right-0 mt-1 border-2 border-line rounded-md bg-surface empty:hidden max-h-80 overflow-y-auto shadow-[0_6px_24px_rgb(30_42_68/0.15)]"></ul>
+      <p id="pos-scan-msg" role="status" class="mt-1 font-bold text-danger empty:hidden"></p>
+    </div>
+
+    <form id="pos-form" hx-post="/pos/checkout" hx-target="#pos-result" hx-swap="innerHTML"
+          class="p-0 border-2 border-line rounded-md bg-surface overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-paper text-left text-sm text-muted">
+          <tr>
+            <th class="px-3 py-2">{{t "pos.product"}}</th>
+            <th class="px-3 py-2 w-32">{{t "pos.quantity"}}</th>
+            <th class="px-3 py-2 text-right">{{t "pos.unit_price"}}</th>
+            <th class="px-3 py-2 text-right">{{t "pos.line_total"}}</th>
+            <th class="px-3 py-2 w-12"><span class="sr-only">{{t "pos.remove"}}</span></th>
+          </tr>
+        </thead>
+        <tbody id="pos-lines"></tbody>
+      </table>
+      <p id="pos-empty" class="px-3 py-6 text-center text-muted">{{t "pos.empty"}}</p>
+    </form>
+  </div>
+
+  {{/* Derecha: total grande y cobro. */}}
+  <aside class="space-y-4 lg:sticky lg:top-6">
+    <div class="p-4 rounded-md bg-ink text-white">
+      <p class="text-sm uppercase tracking-wide text-white/75">{{t "pos.total"}}</p>
+      <p id="pos-total" class="font-display font-bold text-6xl leading-none tabular text-tag" aria-live="polite">$ 0,00</p>
+      <p id="pos-count" class="mt-1 text-sm text-white/75"></p>
+    </div>
+
+    <section class="p-4 border-2 border-line rounded-md bg-surface space-y-3" aria-labelledby="pos-pay-title">
+      <h2 id="pos-pay-title" class="font-display font-bold text-2xl">{{t "pos.pay"}}</h2>
+      <div class="flex flex-wrap gap-2">
+        {{range $.Methods}}
+        <button type="button" data-method="{{.}}" onclick="posAddPayment(this.dataset.method)"
+                class="btn-secondary px-3 py-1">{{t (printf "pos.method_%s" .)}}</button>
+        {{end}}
+      </div>
+      <div id="pos-payments" class="space-y-2"></div>
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-lg">
+        <dt>{{t "pos.paid"}}</dt><dd id="pos-paid" class="text-right tabular">$ 0,00</dd>
+        <dt id="pos-due-label">{{t "pos.due"}}</dt><dd id="pos-due" class="text-right tabular font-bold">$ 0,00</dd>
+      </dl>
+      <button type="submit" form="pos-form" id="pos-charge" disabled
+              class="btn-primary w-full justify-center text-2xl py-3 disabled:opacity-40 disabled:cursor-not-allowed">{{t "pos.charge"}}</button>
+      <p class="field-hint">{{t "pos.charge_hint"}}</p>
+    </section>
+
+    <div id="pos-result" aria-live="polite"></div>
+  </aside>
+</div>
+
+{{/* Moldes que copia el JavaScript. */}}
+<template id="pos-line-tpl">
+  <tr class="border-t border-line align-top">
+    <td class="px-3 py-2">
+      <input type="hidden" name="product_id">
+      <span data-name class="font-bold"></span>
+      <p data-warn class="text-sm font-bold text-danger" hidden></p>
+    </td>
+    <td class="px-3 py-2">
+      <div class="flex items-center gap-1">
+        <input type="text" name="quantity" autocomplete="off" class="field py-1 tabular text-right"
+               oninput="posRecalc()" onkeydown="posQtyKey(event)">
+        <span data-unit class="text-sm text-muted"></span>
+      </div>
+    </td>
+    <td class="px-3 py-2 text-right tabular whitespace-nowrap" data-price-text></td>
+    <td class="px-3 py-2 text-right tabular font-bold whitespace-nowrap" data-total></td>
+    <td class="px-3 py-2 text-right">
+      <button type="button" onclick="posRemove(this)" aria-label="{{t "pos.remove"}}"
+              class="text-2xl leading-none text-danger hover:text-ink">&times;</button>
+    </td>
+  </tr>
+</template>
+<template id="pos-payment-tpl">
+  <div class="grid grid-cols-[1fr_auto] gap-2 p-2 border-2 border-line rounded-md" data-payment>
+    <input type="hidden" name="pay_method" form="pos-form">
+    <p class="font-bold" data-method-label></p>
+    <button type="button" onclick="posRemovePayment(this)" aria-label="{{t "pos.remove"}}"
+            class="text-2xl leading-none text-danger hover:text-ink">&times;</button>
+    <label class="col-span-2 text-sm"><span data-amount-label></span>
+      <input type="text" name="pay_amount" form="pos-form" inputmode="decimal" autocomplete="off" data-amount
+             class="field tabular text-right text-xl" oninput="posRecalc()" onkeydown="posPayKey(event)">
+    </label>
+    {{/* En efectivo no hay referencia, pero el campo va igual (vacío): los
+         pagos se leen en paralelo. */}}
+    <label class="col-span-2 text-sm" data-ref-box>{{t "pos.reference"}}
+      <input type="text" name="pay_ref" form="pos-form" autocomplete="off" maxlength="120" class="field py-1">
+    </label>
+  </div>
+</template>
+
+<div id="pos-i18n" hidden
+     data-items="{{t "pos.items"}}" data-due="{{t "pos.due"}}" data-change="{{t "pos.change"}}"
+     data-tendered="{{t "pos.tendered"}}" data-amount="{{t "pos.amount"}}"
+     data-not-found="{{t "pos.scan_not_found"}}" data-no-price="{{t "pos.scan_no_price"}}"
+     data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
+     data-ticket="{{t "ticket.title"}}"></div>
+
+<script>
+  const posLang = document.documentElement.lang || 'es';
+  const posText = document.getElementById('pos-i18n').dataset;
+  const posMoneyFmt = new Intl.NumberFormat(posLang === 'es' ? 'es-AR' : 'en-US',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Plata en centavos (enteros: sin errores de redondeo de JavaScript).
+  function posMoney(cents) {
+    const s = posMoneyFmt.format(Math.abs(cents) / 100);
+    return (cents < 0 ? '-' : '') + (posLang === 'es' ? '$ ' + s : '$' + s);
+  }
+
+  // Lee un importe como lo escribe el cajero, igual que el servidor
+  // (parseFormMoney): "10.000" son diez mil. Devuelve centavos, o null.
+  function posParseMoney(s) {
+    s = s.trim().replace(/^\$/, '').trim();
+    const dot = s.lastIndexOf('.'), comma = s.lastIndexOf(',');
+    if (dot >= 0 && comma >= 0) {
+      const thousands = dot > comma ? ',' : '.', dec = dot > comma ? '.' : ',';
+      s = s.split(thousands).join('').replace(dec, '.');
+    } else if (comma >= 0) {
+      s = s.replace(',', '.');
+    } else if (dot >= 0 && (s.split('.').length > 2 || s.length - dot - 1 === 3)) {
+      s = s.split('.').join('');
+    }
+    if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+    return Math.round(Number(s) * 100);
+  }
+
+  // Lee una cantidad (coma o punto decimal, como parseFormDecimal). Devuelve
+  // milésimas, o null.
+  function posParseQty(s) {
+    s = s.trim().replace(',', '.');
+    if (!/^\d+(\.\d{1,3})?$/.test(s)) return null;
+    return Math.round(Number(s) * 1000);
+  }
+
+  function posFormatQty(milli) {
+    let s = (milli / 1000).toString();
+    return posLang === 'es' ? s.replace('.', ',') : s;
+  }
+
+  const posLines = document.getElementById('pos-lines');
+  const posScan = document.getElementById('pos-scan');
+  const posOptions = document.getElementById('pos-options');
+  const posScanMsg = document.getElementById('pos-scan-msg');
+
+  // Enter en el buscador: el lector de códigos lo manda después del código.
+  // Busca al momento y, si hay un solo producto, lo agrega. Si no se puede
+  // (no está, o no tiene precio), avisa y deja lo escrito seleccionado: el
+  // escaneo siguiente lo reemplaza. Con el buscador vacío, Enter pasa al
+  // cobro (efectivo).
+  function posScanKey(e, input) {
+    if (e.key === 'Escape') {
+      posOptions.replaceChildren();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = input.value.trim();
+    if (q === '') {
+      if (posLines.children.length > 0) posAddPayment('CASH');
+      return;
+    }
+    htmx.ajax('GET', '/pos/search', { target: posOptions, swap: 'innerHTML', values: { q: q } }).then(function () {
+      const options = posOptions.querySelectorAll('button[data-id]');
+      if (options.length === 1) {
+        if (options[0].disabled) {
+          posScanMsg.textContent = posText.noPrice.replace('%s', options[0].dataset.name);
+          input.select();
+          return;
+        }
+        posAdd(options[0]);
+        return;
+      }
+      if (options.length === 0) {
+        posScanMsg.textContent = posText.notFound.replace('%s', q);
+        input.select();
+      }
+    });
+  }
+
+  // Agrega un producto al carrito (o suma uno si ya está). Uno por peso pide
+  // los kg: el cursor va a su cantidad.
+  function posAdd(button) {
+    const p = button.dataset;
+    posOptions.replaceChildren();
+    posScan.value = '';
+    posScanMsg.textContent = '';
+    document.getElementById('pos-result').replaceChildren();
+
+    let row = posLines.querySelector('tr[data-id="' + p.id + '"]');
+    if (row) {
+      const qty = row.querySelector('[name=quantity]');
+      if (p.type === 'WEIGHT') {
+        qty.focus();
+        qty.select();
+      } else {
+        const milli = posParseQty(qty.value) || 0;
+        qty.value = posFormatQty(milli + 1000);
+        posScan.focus();
+      }
+      posRecalc();
+      return;
+    }
+    row = document.getElementById('pos-line-tpl').content.firstElementChild.cloneNode(true);
+    row.dataset.id = p.id;
+    row.dataset.type = p.type;
+    row.dataset.price = Math.round(Number(p.price) * 100);
+    row.dataset.stock = Math.round(Number(p.stock) * 1000);
+    row.querySelector('[name=product_id]').value = p.id;
+    row.querySelector('[data-name]').textContent = p.name;
+    const qty = row.querySelector('[name=quantity]');
+    if (p.type === 'WEIGHT') {
+      row.querySelector('[data-unit]').textContent = 'kg';
+      row.querySelector('[data-price-text]').textContent = posMoney(Number(row.dataset.price)) + ' /kg';
+      qty.inputMode = 'decimal';
+      qty.placeholder = '0,000';
+    } else {
+      row.querySelector('[data-price-text]').textContent = posMoney(Number(row.dataset.price));
+      qty.inputMode = 'numeric';
+      qty.value = '1';
+    }
+    posLines.appendChild(row);
+    posRecalc();
+    if (p.type === 'WEIGHT') qty.focus();
+    else posScan.focus();
+  }
+
+  // Enter en una cantidad vuelve al buscador (no cobra).
+  function posQtyKey(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    posScan.focus();
+  }
+
+  function posRemove(button) {
+    button.closest('tr').remove();
+    posRecalc();
+    posScan.focus();
+  }
+
+  // Agrega un pago con lo que falta. Efectivo hay uno solo: si ya está, el
+  // cursor va ahí.
+  function posAddPayment(method) {
+    const box = document.getElementById('pos-payments');
+    if (method === 'CASH') {
+      const cash = box.querySelector('[data-payment][data-method=CASH] [data-amount]');
+      if (cash) {
+        cash.focus();
+        cash.select();
+        return;
+      }
+    }
+    const el = document.getElementById('pos-payment-tpl').content.firstElementChild.cloneNode(true);
+    el.dataset.method = method;
+    el.querySelector('[name=pay_method]').value = method;
+    el.querySelector('[data-method-label]').textContent =
+      document.querySelector('button[data-method="' + method + '"]').textContent;
+    el.querySelector('[data-amount-label]').textContent = method === 'CASH' ? posText.tendered : posText.amount;
+    if (method === 'CASH') el.querySelector('[data-ref-box]').hidden = true;
+    const due = posTotals().due;
+    const amount = el.querySelector('[data-amount]');
+    if (due > 0) amount.value = (due / 100).toFixed(2).replace('.', posLang === 'es' ? ',' : '.');
+    box.appendChild(el);
+    posRecalc();
+    amount.focus();
+    amount.select();
+  }
+
+  function posRemovePayment(button) {
+    button.closest('[data-payment]').remove();
+    posRecalc();
+  }
+
+  // Enter en un monto cobra, si alcanza.
+  function posPayKey(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const charge = document.getElementById('pos-charge');
+    if (!charge.disabled) document.getElementById('pos-form').requestSubmit(charge);
+  }
+
+  // Totales en centavos: total de los renglones (cada uno redondeado, como
+  // el servidor), pagado, lo que falta y el vuelto. ok: se puede cobrar.
+  function posTotals() {
+    let total = 0, linesOk = true;
+    posLines.querySelectorAll('tr').forEach(function (row) {
+      const milli = posParseQty(row.querySelector('[name=quantity]').value);
+      const price = Number(row.dataset.price);
+      let lineTotal = 0;
+      const warn = row.querySelector('[data-warn]');
+      if (milli === null || milli === 0 || (row.dataset.type !== 'WEIGHT' && milli % 1000 !== 0)) {
+        linesOk = false;
+        warn.hidden = true;
+      } else {
+        lineTotal = Math.round(milli * price / 1000);
+        const stock = Number(row.dataset.stock);
+        warn.hidden = milli <= stock;
+        warn.textContent = posText.stockWarn.replace('%s', posFormatQty(stock));
+        if (milli > stock) linesOk = false;
+      }
+      row.querySelector('[data-total]').textContent = lineTotal ? posMoney(lineTotal) : '';
+      total += lineTotal;
+    });
+    let paid = 0, cash = 0, paysOk = true;
+    document.querySelectorAll('#pos-payments [data-payment]').forEach(function (p) {
+      const cents = posParseMoney(p.querySelector('[data-amount]').value);
+      if (cents === null || cents <= 0) {
+        paysOk = false;
+        return;
+      }
+      paid += cents;
+      if (p.dataset.method === 'CASH') cash = cents;
+    });
+    const excess = paid - total;
+    // Solo el efectivo puede pasarse del total.
+    const changeOk = excess <= 0 || (cash > excess);
+    return {
+      total: total, paid: paid, due: Math.max(total - paid, 0), change: Math.max(excess, 0),
+      ok: posLines.children.length > 0 && linesOk && paysOk && total > 0 && paid >= total && changeOk,
+    };
+  }
+
+  // Redibuja totales, lo que falta o el vuelto, y habilita "Cobrar".
+  function posRecalc() {
+    const t = posTotals();
+    const n = posLines.children.length;
+    document.getElementById('pos-empty').hidden = n > 0;
+    document.getElementById('pos-total').textContent = posMoney(t.total);
+    document.getElementById('pos-count').textContent = n > 0 ? posText.items.replace('%d', n) : '';
+    document.getElementById('pos-paid').textContent = posMoney(t.paid);
+    const changing = t.change > 0;
+    document.getElementById('pos-due-label').textContent = changing ? posText.change : posText.due;
+    const due = document.getElementById('pos-due');
+    due.textContent = posMoney(changing ? t.change : t.due);
+    due.classList.toggle('text-2xl', changing);
+    document.getElementById('pos-charge').disabled = !t.ok;
+  }
+
+  // Antes de mandar: frena si no alcanza (por ejemplo, un Enter que envía
+  // el formulario con un pago a medio escribir).
+  document.getElementById('pos-form').addEventListener('htmx:configRequest', function (e) {
+    if (!posTotals().ok) e.preventDefault();
+  });
+
+  // Mientras se cobra, "Cobrar" queda deshabilitado: dos clics no cobran dos
+  // veces.
+  document.getElementById('pos-form').addEventListener('htmx:beforeRequest', function () {
+    document.getElementById('pos-charge').disabled = true;
+  });
+
+  // Cobrada: el carrito y los pagos se vacían y se sigue escaneando. Con
+  // error, todo queda como estaba.
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'pos-result') return;
+    if (e.detail.target.querySelector('[data-sale-done]')) {
+      posLines.replaceChildren();
+      document.getElementById('pos-payments').replaceChildren();
+    }
+    posRecalc();
+    posScan.focus();
+  });
+  document.addEventListener('htmx:afterRequest', function (e) {
+    if (e.detail.elt.id === 'pos-form' && !e.detail.successful) posRecalc();
+  });
+
+  // Imprimir ticket: lo carga en un iframe fuera de la vista y lo imprime
+  // desde ahí, así no se sale de Vender. Al cerrar el diálogo de impresión
+  // se sigue escaneando. Sin JavaScript, el enlace abre el ticket en otra
+  // pestaña.
+  function posPrintTicket(e, href) {
+    e.preventDefault();
+    var frame = document.getElementById('pos-ticket-frame');
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = 'pos-ticket-frame';
+      frame.title = posText.ticket;
+      frame.setAttribute('aria-hidden', 'true');
+      frame.tabIndex = -1;
+      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+      document.body.appendChild(frame);
+    }
+    frame.onload = function () {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      posScan.focus();
+    };
+    frame.src = href;
+  }
+
+  // Con algo en el carrito, salir de la página pide confirmación.
+  window.addEventListener('beforeunload', function (e) {
+    if (posLines.children.length === 0) return;
+    e.preventDefault();
+    e.returnValue = posText.leave;
+  });
+
+  posRecalc();
+</script>
+{{end}}
+{{end}}
+{{end}}

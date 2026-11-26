@@ -389,14 +389,14 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | cash_register_id | BIGINT | FK → cash_registers.id, NOT NULL | |
-| opened_by | BIGINT | FK → users.id, NOT NULL | |
+| opened_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13, migration `0017`). |
 | opening_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Initial cash float. |
 | closing_amount | NUMERIC(12,2) | NULL | Declared cash at close. |
 | status | session_status | NOT NULL DEFAULT 'OPEN' | |
 | opened_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | closed_at | TIMESTAMPTZ | NULL | |
 
-> A sale requires an `OPEN` session (**BR-02**).
+> A sale requires an `OPEN` session (**BR-02**). At most one `OPEN` session per register: the partial unique index `uq_cashier_sessions_one_open` on `(cash_register_id) WHERE status = 'OPEN'` (migration `0017`) rejects a second one even when two screens open the same register at the same time.
 
 ### 4.16 `sales`
 
@@ -404,16 +404,16 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | cashier_session_id | BIGINT | FK → cashier_sessions.id, NOT NULL | |
-| sale_number | INTEGER | NOT NULL | Sequential per register. |
+| sale_number | INTEGER | NOT NULL | Sequential **per register**: it continues from session to session and never repeats (next = highest number of the register's sales + 1, read with the session locked). |
 | status | sale_status | NOT NULL DEFAULT 'COMPLETED' | |
-| subtotal | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | |
-| tax_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | |
+| subtotal | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | `Σ quantity × unit_price`, each line rounded to cents. **IVA included.** |
+| tax_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | The IVA already **inside** `subtotal` (`Σ line_total × rate / (100 + rate)`, summed unrounded and rounded once). Informative: it is not added to the total. |
 | discount_amount | NUMERIC(12,2) | NOT NULL DEFAULT 0, CHECK (>= 0) | |
-| total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal + tax_amount - discount_amount`. |
+| total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal − discount_amount` (prices include IVA; no discounts yet, so `total = subtotal`). |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-UNIQUE `(cashier_session_id, sale_number)`.
+UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "never repeats per register" is kept by the app (one `OPEN` session per register, and the number is read with that session locked).
 
 ### 4.17 `sale_items`
 
@@ -439,7 +439,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | unit_cost | NUMERIC(12,2) | NOT NULL | Batch's cost snapshot → exact COGS. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-> A single `sale_items` row may span batches (e.g. 4.450 kg from batch A + 0.050 kg from batch B). This table is the authoritative allocation; every allocation has a matching `stock_movements` row with the same `batch_id` (§6).
+> A single `sale_items` row may span batches (e.g. 4.450 kg from batch A + 0.050 kg from batch B). This table is the authoritative allocation; every allocation has a matching `stock_movements` row with the same `batch_id` (§6). Not the other way around: what the batches do not cover (stock from before the product controlled batches, or an initial count without a batch) goes out as a `SALE` movement **without** `batch_id`, at the current average cost, with no row here.
 
 ### 4.19 `payments`
 
@@ -452,7 +452,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | reference | VARCHAR(120) | NULL | Transfer/QR voucher number, card suffix. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-> Multiple `payments` rows per sale allow split payment (AR$2,000 cash + AR$3,000 transfer) with `SUM(payments.amount) = sales.total` enforced at application level.
+> Multiple `payments` rows per sale allow split payment (AR$2,000 cash + AR$3,000 transfer) with `SUM(payments.amount) = sales.total` enforced at application level. Only cash may go over the total: the cash row stores the amount **applied** to the sale; what the customer handed over and the change are not stored (MVP).
 
 ### 4.20 `cash_audits` — blind close / arqueo
 
@@ -538,6 +538,14 @@ UNIQUE `(cashier_session_id, sale_number)`.
 
 > Avoids hardcoding business thresholds in code. Example: the "expiring soon" report reads `expiry_warning_days` from here instead of a constant.
 
+Keys in use:
+
+| Key | Value | Set by | Read by |
+|---|---|---|---|
+| `expiry_warning_days` | days, e.g. `30` | seed | R-02 (not built yet) |
+| `currency` | `"ARS"` | seed | nothing yet |
+| `max_sale_weight_kg` | kg, `50` | migration `0017` (not the seed: a database with the real catalog needs it too) | F-10: a heavier sale line is rejected as a typing mistake. Missing key → 50. |
+
 ### 4.26 `stock_adjustments` — known exits
 
 One row per known exit (F-09b, migration `0016`): goods that left without being sold. Its movements (`ADJUSTMENT`, negative, one per batch or one without batch) reference it through `stock_movements.adjustment_id`.
@@ -567,7 +575,8 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 | stock_movements | (product_id, created_at) | Ledger per product. |
 | stock_movements | (batch_id) | Batch history. |
 | stock_movements | (store_id, created_at) | Store-level reports. |
-| sales | (cashier_session_id, sale_number) | Receipt numbering. |
+| cashier_sessions | uq_cashier_sessions_one_open: UNIQUE(cash_register_id) WHERE status = 'OPEN' | One open session per register (**BR-02**, migration `0017`). |
+| sales | (cashier_session_id, sale_number) | Receipt numbering (UNIQUE per session; per register by the app, §4.16). |
 | sales | (created_at) | Daily sales reports. |
 | sale_items | (product_id) | Top-products / ABC analysis. |
 | prices / product_costs | (product_id, valid_from DESC) | Current + historical price. |
@@ -577,7 +586,7 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 | stock_adjustments | (product_id, created_at) | A product's known exits. |
 | stock_movements | (adjustment_id) WHERE NOT NULL | A known exit's movements. |
 | products | (preferred_supplier_id) | Replenishment grouped by preferred supplier. |
-| app_settings | UNIQUE(key) | Config lookup. |
+| app_settings | UNIQUE(key) | Config lookup (`expiry_warning_days`, `max_sale_weight_kg`, §4.25). |
 | taxes | idx_taxes_name_unique_lower | Case-insensitive unique name |
 
 ---
@@ -585,14 +594,14 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 ## 6. Key Transactions (sketches; detailed in `03-flows-and-transactions.md`)
 
 ### 6.1 Sale (atomic, BR-04)
-1. Validate `OPEN` cashier session (**BR-02**).
-2. Lock affected `stock_balances` rows (`SELECT ... FOR UPDATE`) — prevents negative stock under concurrency.
-3. FIFO-allocate from `product_batches`; insert `sale_item_batches` (one per batch touched).
-4. Insert `sale_items` with price/cost **snapshots** (**BR-03**).
-5. Insert `payments` (one per method; split allowed).
-6. Insert `sales` header.
-7. Insert one `stock_movements` (type `SALE`, negative) **per batch allocation**, each with its `batch_id`.
-8. Decrement `remaining_quantity` per batch; decrement `stock_balances`.
+1. Lock the `OPEN` session of the only register of the active store (**BR-02**).
+2. Lock affected products and `stock_balances` rows in ascending `product_id` order — prevents negative stock and deadlocks under concurrency.
+3. Price each line (current price + its category's IVA, **snapshots**, **BR-03**), check stock, compute totals and settle payments.
+4. Read the next `sale_number` of the register.
+5. FIFO-allocate from `product_batches` (decrement `remaining_quantity`); what the batches do not cover goes out without a batch at the average cost.
+6. Insert the `sales` header **first** (the other rows reference it by FK), then `sale_items`, `sale_item_batches` (one per batch touched) and `payments` (one per method; split allowed).
+7. Insert one `stock_movements` (type `SALE`, negative, `sale_id`) **per batch allocation**, with its `batch_id`, plus one without batch for the uncovered rest.
+8. Decrement `stock_balances`.
 9. `COMMIT`. Any failure → full rollback (**BR-04**).
 
 ### 6.2 Purchase reception

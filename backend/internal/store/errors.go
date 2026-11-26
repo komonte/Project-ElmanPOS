@@ -56,6 +56,12 @@ var (
 	ErrCountDraftExists = conflictError("there is already a stock count in progress")
 	ErrCountNotDraft    = conflictError("stock count is already confirmed")
 
+	// Cajas (F-11, BR-02): una sola sesión abierta por caja, y sin sesión
+	// abierta no se vende. La venta usa la única caja activa del local.
+	ErrSessionAlreadyOpen     = conflictError("cash register already has an open session")
+	ErrSessionNotOpen         = conflictError("cashier session is not open")
+	ErrSeveralActiveRegisters = conflictError("there is more than one active cash register in the store")
+
 	// Saldos (02 4.13): el stock de un local nunca queda negativo.
 	ErrNegativeStock = conflictError("stock cannot go below zero")
 )

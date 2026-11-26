@@ -214,47 +214,55 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-07: Atomic Sale (Core Flow)
 
-- **Actor / Role:** Cashier (`CASHIER`).
-- **Trigger:** Barcode scanned or product searched while a sale is in progress.
+- **Actor / Role:** Cashier (`CASHIER`). Until F-13 there is no login: `performed_by` on the movements stays `NULL`.
+- **Trigger:** Barcode scanned or product searched on the sell screen (`/pos`, "Vender", first in the menu).
 - **Preconditions:**
-  - An `OPEN` cashier session exists for the current register (**BR-02**).
-  - Product `is_active = TRUE` and has a current price in `prices`.
-- **Business flow:**
-  1. Scan / search → resolve `product_codes.code` → product (target **NFR-01**, <100 ms).
-  2. If `sale_type = 'WEIGHT'` → weight mode (F-10); else default `quantity = 1`.
-  3. Line added with `unit_price` snapshot from current `prices`.
-  4. Repeat until cart complete; quantities adjustable; lines removable.
-  5. Cashier selects payment method(s); for `CASH`, change is computed from the tendered amount.
-  6. Confirm → system validates totals and processes atomically.
-  7. On success: receipt prints; cart resets.
-- **DB transaction (single `BEGIN...COMMIT`):**
-  1. `BEGIN;`
-  2. `SELECT id FROM cashier_sessions WHERE id = $1 AND status='OPEN' FOR UPDATE;` (**BR-02** guard).
-  3. `SELECT ... FROM stock_balances WHERE product_id IN (...) AND store_id = $1 FOR UPDATE;` — lock every touched product, in **ascending `product_id` order** to avoid deadlocks (§6).
-  4. For each line, FIFO-allocate: pick `product_batches` with `remaining_quantity > 0` ordered by `(expiry_date, id)`; if the line spans batches, create one allocation per batch.
-     - `INSERT INTO sale_item_batches (sale_item_id, batch_id, quantity, unit_cost);`
-     - `UPDATE product_batches SET remaining_quantity = remaining_quantity - q, is_consumed = (remaining_quantity - q = 0);`
-  5. `INSERT INTO sale_items (product_id, quantity, unit_price, unit_cost, tax_rate)` — price/cost **snapshots** (**BR-03**). For `COMPOSITE` products, instead of one line, expand components: one `sale_item` per component using each component's price and batch allocation.
-  6. `INSERT INTO payments` (one per method; `SUM(payments.amount) = sales.total` validated).
-  7. `INSERT INTO sales (header, subtotal, tax_amount, discount_amount, total, status='COMPLETED');`
-  8. `INSERT INTO stock_movements` (one per batch allocation, type `SALE`, negative, `batch_id` + `sale_id`).
-  9. `UPDATE stock_balances SET quantity = quantity - allocated;`
-  10. `COMMIT;`
-- **Totals convention:** `unit_price` includes IVA. `subtotal = Σ quantity × unit_price`; `tax_amount = Σ line_total × rate/(100+rate)`; `total = subtotal − discount_amount`.
+  - There is **exactly one active store**, it has **exactly one active register**, and that register has an `OPEN` session (**BR-02**, F-11). Otherwise the screen says the register is closed and links to `/cash`; with several stores or registers nothing is guessed (409).
+  - Each product is active, is not `COMPOSITE` (combos: §7) and has a current price in `prices`.
+  - There is enough stock in the store for every line.
+- **Business flow** (`/pos`; the cart lives in the page until charging, the server only searches and charges):
+  1. The search box is always focused for the scanner. Scan / search by name, SKU or barcode (`sales.Search`: active, non-combo products, up to 20, each with its price and the store's stock). Enter with exactly one match adds it; scanning it again adds one more. Unknown code or no price → a notice, nothing added; what was typed stays selected so the next scan replaces it.
+  2. `sale_type = 'WEIGHT'` → the cursor goes to the kg field (F-10); else `quantity = 1`. Quantities are editable and lines removable. A line asking for more than the stock says "There is N in stock" and blocks charging.
+  3. The total shows large. Payment buttons (cash, debit, credit, transfer, QR) each add a payment for what is still due; they can be combined. Cash has "Pays with" and shows the change; a card cannot go over the total. With an empty search box, Enter jumps to cash, and Enter on the amount charges: scan, scan, Enter, "20.000", Enter.
+  4. Charge (`POST /pos/checkout`). On success: "Sale No. X charged" with the change and a "Print receipt" button (below); the cart empties and scanning continues. On error the cart stays as it was, and a line problem names the product ("SODA COLA 1.5L: not enough stock (there is 0).").
+  5. Leaving the page with something in the cart asks first.
+- **Ticket** (`GET /pos/sales/{id}/ticket`, non-fiscal): a standalone 80 mm page without the menu, printed with the browser. "Print receipt" loads it in a hidden iframe and prints it without leaving `/pos`; the same URL reprints. It shows the store's name and address, the register, sale number, date, lines (`0,35 kg × $ 7.000,00/kg` for weight), total, IVA included, payments, "Not a valid invoice", and `VOIDED` when voided (F-08). "Pays with" and the change are not stored: the button passes the cash handed over (`?paid=20000`) and the ticket computes the change against the stored cash payment; a reprint without it shows neither. The page height is measured on load (`size: 80mm auto` is not valid CSS and the browser would fall back to A4/Letter).
+- **DB transaction** (`usecase/sales.Checkout`, one `TxRunner.InTx`). Before it: copy only what the register sends (product, quantity, method, amount, reference: never a price, cost or session) and `Sale.Validate` (at least one line; product set; `quantity > 0` with ≤ 3 decimals; no product twice; at least one payment; valid method; `amount > 0` with 2 decimals; reference ≤ 120 chars; at most one cash payment).
+  1. **Session:** `StoreStore.ActiveID` → `CashRegisterStore.Only` → `CashierSessionStore.OpenFor`, then `LockOpen` (`FOR UPDATE`, re-checks `status = 'OPEN'`: it could have closed in between). No register or no open session → `ErrRegisterClosed` (409).
+  2. Read `app_settings.max_sale_weight_kg` (missing → 50).
+  3. **Lock, then read:** `StockBalanceStore.LockOnHand` for every product, in **ascending `product_id` order** (§6): the product row (`FOR NO KEY UPDATE`) and its balances (`FOR UPDATE`). A missing product → `LineError` (400).
+  4. For each line: read the product (inactive → 409, `COMPOSITE` → 400); check the quantity by sale type (`ValidateQuantity`: whole for units; ≤ `max_sale_weight_kg` for weight); current price (none → 409); stock in the store (`quantity > on hand` → 409 with how much there is); copy `unit_price` and the category's IVA `tax_rate` (**BR-03**). Every line error is a `*LineError` carrying the product name.
+  5. `ComputeTotals` (see "Totals convention"; a line that rounds to $0 → 400) and `SettlePayments` (payments must cover the total; only cash may go over and is reduced to the applied amount, the excess is the change; cash that is entirely surplus → 400).
+  6. `sale_number` = `SaleStore.NextNumber(register)`: highest number of the register's sales + 1, read with the session locked.
+  7. **FIFO** for products with `controls_batches`: `BatchStore.TakeFIFO` locks the batches (`FOR UPDATE`) ordered by `(expiry_date NULLS LAST, created_at, id)` and decrements `remaining_quantity`. What the batches do not cover goes out **without a batch** at the current average cost (`product_costs.avg_cost`; the average does not change). `unit_cost` = weighted cost of what went out.
+  8. `SaleStore.Create`: `INSERT INTO sales` (**header first**: the other rows reference it), then per line `sale_items` and its `sale_item_batches`, then `payments` (empty reference → `NULL`).
+  9. `INSERT INTO stock_movements` (`SALE`, negative, `sale_id`, `store_id`): one per batch allocation with its `batch_id` and cost, plus one without batch for the uncovered rest.
+  10. `stock_balances`: subtract each line's quantity.
+  11. `COMMIT`.
+- **Totals convention:** `unit_price` includes IVA. `subtotal = Σ quantity × unit_price` (each line rounded to cents); `tax_amount = Σ line_total × rate/(100+rate)`, summed unrounded and rounded once (the IVA inside, not added); `total = subtotal − discount_amount` (no discounts yet).
+- **Decisions:**
+  - **One store, one register.** The sale uses the only register of the only active store; with two, the screen will have to say which (and these checks fail until then, on purpose).
+  - **No stock, no sale.** The whole sale is rejected; initial stock is loaded with a count (F-09) first.
+  - **No price, no line**; combos and inactive products are not sold.
+  - **No discounts** (`discount_amount = 0`).
+  - **Change is not stored** (MVP): `payments.amount` for cash is what applies to the sale.
+  - **Sale number per register**, continuing across sessions, never repeated.
+  - Ticket is **non-fiscal** (no AFIP, §7).
 - **Invariants:**
   - `stock_balances.quantity >= 0` for every touched product after commit (never negative).
   - `SUM(payments.amount) = sales.total`.
   - Ledger equals balance: `Σ stock_movements.quantity(product) = stock_balances.quantity(product)`.
-  - Every `sale_item_batches` row has a matching `stock_movements` row with the same `batch_id`.
-- **Errors / rollback:**
-  - Insufficient stock → `ROLLBACK`, nothing persisted, POS shows "insufficient stock".
-  - Payment rejected / validation failed → `ROLLBACK`; cart retained on screen for retry.
-  - Any DB error → `ROLLBACK`; caller sees a generic error; nothing half-written (**BR-04**).
+  - Every `sale_item_batches` row has a matching `stock_movements` row with the same `batch_id` — **but not the other way around**: the uncovered rest has a movement without batch and no `sale_item_batches` row.
+  - For each line, `Σ` of its `SALE` movements = `−quantity`.
+- **Errors / rollback:** any failure → full rollback (**BR-04**); the cart stays on screen for retry.
+  - Validation (quantities, payments, line rounding to $0, a combo, unknown product) → 400.
+  - Register closed, no / several stores or registers, inactive product, no price, not enough stock → 409.
+  - A line's error names the product (`*LineError`; with not enough stock, also how much there is).
+- **Web routes:** `GET /pos` (page), `GET /pos/search?q=` (results with price and stock), `POST /pos/checkout` (form: `product_id`/`quantity` per line, `pay_method`/`pay_amount`/`pay_ref` per payment, amounts written like money: "10.000" is ten thousand; answers `pos_result` with the sale or the error), `GET /pos/sales/{id}/ticket[?paid=]` (ticket; missing → 404). No JSON API yet.
 - **Edge cases:**
-  - **Two registers, same product, simultaneously:** the second blocks on the `FOR UPDATE` row lock, re-reads stock after the first commits; if insufficient → sale rejected. Negative stock is structurally impossible.
+  - **Two registers, same product, simultaneously:** the second blocks on the row locks, re-reads stock after the first commits; if insufficient → sale rejected. Negative stock is structurally impossible.
   - Repeated scan of the same barcode → increments quantity on the existing line.
   - Split payment (AR$2,000 cash + AR$3,000 transfer) → two `payments` rows.
-  - Product priced but inactive → blocked with a clear message.
   - `WEIGHT` line (0.300 kg): FIFO allocates fractional quantities from batches.
   - Undoing a completed sale is **only** possible via F-08 (full void).
 
@@ -375,7 +383,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
   4. Continue with F-07 (atomic processing).
 - **DB transaction:** identical to F-07; `quantity` is `NUMERIC(12,3)`.
 - **Invariants:** `quantity > 0`; unit_price used is the per-kg price (never the per-unit one).
-- **Errors / rollback:** `0` / negative weight rejected; absurd weights flagged (configurable sanity ceiling in `app_settings`).
+- **Errors / rollback:** `0` / negative weight or more than 3 decimals → 400. A weight above `app_settings.max_sale_weight_kg` (default `50`, migration `0017`; missing key → 50) is rejected as a typing mistake (3000 instead of 3.000) → 400; the ceiling changes without a new build.
 - **Edge cases:** Phase 2 — scale-printed GS1 variable-measure barcode (prefix `2`) decoded into weight/price on scan; v1 is manual entry only.
 
 ---
@@ -384,14 +392,17 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-11: Session Open
 
-- **Actor / Role:** Cashier opens their own register session; Admin may open any.
+- **Actor / Role:** Cashier opens their own register session; Admin may open any. Until F-13 there is no login: `opened_by` stays `NULL` (migration `0017`).
 - **Trigger:** Start of shift.
-- **Preconditions:** The register must **not** already have an `OPEN` session.
-- **Business flow:** select register → enter `opening_amount` (cash float) → open.
-- **DB transaction:** `INSERT INTO cashier_sessions (cash_register_id, opened_by, opening_amount, status='OPEN')`.
-- **Invariants:** at most one `OPEN` session per register (**BR-02**).
-- **Errors / rollback:** double-open → rejected with "session already open".
-- **Edge cases:** opening with `0` float is allowed but discouraged; opening float is excluded from sales totals but included in CASH expected value at close.
+- **Preconditions:** exactly one active store with exactly one active register, and that register has **no** `OPEN` session.
+- **Business flow** (Cash → "Open register", `/cash`). The screen shows one of three states:
+  1. **The store has no register** (a database with the real catalog): "Create «Caja 1»" (`POST /cash/register`, `sessions.CreateRegister`). It locks the store row (`StoreStore.Lock`), so two clicks create one register; if one already exists it returns that one.
+  2. **Register closed:** the "Opening cash (float)" field and "Open register" (`POST /cash/open`). The amount is written like money: "15.000" is fifteen thousand; "15000", "1.500,50" and "$ 2.000" work too. A bad amount returns the form with what was typed and the message.
+  3. **Register open:** since when and with how much float, and "Go sell" (`/pos`).
+- **DB transaction** (`sessions.Open`): find the register as above, then `INSERT INTO cashier_sessions (cash_register_id, opened_by NULL, opening_amount, status='OPEN')`.
+- **Invariants:** at most one `OPEN` session per register (**BR-02**): the app checks it, and the partial unique index `uq_cashier_sessions_one_open` makes a second `OPEN` row impossible even when two screens open at once.
+- **Errors / rollback:** double-open → 409 "The register is already open". No / several stores or registers → 409. Bad amount → 400.
+- **Edge cases:** opening with a `0` float is allowed; the opening float is excluded from sales totals but included in CASH expected value at close (F-12).
 
 ### F-12: Session Close / Cash Audit (Arqueo)
 
@@ -491,4 +502,6 @@ The following are intentionally **out of scope** and must not be assumed to work
 - **Promotions / rule-based discounts** — only a header-level `discount_amount` is supported.
 - **AFIP electronic invoicing** — internal tickets only.
 - **GS1 scale barcode decoding** — manual weight entry only (F-10).
+- **Selling combos (`COMPOSITE`)** — F-07 rejects them. Pending: expand the components into one `sale_item` each, with their own price share, stock check and FIFO allocation.
+- **Storing the change / cash tendered** — not stored (F-07); the ticket shows it only right after charging.
 - **Scheduled prices** — a price always takes effect when it is saved (F-03). Supporting a future `valid_from` needs the "current price" reads to filter `valid_from <= now()`.

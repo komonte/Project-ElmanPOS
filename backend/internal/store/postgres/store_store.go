@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
@@ -50,4 +52,17 @@ func (s *StoreStore) ActiveID(ctx context.Context) (int64, error) {
 	default:
 		return 0, store.ErrSeveralActiveStores
 	}
+}
+
+// Lock traba la fila del local hasta que termine la transacción. Sirve para
+// que dos pedidos que crean algo único del local (la primera caja) hagan
+// fila en vez de crear dos. ErrNotFound si el local no existe.
+func (s *StoreStore) Lock(ctx context.Context, id int64) error {
+	var got int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM stores WHERE id = $1 FOR NO KEY UPDATE;`, id).Scan(&got)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrNotFound
+	}
+	return err
 }

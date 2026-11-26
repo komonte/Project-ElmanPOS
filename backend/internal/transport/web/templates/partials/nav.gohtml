@@ -1,6 +1,7 @@
 {{/* Menú lateral oscuro (tinta). En celular pasa a ser una barra arriba con
      los links en una fila que se desliza de costado. Los grupos (Catálogo,
-     y más adelante Inventario y Caja) ordenan el menú a medida que crece. */}}
+     Inventario y Caja) ordenan el menú a medida que crece. "Vender" va
+     primero y destacado. */}}
 <nav class="bg-ink text-white md:w-60 md:shrink-0 md:min-h-screen md:sticky md:top-0 md:self-start md:h-screen flex flex-col">
   <div class="flex items-center justify-between gap-4 px-4 pt-4 pb-3 md:px-5 md:pt-6 md:pb-6">
     <a href="/" class="font-display font-bold text-3xl leading-none tracking-wide">Elman<span class="text-tag">POS</span></a>
@@ -8,6 +9,10 @@
   </div>
 
   <div class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
+      {{/* Vender es lo que más se usa: va primero y se ve distinto, como
+           un cartel de góndola. */}}
+      <a href="/pos" {{if eq .Section "pos"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center justify-center gap-2 px-4 py-2 md:py-3 md:mb-3 rounded-md whitespace-nowrap bg-tag text-ink font-display font-bold uppercase tracking-wide text-xl md:text-2xl border-b-4 {{if eq .Section "pos"}}border-white{{else}}border-tag-deep hover:bg-tag-deep{{end}}">{{t "nav.pos"}}</a>
       <a href="/" {{if eq .Section "dashboard"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "dashboard"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.dashboard"}}</a>
     <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_catalog"}}</p>
@@ -28,6 +33,9 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "counts"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.counts"}}</a>
       <a href="/adjustments" {{if eq .Section "adjustments"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "adjustments"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.adjustments"}}</a>
+    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_cash"}}</p>
+      <a href="/cash" {{if eq .Section "cash"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "cash"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.cash"}}</a>
   </div>
 
   <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>

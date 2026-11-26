@@ -523,7 +523,7 @@ UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migrat
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-> **First login:** the seed users (`admin`, `cajero`, `stock`) have a placeholder hash that matches no password. Set a real one from the store's PC with `make passwd U=admin` (F-13).
+> **First login:** the seed users (`admin`, `cajero`, `stock`) have a placeholder hash that matches no password. Set a real one from the store's PC with `make passwd U=admin` (F-13). After that, an Admin creates, edits, deactivates users and resets passwords on the users page (`/users`). Users are never deleted: deactivating one closes their sessions.
 
 ### 4.24 `audit_log`
 

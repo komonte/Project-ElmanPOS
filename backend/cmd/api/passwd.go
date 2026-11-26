@@ -20,9 +20,9 @@ import (
 
 // Comandos de administración (F-13). Por ahora uno: poner la contraseña de
 // un usuario. Hace falta para el primer ingreso (los usuarios del seed
-// tienen un hash inventado) y para cuando alguien se la olvida, hasta que
-// haya una página de usuarios. Se corre en la PC del almacén, con acceso a
-// la base: quien puede correrlo ya tiene todo.
+// tienen un hash inventado) y cuando ningún admin puede entrar (se olvidó
+// la suya). Lo demás se hace en la página de usuarios. Se corre en la PC
+// del almacén, con acceso a la base: quien puede correrlo ya tiene todo.
 //
 //	elmanpos passwd <usuario>     (o: make passwd U=<usuario>)
 

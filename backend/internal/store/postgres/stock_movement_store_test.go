@@ -40,7 +40,27 @@ func TestStockMovementStore_Create(t *testing.T) {
 	if got.ID == 0 || got.ProductID != p.ID || got.StoreID != m.StoreID || got.MovementType != "PURCHASE" ||
 		!got.Quantity.Equal(decimal.RequireFromString("2.5")) || !got.UnitCost.Equal(decimal.RequireFromString("60")) ||
 		got.PurchaseID == nil || *got.PurchaseID != *m.PurchaseID || got.BatchID != nil ||
-		got.PerformedBy != nil || got.CreatedAt == "" {
+		got.Reason != "" || got.CountID != nil || got.PerformedBy != nil || got.CreatedAt == "" {
+		t.Errorf("create: got %+v", got)
+	}
+}
+
+// El ajuste de un conteo: motivo COUNT, referencia al conteo y cantidad con
+// signo (acá falta mercadería).
+func TestStockMovementStore_CountAdjustment(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-SM-3", "AJUSTE CONTEO TEST")
+	m := f.purchaseMovement(t, p.ID)
+	countID := f.insertID(t, `INSERT INTO stock_counts (store_id) VALUES ($1) RETURNING id;`, m.StoreID)
+	m.MovementType, m.Reason, m.PurchaseID, m.CountID = model.MovementAdjustment, model.ReasonCount, nil, &countID
+	m.Quantity = decimal.RequireFromString("-3")
+
+	got, err := postgres.NewStockMovementStore(f.tx).Create(f.ctx, m)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if got.MovementType != "ADJUSTMENT" || got.Reason != "COUNT" || got.CountID == nil || *got.CountID != countID ||
+		got.PurchaseID != nil || !got.Quantity.Equal(decimal.RequireFromString("-3")) {
 		t.Errorf("create: got %+v", got)
 	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 // BatchStore guarda los lotes (02 4.11). La recepción de compras (F-06) los
-// crea; las ventas (F-07) los van a descontar.
+// crea; los conteos (F-09) y las ventas (F-07) los descuentan (TakeFIFO).
 type BatchStore struct {
 	db DBTX
 }
@@ -80,4 +80,66 @@ func (s *BatchStore) AddQuantity(ctx context.Context, id int64, qty decimal.Deci
 		return nil, err
 	}
 	return got, nil
+}
+
+// TakeFIFO descuenta qty de los lotes con mercadería de un producto, primero
+// el que vence antes (FIFO por vencimiento, P-04). Los lotes sin vencimiento
+// van al final y, entre iguales, el más viejo primero. Un lote que queda en
+// 0 se marca consumido.
+//
+// Devuelve cuánto salió de cada lote y lo que no alcanzó a salir (left): si
+// los lotes suman menos que qty (stock anterior a que el producto controlara
+// lotes, o un inventario inicial sin lote), el resto queda sin lote y quien
+// llama decide qué hacer. qty tiene que ser positiva.
+//
+// Bloquea los lotes que lee (FOR UPDATE) hasta que termine la transacción:
+// otra salida del mismo producto espera y lee lo que quedó.
+func (s *BatchStore) TakeFIFO(ctx context.Context, productID int64, qty decimal.Decimal) (takes []model.BatchTake, left decimal.Decimal, err error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, remaining_quantity, unit_cost
+		FROM product_batches
+		WHERE product_id = $1 AND remaining_quantity > 0
+		ORDER BY expiry_date NULLS LAST, created_at, id
+		FOR UPDATE;`, productID)
+	if err != nil {
+		return nil, decimal.Zero, err
+	}
+	type open struct {
+		id        int64
+		remaining decimal.Decimal
+		unitCost  decimal.Decimal
+	}
+	var batches []open
+	for rows.Next() {
+		var b open
+		if err := rows.Scan(&b.id, &b.remaining, &b.unitCost); err != nil {
+			rows.Close()
+			return nil, decimal.Zero, err
+		}
+		batches = append(batches, b)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, decimal.Zero, err
+	}
+
+	// Se leen todos antes de actualizar: no se puede usar la conexión para
+	// otra consulta mientras las filas siguen abiertas.
+	left = qty
+	for _, b := range batches {
+		if !left.IsPositive() {
+			break
+		}
+		take := decimal.Min(left, b.remaining)
+		if _, err := s.db.ExecContext(ctx, `
+			UPDATE product_batches
+			SET remaining_quantity = remaining_quantity - $2,
+			    is_consumed = (remaining_quantity - $2 = 0)
+			WHERE id = $1;`, b.id, take); err != nil {
+			return nil, decimal.Zero, err
+		}
+		takes = append(takes, model.BatchTake{BatchID: b.id, Quantity: take, UnitCost: b.unitCost})
+		left = left.Sub(take)
+	}
+	return takes, left, nil
 }

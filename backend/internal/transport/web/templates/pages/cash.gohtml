@@ -24,6 +24,7 @@
   <h2 class="font-display font-bold text-2xl">{{printf (t "cash.open_title") .Register.Name}}</h2>
   <p>{{printf (t "cash.open_since") (formatTime .Session.OpenedAt)}}</p>
   <p>{{t "cash.opening_amount"}}: <span class="font-bold tabular">{{money .Session.OpeningAmount}}</span></p>
+  <p class="pt-2"><a href="/pos" class="btn-primary">{{t "cash.go_sell"}}</a></p>
 </section>
 {{else}}
 <section class="p-6 border-2 border-line rounded-md bg-surface max-w-2xl space-y-4">

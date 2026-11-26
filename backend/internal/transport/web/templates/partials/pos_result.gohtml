@@ -1,0 +1,12 @@
+{{/* Resultado de cobrar (PosCheckout). Con .Sale, la venta quedó guardada:
+     data-sale-done le avisa a la página que vacíe el carrito. Con .Error, el
+     carrito queda como estaba. */}}
+{{with .Sale}}
+<div role="status" data-sale-done class="p-4 bg-surface border-2 border-line border-l-8 border-l-stock rounded-md space-y-1">
+  <p class="font-display font-bold text-2xl">{{printf (t "pos.done") .SaleNumber}}</p>
+  <p>{{t "pos.total"}}: <span class="font-bold tabular">{{money .Total}}</span>
+    {{if .Change.IsPositive}} · {{t "pos.change"}}: <span class="font-bold tabular text-xl">{{money .Change}}</span>{{end}}</p>
+</div>
+{{else}}{{with .Error}}
+<div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.}}</div>
+{{end}}{{end}}

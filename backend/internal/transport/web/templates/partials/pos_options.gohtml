@@ -1,0 +1,18 @@
+{{- /* Resultados del buscador de la caja (PosSearch). Cada producto con
+     precio es un botón que lo agrega al carrito (posAdd en pos.gohtml); sin
+     precio se muestra deshabilitado: no se puede vender. Sin espacios sueltos:
+     si no hay nada, la lista queda vacía y :empty la oculta. */ -}}
+{{- range .Options}}
+<li role="option">
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-type="{{.SaleType}}"
+          data-price="{{with .Price}}{{.}}{{end}}" data-stock="{{.OnHand}}"
+          {{if .Price}}onclick="posAdd(this)"{{else}}disabled aria-disabled="true"{{end}}
+          class="flex w-full items-baseline justify-between gap-4 text-left px-3 py-2 {{if .Price}}hover:bg-paper focus:bg-paper{{else}}text-muted cursor-not-allowed{{end}}">
+    <span>{{.Name}} <span class="text-sm text-muted">· {{.SKU}} · {{t "pos.stock"}} {{qty .OnHand}}{{if eq .SaleType "WEIGHT"}} kg{{end}}</span></span>
+    <span class="font-bold tabular whitespace-nowrap">{{if .Price}}{{money .Price}}{{if eq .SaleType "WEIGHT"}} /kg{{end}}{{else}}{{t "pos.no_price"}}{{end}}</span>
+  </button>
+</li>
+{{- end}}
+{{- if and .Query (not .Options)}}
+<li class="px-3 py-2 text-muted" data-not-found>{{printf (t "pos.not_found") .Query}}</li>
+{{- end -}}

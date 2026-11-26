@@ -52,7 +52,7 @@ func runCommand(db *sql.DB, args []string) int {
 
 // passwordSetter es lo que passwd usa de auth.Service.
 type passwordSetter interface {
-	SetPassword(ctx context.Context, username, password string) (*model.User, error)
+	SetPassword(ctx context.Context, by int64, username, password string) (*model.User, error)
 }
 
 // promptFunc muestra el texto y lee una contraseña.
@@ -80,7 +80,7 @@ func passwd(ctx context.Context, svc passwordSetter, args []string, ask promptFu
 	if first != second {
 		return errPasswordMismatch
 	}
-	u, err := svc.SetPassword(ctx, username, first)
+	u, err := svc.SetPassword(ctx, auth.ByCommand, username, first)
 	switch {
 	case errors.Is(err, service.ErrNotFound):
 		return fmt.Errorf("no existe el usuario %q", username)

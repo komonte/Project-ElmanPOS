@@ -10,18 +10,20 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
 )
 
 // fakeSetter anota con qué lo llamaron y devuelve err.
 type fakeSetter struct {
 	calls              int
+	by                 int64
 	username, password string
 	err                error
 }
 
-func (f *fakeSetter) SetPassword(_ context.Context, username, password string) (*model.User, error) {
+func (f *fakeSetter) SetPassword(_ context.Context, by int64, username, password string) (*model.User, error) {
 	f.calls++
-	f.username, f.password = username, password
+	f.by, f.username, f.password = by, username, password
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -51,7 +53,7 @@ func TestPasswd(t *testing.T) {
 		if err := passwd(ctx, s, []string{"Admin"}, answers(&asked, "clave del almacén", "clave del almacén"), &out); err != nil {
 			t.Fatal(err)
 		}
-		if s.calls != 1 || s.username != "Admin" || s.password != "clave del almacén" {
+		if s.calls != 1 || s.by != auth.ByCommand || s.username != "Admin" || s.password != "clave del almacén" {
 			t.Errorf("setter: got %+v", s)
 		}
 		if len(asked) != 2 || !strings.Contains(asked[0], "Admin") || !strings.Contains(asked[0], "mínimo 8") {

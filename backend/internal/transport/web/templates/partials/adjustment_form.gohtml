@@ -1,0 +1,61 @@
+{{/* Formulario de una salida conocida (F-09b). Es un renglón del buscador
+     compartido (data-picker-line, ver picker_script.gohtml): escanear + Enter
+     elige el producto y pasa a la cantidad; Enter en la cantidad anota.
+     Responde este panel entero (#adjustment-panel, outerHTML), listo para la
+     salida siguiente con el mismo motivo.
+
+     Datos: .Form (lo escrito), .Reasons, .Product (lotes y aviso, ver
+     adjustment_product.gohtml), .Last (lo último anotado) y .Error. */}}
+<div id="adjustment-panel">
+  {{$focus := "product"}}
+  {{if and .Error .Form.ProductID}}{{$focus = "quantity"}}{{end}}
+  <form id="adjustment-form" data-picker-line hx-post="/adjustments" hx-target="#adjustment-panel" hx-swap="outerHTML"
+        class="p-4 border-2 rounded-md bg-surface space-y-3 {{if .Error}}border-danger{{else}}border-line{{end}}">
+    {{if .Error}}
+    <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+    {{else}}{{with .Last}}
+    <div role="status" class="p-3 bg-paper border-l-8 border-tag rounded-sm space-y-1">
+      <p>{{printf (t "adjustment.recorded") .Name (qty .Quantity) (t (printf "adjustment.reason_%s" .Reason))}}</p>
+      {{if .InOpenCount}}<p class="font-bold">{{t "adjustment.in_open_count_after"}}</p>{{end}}
+    </div>
+    {{end}}{{end}}
+
+    <div class="grid gap-3 md:grid-cols-[1fr_9rem_14rem_auto] md:items-start">
+      <div>
+        <label class="field-label">{{t "picker.product"}}
+          <input type="search" name="product_q" autocomplete="off" value="{{.Form.ProductQ}}"
+                 placeholder="{{t "picker.product_search"}}"
+                 hx-get="/picker/product-options" hx-trigger="input changed delay:250ms"
+                 hx-target="next ul" hx-swap="innerHTML"
+                 onkeydown="pickerSearchEnter(event, this)"
+                 oninput="this.form.querySelector('[name=product_id]').value = ''; document.getElementById('adjustment-product-info').replaceChildren();"
+                 {{if eq $focus "product"}}data-focus autofocus{{end}}
+                 class="field">
+        </label>
+        <ul role="listbox" class="mt-1 border-2 border-line rounded-md bg-surface empty:hidden max-h-64 overflow-y-auto"></ul>
+        <input type="hidden" name="product_id" value="{{.Form.ProductID}}">
+      </div>
+      <label class="field-label">{{t "count.quantity"}}
+        <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Form.Quantity}}"
+               {{if eq $focus "quantity"}}data-focus autofocus{{end}}
+               class="field tabular">
+      </label>
+      <label class="field-label">{{t "adjustment.reason"}}
+        <select name="reason" class="field">
+          {{range .Reasons}}
+          <option value="{{.}}" {{if eq . $.Form.Reason}}selected{{end}}>{{t (printf "adjustment.reason_%s" .)}}</option>
+          {{end}}
+        </select>
+      </label>
+      <button type="submit" class="btn-primary md:mt-7">{{t "adjustment.record"}}</button>
+    </div>
+
+    {{template "adjustment_product.gohtml" .Product}}
+
+    <label class="field-label">{{t "adjustment.notes"}}
+      <input type="text" name="notes" autocomplete="off" maxlength="500" value="{{.Form.Notes}}"
+             aria-describedby="adjustment-notes-hint" class="field">
+    </label>
+    <p id="adjustment-notes-hint" class="field-hint">{{t "adjustment.notes_hint"}}</p>
+  </form>
+</div>

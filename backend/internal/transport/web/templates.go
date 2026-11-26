@@ -30,6 +30,7 @@ var pageFiles = []string{
 	"templates/pages/purchases.gohtml",
 	"templates/pages/counts.gohtml",
 	"templates/pages/count_review.gohtml",
+	"templates/pages/adjustments.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -63,6 +64,9 @@ var partialFiles = []string{
 	"templates/partials/count_sheet.gohtml",
 	"templates/partials/count_review_row.gohtml",
 	"templates/partials/count_review_summary.gohtml",
+	"templates/partials/adjustment_form.gohtml",
+	"templates/partials/adjustment_product.gohtml",
+	"templates/partials/adjustment_recent.gohtml",
 }
 
 type TemplateEngine struct {

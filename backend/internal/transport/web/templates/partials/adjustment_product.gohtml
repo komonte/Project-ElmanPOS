@@ -1,0 +1,19 @@
+{{/* Lo que la salida necesita del producto elegido (GET /adjustments/product):
+     el aviso si ya está contado en el conteo abierto y, si tiene lotes con
+     mercadería, de cuál sale (vacío = primero el que vence antes). Vacío sin
+     producto. Datos: .Batches, .InOpenCount y .BatchID (el elegido, texto). */}}
+<div id="adjustment-product-info" class="space-y-3 empty:hidden">
+  {{- if .InOpenCount}}
+  <p role="status" class="p-3 bg-paper border-l-8 border-tag rounded-sm font-bold">{{t "adjustment.in_open_count"}}</p>
+  {{- end}}
+  {{- if .Batches}}
+  <label class="field-label">{{t "adjustment.batch"}}
+    <select name="batch_id" class="field">
+      <option value="">{{t "adjustment.batch_fifo"}}</option>
+      {{range .Batches}}
+      <option value="{{.ID}}" {{if eq (printf "%d" .ID) $.BatchID}}selected{{end}}>{{printf (t "adjustment.batch_option") .BatchNumber (or .ExpiryDate "-") (qty .RemainingQuantity)}}</option>
+      {{end}}
+    </select>
+  </label>
+  {{- end -}}
+</div>

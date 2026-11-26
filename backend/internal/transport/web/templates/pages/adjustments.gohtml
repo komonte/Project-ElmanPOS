@@ -1,0 +1,44 @@
+{{define "content"}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "adjustment.title"}}</h1>
+  <p class="mt-2 text-muted max-w-2xl">{{t "adjustment.hint"}}</p>
+</header>
+
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+{{end}}
+
+<div class="space-y-8">
+  {{template "adjustment_form.gohtml" .Form}}
+  {{template "adjustment_recent.gohtml" .Recent}}
+</div>
+
+{{/* Paneles que salen del buscador: alta de producto y agregar código. */}}
+<div id="form-modal"></div>
+
+{{/* El buscador de producto compartido. Abajo, lo que la salida hace con el
+     producto elegido. */}}
+{{template "picker_script.gohtml"}}
+
+<script>
+  // Deja el producto elegido, trae sus lotes (y si ya está contado en el
+  // conteo abierto) y pasa a la cantidad. Lo llama el buscador compartido.
+  function pickerSetProduct(row, product) {
+    row.querySelector('[name=product_id]').value = product.id;
+    row.querySelector('[name=product_q]').value = product.name;
+    row.querySelector('ul[role=listbox]').replaceChildren();
+    htmx.ajax('GET', '/adjustments/product', {
+      target: '#adjustment-product-info', swap: 'outerHTML', values: { product_id: product.id },
+    });
+    row.querySelector('[name=quantity]').focus();
+  }
+
+  // Después de anotar (o de un error) el formulario vuelve entero: el cursor
+  // va adonde él diga (data-focus).
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'adjustment-panel') return;
+    const el = e.detail.target.querySelector('[data-focus]');
+    if (el) el.focus();
+  });
+</script>
+{{end}}

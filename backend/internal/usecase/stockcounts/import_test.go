@@ -145,3 +145,24 @@ func TestImportErrors(t *testing.T) {
 		t.Errorf("confirmed count: got %v", err)
 	}
 }
+
+// Un producto por unidad se cuenta en números enteros (también al
+// importar); uno por peso, en kg con decimales.
+func TestWholeUnits(t *testing.T) {
+	f, _ := importFixture(t)
+	c := f.open(t)
+	_, err := f.svc.AddEntry(f.ctx, c.ID, &model.StockCountEntry{ProductID: f.plain, Sector: "A", Quantity: dec("2.5")})
+	if !errors.Is(err, model.ErrQuantityNotWhole) || !errors.Is(err, service.ErrValidation) {
+		t.Errorf("unit 2.5: got %v", err)
+	}
+	f.add(t, c.ID, f.plain, "A", "3")
+	f.add(t, c.ID, f.batched, "A", "1.25")
+
+	res, err := f.svc.Import(f.ctx, c.ID, []countcsv.Row{row(2, "9770301", "1.5")}, nil, "B", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Problems) != 1 || res.Problems[0].Line != 2 || !errors.Is(res.Problems[0].Err, model.ErrQuantityNotWhole) {
+		t.Errorf("import 1.5: %+v", res.Problems)
+	}
+}

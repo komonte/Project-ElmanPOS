@@ -369,6 +369,56 @@ func lineOrValidation(sale *model.Sale, err error) error {
 	return fmt.Errorf("%w: %w", service.ErrValidation, err)
 }
 
+// Option es un producto encontrado por el buscador de la caja, con lo que
+// la pantalla necesita para agregarlo al carrito.
+type Option struct {
+	ID       int64          `json:"id"`
+	Name     string         `json:"name"`
+	SKU      string         `json:"sku"`
+	SaleType model.SaleType `json:"sale_type"`
+	// Price es el precio vigente (por kg si es a granel); nil si no tiene:
+	// no se puede vender.
+	Price *decimal.Decimal `json:"price"`
+	// OnHand es el stock del local activo.
+	OnHand decimal.Decimal `json:"on_hand"`
+}
+
+// Search busca productos para vender por nombre, SKU o código de barras
+// (escanear): los activos que no son combos, hasta 20, con su precio y su
+// stock en el local activo.
+//   - service.ErrConflict: no hay un único local activo.
+func (s *Service) Search(ctx context.Context, query string) ([]Option, error) {
+	storeID, err := postgres.NewStoreStore(s.db).ActiveID(ctx)
+	if err != nil {
+		return nil, translate(err)
+	}
+	found, err := postgres.NewProductStore(s.db).SearchByName(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	prices := postgres.NewPriceStore(s.db)
+	balances := postgres.NewStockBalanceStore(s.db)
+	options := make([]Option, 0, len(found))
+	for _, p := range found {
+		if p.SaleType == model.SaleTypeComposite {
+			continue
+		}
+		o := Option{ID: p.ID, Name: p.Name, SKU: p.SKU, SaleType: p.SaleType}
+		price, err := prices.Current(ctx, p.ID)
+		switch {
+		case err == nil:
+			o.Price = &price.UnitPrice
+		case !errors.Is(err, store.ErrNotFound):
+			return nil, err
+		}
+		if o.OnHand, err = balances.OnHandAt(ctx, p.ID, storeID); err != nil {
+			return nil, err
+		}
+		options = append(options, o)
+	}
+	return options, nil
+}
+
 // Get devuelve una venta para el ticket. service.ErrNotFound si no existe.
 func (s *Service) Get(ctx context.Context, id int64) (*model.Sale, error) {
 	if id <= 0 {

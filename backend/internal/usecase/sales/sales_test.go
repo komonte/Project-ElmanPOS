@@ -334,3 +334,31 @@ func TestCheckoutNoRegister(t *testing.T) {
 		t.Errorf("got %v, want %v", err, ErrRegisterClosed)
 	}
 }
+
+func TestSearch(t *testing.T) {
+	f := newFixture(t)
+	got, err := f.svc.Search(f.ctx, "TEST SALES")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]Option{}
+	for _, o := range got {
+		byName[o.Name] = o
+	}
+	if _, ok := byName["COMBO TEST SALES"]; ok {
+		t.Error("composite products are not sold")
+	}
+	if _, ok := byName["INACTIVO TEST SALES"]; ok {
+		t.Error("inactive products are not sold")
+	}
+	if q := byName["QUESO TEST SALES"]; q.Price == nil || !q.Price.Equal(d("5000")) || !q.OnHand.Equal(d("3")) ||
+		q.SaleType != model.SaleTypeWeight {
+		t.Errorf("queso: got %+v", q)
+	}
+	if o, ok := byName["SIN PRECIO TEST SALES"]; !ok || o.Price != nil || !o.OnHand.Equal(d("5")) {
+		t.Errorf("no price: got %+v (found %v)", o, ok)
+	}
+	if len(got) != 3 {
+		t.Errorf("got %d options, want 3", len(got))
+	}
+}

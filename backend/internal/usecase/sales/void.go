@@ -20,8 +20,9 @@ import (
 //   - El stock vuelve exactamente por donde salió: un RETURN por cada SALE de
 //     la venta, con el mismo lote y costo (lo que salió sin lote vuelve sin
 //     lote). El costo promedio no cambia, como al vender.
-//   - Sin login todavía: cualquiera puede anular (F-13 lo limitará al
-//     admin), y performed_by queda NULL.
+//   - Solo el admin anula (permiso void de F-13, en la ruta). by es quién:
+//     queda en el performed_by de los RETURN y en el user_id de la
+//     auditoría.
 
 var (
 	// ErrSaleOtherSession: la venta es de una sesión ya cerrada.
@@ -42,7 +43,7 @@ var (
 // y así el arqueo ya no la cuenta), la venta y el stock de sus productos en
 // orden de id; devolver cada movimiento a su lote y al saldo; marcarla
 // anulada y auditar.
-func (s *Service) Void(ctx context.Context, saleID int64, reason string) (*model.Sale, error) {
+func (s *Service) Void(ctx context.Context, by, saleID int64, reason string) (*model.Sale, error) {
 	if saleID <= 0 {
 		return nil, service.ErrInvalidID
 	}
@@ -76,7 +77,7 @@ func (s *Service) Void(ctx context.Context, saleID int64, reason string) (*model
 		if err := lockProducts(ctx, tx, movements); err != nil {
 			return err
 		}
-		if err := giveBack(ctx, tx, movements); err != nil {
+		if err := giveBack(ctx, tx, by, movements); err != nil {
 			return err
 		}
 
@@ -88,6 +89,7 @@ func (s *Service) Void(ctx context.Context, saleID int64, reason string) (*model
 			return err
 		}
 		_, err = postgres.NewAuditLogStore(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "sales",
 			Action:   "VOID",
 			RecordID: saleID,
@@ -127,7 +129,8 @@ func lockProducts(ctx context.Context, tx postgres.DBTX, movements []*model.Stoc
 
 // giveBack devuelve cada salida: un RETURN positivo con el mismo producto,
 // local, lote y costo, y la cantidad vuelve al lote (si tenía) y al saldo.
-func giveBack(ctx context.Context, tx postgres.DBTX, movements []*model.StockMovement) error {
+// by es quién anula.
+func giveBack(ctx context.Context, tx postgres.DBTX, by int64, movements []*model.StockMovement) error {
 	moves := postgres.NewStockMovementStore(tx)
 	batches := postgres.NewBatchStore(tx)
 	balances := postgres.NewStockBalanceStore(tx)
@@ -141,6 +144,7 @@ func giveBack(ctx context.Context, tx postgres.DBTX, movements []*model.StockMov
 			Quantity:     qty,
 			UnitCost:     m.UnitCost,
 			SaleID:       m.SaleID,
+			PerformedBy:  &by,
 		}); err != nil {
 			return err
 		}

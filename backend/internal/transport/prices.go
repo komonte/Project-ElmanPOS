@@ -16,7 +16,7 @@ import (
 // PriceService es lo que la API usa del caso de uso de precios. Lo cumple
 // *prices.Service; los tests usan uno en memoria.
 type PriceService interface {
-	Set(ctx context.Context, productID int64, unitPrice decimal.Decimal) (*model.Price, error)
+	Set(ctx context.Context, by, productID int64, unitPrice decimal.Decimal) (*model.Price, error)
 	History(ctx context.Context, productID int64) ([]*model.Price, error)
 }
 
@@ -83,7 +83,7 @@ func (h *PricesHandler) Set(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	saved, err := h.svc.Set(r.Context(), productID, body.UnitPrice)
+	saved, err := h.svc.Set(r.Context(), UserID(r.Context()), productID, body.UnitPrice)
 	if err != nil {
 		pricesError(w, r, err)
 		return

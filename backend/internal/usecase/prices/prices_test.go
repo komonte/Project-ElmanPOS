@@ -13,12 +13,14 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar y un producto activo.
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	categoryID int64
 	productID  int64
@@ -42,6 +44,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	var taxID int64
 	f.scan(t, &taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA test prices', 21) RETURNING id;`)
 	f.scan(t, &f.categoryID, `INSERT INTO categories (name, tax_id) VALUES ('Categoria test prices', $1) RETURNING id;`, taxID)
@@ -91,10 +97,12 @@ func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 func TestSetSavesPriceAndAudit(t *testing.T) {
 	f := newFixture(t)
 
-	got, err := f.svc.Set(f.ctx, f.productID, dec("1500.50"))
+	got, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("1500.50"))
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "price audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'prices' AND record_id = $2"), f.userID, got.ID)
 	if got.ID == 0 || got.ProductID != f.productID || !got.UnitPrice.Equal(dec("1500.50")) {
 		t.Errorf("set: got %+v", got)
 	}
@@ -116,10 +124,10 @@ func TestSetSavesPriceAndAudit(t *testing.T) {
 func TestSetNewPriceBecomesCurrent(t *testing.T) {
 	f := newFixture(t)
 
-	if _, err := f.svc.Set(f.ctx, f.productID, dec("100")); err != nil {
+	if _, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("100")); err != nil {
 		t.Fatalf("set first: %v", err)
 	}
-	second, err := f.svc.Set(f.ctx, f.productID, dec("120"))
+	second, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("120"))
 	if err != nil {
 		t.Fatalf("set second: %v", err)
 	}
@@ -136,7 +144,7 @@ func TestSetNewPriceBecomesCurrent(t *testing.T) {
 func TestSetInvalidPrice(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, f.productID, dec("0"))
+	_, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("0"))
 	wantErr(t, err, service.ErrValidation)
 	wantErr(t, err, model.ErrInvalidPrice)
 	if n := f.pricesOf(t, f.productID); n != 0 {
@@ -147,14 +155,14 @@ func TestSetInvalidPrice(t *testing.T) {
 func TestSetUnknownProduct(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, 999_999_999, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, 999_999_999, dec("100"))
 	wantErr(t, err, service.ErrNotFound)
 }
 
 func TestSetInvalidID(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, 0, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, 0, dec("100"))
 	wantErr(t, err, service.ErrInvalidID)
 }
 
@@ -162,7 +170,7 @@ func TestSetInactiveProduct(t *testing.T) {
 	f := newFixture(t)
 	inactive := f.newProduct(t, "INACTIVO TEST PRICES", false)
 
-	_, err := f.svc.Set(f.ctx, inactive, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, inactive, dec("100"))
 	wantErr(t, err, ErrProductInactive)
 	wantErr(t, err, service.ErrConflict)
 	if n := f.pricesOf(t, inactive); n != 0 {
@@ -184,7 +192,7 @@ func TestSetRollsBackPriceWhenAuditFails(t *testing.T) {
 	f := newFixture(t)
 	f.svc.audit = func(postgres.DBTX) auditStore { return failingAudit{} }
 
-	_, err := f.svc.Set(f.ctx, f.productID, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("100"))
 	wantErr(t, err, errAuditInsert)
 	if n := f.pricesOf(t, f.productID); n != 0 {
 		t.Errorf("prices left after rollback: %d, want 0", n)

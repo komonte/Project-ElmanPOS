@@ -7,7 +7,8 @@
 //     "Caja 1" (CreateRegister). Con más de una caja activa no se adivina.
 //   - Una sola sesión abierta por caja (BR-02, índice de la 0017).
 //   - El efectivo inicial puede ser 0.
-//   - Sin login todavía: opened_by queda NULL.
+//   - by es el usuario que entró (F-13): abrir guarda opened_by, cerrar
+//     closed_by y el user_id de la auditoría.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrConflict...), así la API y la web los traducen igual.
@@ -110,16 +111,16 @@ func (s *Service) CreateRegister(ctx context.Context) (*model.CashRegister, erro
 	return reg, nil
 }
 
-// Open abre la caja del local activo con el efectivo inicial.
+// Open abre la caja del local activo con el efectivo inicial; by es quién.
 //   - service.ErrValidation: el monto está mal (envuelve el error del model).
 //   - service.ErrConflict: no hay caja (ErrNoRegister), ya está abierta
 //     (store.ErrSessionAlreadyOpen adentro), o no hay un único local o caja.
-func (s *Service) Open(ctx context.Context, openingAmount decimal.Decimal) (*model.CashierSession, error) {
+func (s *Service) Open(ctx context.Context, by int64, openingAmount decimal.Decimal) (*model.CashierSession, error) {
 	reg, err := register(ctx, s.db)
 	if err != nil {
 		return nil, err
 	}
-	in := &model.CashierSession{CashRegisterID: reg.ID, OpeningAmount: openingAmount}
+	in := &model.CashierSession{CashRegisterID: reg.ID, OpeningAmount: openingAmount, OpenedBy: &by}
 	if err := in.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
 	}

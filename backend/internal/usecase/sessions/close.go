@@ -49,7 +49,7 @@ type Summary struct {
 // Una transacción: trabar la sesión (una venta a medio cobrar termina antes,
 // y después ninguna entra), calcular lo esperado, guardar lo declarado,
 // cerrar y auditar.
-func (s *Service) Close(ctx context.Context, sessionID int64, declared []*model.CashAudit) (*Summary, error) {
+func (s *Service) Close(ctx context.Context, by, sessionID int64, declared []*model.CashAudit) (*Summary, error) {
 	var sum *Summary
 	err := s.tx.InTx(ctx, func(tx postgres.DBTX) error {
 		sessions := postgres.NewCashierSessionStore(tx)
@@ -67,13 +67,14 @@ func (s *Service) Close(ctx context.Context, sessionID int64, declared []*model.
 				return err
 			}
 		}
-		closed, err := sessions.Close(ctx, sessionID, sum.Close.Line(model.PaymentCash).Declared, nil)
+		closed, err := sessions.Close(ctx, sessionID, sum.Close.Line(model.PaymentCash).Declared, &by)
 		if err != nil {
 			return err
 		}
 		sum.Session = closed
 
 		_, err = postgres.NewAuditLogStore(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "cashier_sessions",
 			Action:   "CLOSE",
 			RecordID: sessionID,

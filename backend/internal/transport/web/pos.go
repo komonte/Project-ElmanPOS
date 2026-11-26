@@ -57,7 +57,7 @@ func (h *WebHandler) PosCheckout(w http.ResponseWriter, r *http.Request) {
 	in, err := saleFromForm(r)
 	if err == nil {
 		var sale *model.Sale
-		if sale, err = h.sales.Checkout(r.Context(), in); err == nil {
+		if sale, err = h.sales.Checkout(r.Context(), transport.UserID(r.Context()), in); err == nil {
 			h.renderPartial(w, r, "pos_result.gohtml", map[string]any{"Sale": sale, "TicketURL": ticketURL(sale)})
 			return
 		}

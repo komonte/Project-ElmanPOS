@@ -48,13 +48,14 @@ func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
 	}
 }
 
-// Set le pone un precio nuevo a un producto, vigente desde ya.
+// Set le pone un precio nuevo a un producto, vigente desde ya. by es quién:
+// queda en el user_id de la auditoría (F-13).
 //   - service.ErrValidation: el precio está mal (envuelve model.ErrInvalidPrice).
 //   - service.ErrNotFound: el producto no existe.
 //   - ErrProductInactive: el producto está desactivado.
 //   - service.ErrConflict: ya tiene un precio con ese mismo "desde" (raro: dos
 //     cambios en el mismo instante).
-func (s *Service) Set(ctx context.Context, productID int64, unitPrice decimal.Decimal) (*model.Price, error) {
+func (s *Service) Set(ctx context.Context, by, productID int64, unitPrice decimal.Decimal) (*model.Price, error) {
 	if productID <= 0 {
 		return nil, service.ErrInvalidID
 	}
@@ -83,6 +84,7 @@ func (s *Service) Set(ctx context.Context, productID int64, unitPrice decimal.De
 		}
 
 		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "prices",
 			Action:   "INSERT",
 			RecordID: saved.ID,

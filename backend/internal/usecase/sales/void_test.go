@@ -9,13 +9,14 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // sell cobra 2 sodas y 2,7 kg de queso (lote A entero, lote B entero y
 // 0,2 kg sin lote) en efectivo justo.
 func (f *fixture) sell(t *testing.T) *model.Sale {
 	t.Helper()
-	sale, err := f.svc.Checkout(f.ctx, &model.Sale{
+	sale, err := f.svc.Checkout(f.ctx, f.userID, &model.Sale{
 		Items:    []*model.SaleItem{line(f.soda, "2"), line(f.queso, "2.700")},
 		Payments: []*model.Payment{pay(model.PaymentCash, "15500")},
 	})
@@ -44,7 +45,13 @@ func TestVoid(t *testing.T) {
 		t.Fatalf("after the sale batch A: got %s, %v", rem, consumed)
 	}
 
-	voided, err := f.svc.Void(f.ctx, sale.ID, "  cobré de más  ")
+	voided, err := f.svc.Void(f.ctx, f.userID, sale.ID, "  cobré de más  ")
+	if err == nil {
+		usecasetest.WantAuthor(t, f.ctx, f.tx, "returns", usecasetest.Author("stock_movements", "performed_by",
+			"sale_id = $2 AND movement_type = 'RETURN'"), f.userID, sale.ID)
+		usecasetest.WantAuthor(t, f.ctx, f.tx, "void audit", usecasetest.Author("audit_log", "user_id",
+			"table_name = 'sales' AND action = 'VOID' AND record_id = $2"), f.userID, sale.ID)
+	}
 	if err != nil {
 		t.Fatalf("void: %v", err)
 	}
@@ -80,8 +87,8 @@ func TestVoid(t *testing.T) {
 		t.Errorf("%d product/batch/cost groups do not net to 0", n)
 	}
 	if n := f.count(t, `SELECT count(*) FROM stock_movements WHERE sale_id = $1 AND movement_type = 'RETURN'
-		AND performed_by IS NULL AND quantity > 0;`, sale.ID); n != 4 {
-		t.Errorf("returns: got %d positive without author, want 4", n)
+		AND quantity > 0;`, sale.ID); n != 4 {
+		t.Errorf("returns: got %d positive, want 4", n)
 	}
 
 	// Queda auditada.
@@ -91,7 +98,7 @@ func TestVoid(t *testing.T) {
 	}
 
 	// Ya anulada no se anula de nuevo (el stock no vuelve dos veces).
-	if _, err := f.svc.Void(f.ctx, sale.ID, "otra vez"); !errors.Is(err, ErrSaleAlreadyVoided) ||
+	if _, err := f.svc.Void(f.ctx, f.userID, sale.ID, "otra vez"); !errors.Is(err, ErrSaleAlreadyVoided) ||
 		!errors.Is(err, service.ErrConflict) {
 		t.Errorf("void twice: got %v", err)
 	}
@@ -120,7 +127,7 @@ func TestVoidRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := f.svc.Void(f.ctx, tt.id, tt.reason); !errors.Is(err, tt.want) {
+			if _, err := f.svc.Void(f.ctx, f.userID, tt.id, tt.reason); !errors.Is(err, tt.want) {
 				t.Errorf("got %v, want %v", err, tt.want)
 			}
 		})
@@ -136,11 +143,11 @@ func TestVoidRejected(t *testing.T) {
 	// Una venta de una sesión ya cerrada no se anula: su plata salió del
 	// arqueo de ese día.
 	f.exec(t, `UPDATE cashier_sessions SET status = 'CLOSED', closed_at = now() WHERE id = $1;`, f.sessionID)
-	if _, err := f.svc.Void(f.ctx, sale.ID, "x"); !errors.Is(err, ErrRegisterClosed) {
+	if _, err := f.svc.Void(f.ctx, f.userID, sale.ID, "x"); !errors.Is(err, ErrRegisterClosed) {
 		t.Errorf("register closed: got %v, want %v", err, ErrRegisterClosed)
 	}
 	f.exec(t, `INSERT INTO cashier_sessions (cash_register_id, opening_amount) VALUES ($1, 0);`, f.registerID)
-	if _, err := f.svc.Void(f.ctx, sale.ID, "x"); !errors.Is(err, ErrSaleOtherSession) || !errors.Is(err, service.ErrConflict) {
+	if _, err := f.svc.Void(f.ctx, f.userID, sale.ID, "x"); !errors.Is(err, ErrSaleOtherSession) || !errors.Is(err, service.ErrConflict) {
 		t.Errorf("other session: got %v, want %v", err, ErrSaleOtherSession)
 	}
 	if got := f.onHand(t, f.soda); !got.Equal(d("8")) {

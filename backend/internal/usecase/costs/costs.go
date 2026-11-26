@@ -70,7 +70,7 @@ func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
 //   - service.ErrNotFound: el producto no existe.
 //   - ErrProductInactive: el producto está desactivado.
 //   - service.ErrConflict: ya tiene un costo con ese mismo "desde" (raro).
-func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Decimal) (*Result, error) {
+func (s *Service) Set(ctx context.Context, by, productID int64, unitCost decimal.Decimal) (*Result, error) {
 	if productID <= 0 {
 		return nil, service.ErrInvalidID
 	}
@@ -123,6 +123,7 @@ func (s *Service) Set(ctx context.Context, productID int64, unitCost decimal.Dec
 		}
 
 		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "product_costs",
 			Action:   "INSERT",
 			RecordID: res.Cost.ID,

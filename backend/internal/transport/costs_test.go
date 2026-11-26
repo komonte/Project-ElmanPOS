@@ -36,7 +36,7 @@ func newFakeCosts() *fakeCosts {
 	}
 }
 
-func (f *fakeCosts) Set(_ context.Context, productID int64, unitCost decimal.Decimal) (*costs.Result, error) {
+func (f *fakeCosts) Set(_ context.Context, _, productID int64, unitCost decimal.Decimal) (*costs.Result, error) {
 	if productID <= 0 {
 		return nil, service.ErrInvalidID
 	}

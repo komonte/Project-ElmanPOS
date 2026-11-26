@@ -12,6 +12,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 func (f *fixture) setCost(t *testing.T, productID int64, cost string) {
@@ -114,7 +115,12 @@ func TestConfirm(t *testing.T) {
 	}
 	f.add(t, c.ID, same, "Góndola", "5")
 
-	res, err := f.svc.Confirm(f.ctx, c.ID)
+	res, err := f.svc.Confirm(f.ctx, f.userID, c.ID)
+	if err == nil {
+		usecasetest.WantAuthor(t, f.ctx, f.tx, "count movements", usecasetest.Author("stock_movements", "performed_by", "count_id = $2"), f.userID, c.ID)
+		usecasetest.WantAuthor(t, f.ctx, f.tx, "count audit", usecasetest.Author("audit_log", "user_id",
+			"table_name = 'stock_counts' AND record_id = $2"), f.userID, c.ID)
+	}
 	if err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
@@ -146,10 +152,10 @@ func TestConfirm(t *testing.T) {
 		t.Errorf("audit rows: %d, %v", audits, err)
 	}
 
-	if _, err := f.svc.Confirm(f.ctx, c.ID); !errors.Is(err, service.ErrConflict) {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c.ID); !errors.Is(err, service.ErrConflict) {
 		t.Errorf("confirm twice: got %v, want %v", err, service.ErrConflict)
 	}
-	if _, err := f.svc.Confirm(f.ctx, 999999999); !errors.Is(err, service.ErrNotFound) {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, 999999999); !errors.Is(err, service.ErrNotFound) {
 		t.Errorf("confirm missing: got %v, want %v", err, service.ErrNotFound)
 	}
 }
@@ -172,7 +178,7 @@ func TestConfirmCost(t *testing.T) {
 	if err := f.svc.SetDetails(f.ctx, c.ID, withCost, &cost, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.Confirm(f.ctx, c.ID); err != nil {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c.ID); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
 
@@ -190,7 +196,7 @@ func TestConfirmCost(t *testing.T) {
 	never := f.newProduct(t, "NUNCA COSTO TEST COUNTS", `'UNIT', 'UNIT', FALSE, 30, TRUE`)
 	c2 := f.open(t)
 	f.add(t, c2.ID, never, "A", "1")
-	if _, err := f.svc.Confirm(f.ctx, c2.ID); err != nil {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c2.ID); err != nil {
 		t.Fatalf("confirm 2: %v", err)
 	}
 	checkMovements(t, "never", f.movements(t, c2.ID, never), []movement{{"", "1", "0"}})
@@ -243,7 +249,7 @@ func TestConfirmBatches(t *testing.T) {
 	}
 	f.add(t, c.ID, short, "Heladera", "0.5")
 	f.add(t, c.ID, beyond, "Heladera", "0")
-	if _, err := f.svc.Confirm(f.ctx, c.ID); err != nil {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c.ID); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
 
@@ -279,7 +285,7 @@ func TestConfirmKeepsPurchaseDuringCount(t *testing.T) {
 	f.add(t, c.ID, f.plain, "A", "7")
 	f.addStock(t, f.plain, "5")
 
-	if _, err := f.svc.Confirm(f.ctx, c.ID); err != nil {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c.ID); err != nil {
 		t.Fatalf("confirm: %v", err)
 	}
 	if got := f.onHand(t, f.plain); !got.Equal(dec("12")) {
@@ -296,7 +302,7 @@ func TestConfirmNegativeStock(t *testing.T) {
 	f.add(t, c.ID, f.plain, "A", "0")
 	f.addStock(t, f.plain, "-8") // como una venta después de la foto
 
-	_, err := f.svc.Confirm(f.ctx, c.ID)
+	_, err := f.svc.Confirm(f.ctx, f.userID, c.ID)
 	if !errors.Is(err, ErrNegativeStock) || !errors.Is(err, service.ErrConflict) ||
 		!strings.Contains(err.Error(), "GASEOSA TEST COUNTS") {
 		t.Fatalf("got %v, want %v naming the product", err, ErrNegativeStock)
@@ -319,7 +325,7 @@ func TestConfirmRollsBack(t *testing.T) {
 	f.add(t, c.ID, f.batched, "A", "1")
 	f.svc.audit = func(postgres.DBTX) auditStore { return failingAudit{} }
 
-	if _, err := f.svc.Confirm(f.ctx, c.ID); err == nil {
+	if _, err := f.svc.Confirm(f.ctx, f.userID, c.ID); err == nil {
 		t.Fatal("confirm with failing audit: got no error")
 	}
 	assertUntouched(t, f, c.ID, "10")

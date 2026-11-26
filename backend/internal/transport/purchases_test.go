@@ -21,7 +21,7 @@ import (
 // inactivo; cualquier otro no existe. La compra 40 existe.
 type fakePurchases struct{}
 
-func (fakePurchases) Receive(_ context.Context, p *model.Purchase) (*purchases.Result, error) {
+func (fakePurchases) Receive(_ context.Context, _ int64, p *model.Purchase) (*purchases.Result, error) {
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
 	}

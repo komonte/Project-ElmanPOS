@@ -18,7 +18,8 @@
 //     puede pasarse (el vuelto no se guarda).
 //   - Número de venta por caja, sin repetirse entre sesiones.
 //   - Combos (expandir sus componentes) quedan para después.
-//   - Sin login todavía: performed_by queda NULL.
+//   - by es el usuario que cobra (F-13): queda en sales.created_by y en el
+//     performed_by de los movimientos.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrConflict...), así la API y la web los traducen igual.
@@ -99,11 +100,12 @@ func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
 //   - *LineError: un renglón no se puede vender (sin precio, sin stock,
 //     inactivo, combo, cantidad mal); cumple ErrValidation o ErrConflict
 //     según el error que envuelve.
-func (s *Service) Checkout(ctx context.Context, in *model.Sale) (*model.Sale, error) {
+func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*model.Sale, error) {
 	if in == nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, model.ErrNilSale)
 	}
 	sale := copyInput(in)
+	sale.CreatedBy = &by
 	if err := sale.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
 	}
@@ -183,6 +185,7 @@ func (s *Service) Checkout(ctx context.Context, in *model.Sale) (*model.Sale, er
 				Quantity:     qty.Neg(),
 				UnitCost:     unitCost,
 				SaleID:       &sale.ID,
+				PerformedBy:  &by,
 			})
 			return err
 		}

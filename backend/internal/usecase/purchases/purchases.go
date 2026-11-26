@@ -12,7 +12,8 @@
 //     lote; con distinto costo quedan dos lotes con el mismo número.
 //   - Un producto que controla lotes sin número de lote (fiambres sin lote
 //     claro) recibe uno automático: "C-<n° de compra>" (AutoBatchNumber).
-//   - Sin login todavía: received_by y performed_by quedan NULL (0013).
+//   - by es quién recibe (F-13): queda en received_by, en el performed_by
+//     de los movimientos y en el user_id de la auditoría.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrConflict...), así la API y la web los traducen igual. Los de un
@@ -99,9 +100,11 @@ type batchKey struct {
 	unitCost  string // decimal.String(): "60" y "60.00" son el mismo costo
 }
 
-// Receive guarda una compra recibida. No modifica p: trabaja con una copia.
-func (s *Service) Receive(ctx context.Context, p *model.Purchase) (*Result, error) {
+// Receive guarda una compra recibida por by. No modifica p: trabaja con una
+// copia.
+func (s *Service) Receive(ctx context.Context, by int64, p *model.Purchase) (*Result, error) {
 	in := copyPurchase(p)
+	in.ReceivedBy = &by
 	if err := in.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
 	}
@@ -131,7 +134,7 @@ func (s *Service) Receive(ctx context.Context, p *model.Purchase) (*Result, erro
 		batches := map[batchKey]int64{}
 		suggestions := map[int64]int{} // producto → posición en res.Suggestions
 		for i, it := range in.Items {
-			line, sug, err := s.receiveLine(ctx, tx, saved.ID, storeID, it, batches)
+			line, sug, err := s.receiveLine(ctx, tx, by, saved.ID, storeID, it, batches)
 			if err != nil {
 				return fmt.Errorf("line %d: %w", i+1, err)
 			}
@@ -145,6 +148,7 @@ func (s *Service) Receive(ctx context.Context, p *model.Purchase) (*Result, erro
 		}
 
 		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "purchases",
 			Action:   "INSERT",
 			RecordID: saved.ID,
@@ -181,8 +185,8 @@ func (s *Service) Get(ctx context.Context, id int64) (*model.Purchase, error) {
 }
 
 // receiveLine guarda un renglón con todo lo que mueve: lote, renglón,
-// movimiento, saldo y costo.
-func (s *Service) receiveLine(ctx context.Context, tx postgres.DBTX, purchaseID, storeID int64,
+// movimiento (de by), saldo y costo.
+func (s *Service) receiveLine(ctx context.Context, tx postgres.DBTX, by, purchaseID, storeID int64,
 	it *model.PurchaseItem, batches map[batchKey]int64) (*model.PurchaseItem, Suggestion, error) {
 	prod, err := checkProduct(ctx, tx, it)
 	if err != nil {
@@ -228,6 +232,7 @@ func (s *Service) receiveLine(ctx context.Context, tx postgres.DBTX, purchaseID,
 		Quantity:     it.Quantity,
 		UnitCost:     it.UnitCost,
 		PurchaseID:   &purchaseID,
+		PerformedBy:  &by,
 	})
 	if err != nil {
 		return nil, Suggestion{}, err

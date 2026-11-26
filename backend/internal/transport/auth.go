@@ -138,6 +138,17 @@ func WithUser(ctx context.Context, u *model.User) context.Context {
 	return context.WithValue(ctx, userKey, u)
 }
 
+// UserID es el id de quién hizo el pedido: los casos de uso lo guardan como
+// autor (opened_by, performed_by, audit_log.user_id...). 0 si nadie entró,
+// algo que detrás de AuthMiddleware no pasa; y si pasara, la FK lo rechaza
+// en lugar de dejar un autor vacío.
+func UserID(ctx context.Context) int64 {
+	if u := CurrentUser(ctx); u != nil {
+		return u.ID
+	}
+	return 0
+}
+
 // CurrentUser es el usuario que hizo el pedido, o nil (en las páginas
 // públicas).
 func CurrentUser(ctx context.Context) *model.User {

@@ -33,7 +33,7 @@ func newFakePrices() *fakePrices {
 	}
 }
 
-func (f *fakePrices) Set(_ context.Context, productID int64, unitPrice decimal.Decimal) (*model.Price, error) {
+func (f *fakePrices) Set(_ context.Context, _, productID int64, unitPrice decimal.Decimal) (*model.Price, error) {
 	if productID <= 0 {
 		return nil, service.ErrInvalidID
 	}

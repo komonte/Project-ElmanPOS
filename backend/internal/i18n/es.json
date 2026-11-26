@@ -451,6 +451,7 @@
   "role.STOCK_CLERK": "Repositor",
   "error.login_invalid": "Usuario o contraseña incorrectos.",
   "error.login_locked": "Demasiados intentos fallidos. Esperá 5 minutos y probá de nuevo.",
+  "error.forbidden": "No tenés permiso para hacer esto. Pedíselo a un administrador.",
   "cash.title": "Caja",
   "cash.hint": "Antes de vender, abrí la caja con el efectivo que hay para dar cambio. Sin la caja abierta no se puede cobrar.",
   "cash.no_register_title": "Este local todavía no tiene caja",

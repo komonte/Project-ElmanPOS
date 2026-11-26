@@ -451,6 +451,7 @@
   "role.STOCK_CLERK": "Stock clerk",
   "error.login_invalid": "Wrong username or password.",
   "error.login_locked": "Too many failed attempts. Wait 5 minutes and try again.",
+  "error.forbidden": "You don't have permission to do this. Ask an administrator.",
   "cash.title": "Cash register",
   "cash.hint": "Before selling, open the register with the cash there is to give change. You cannot charge with the register closed.",
   "cash.no_register_title": "This store has no cash register yet",

@@ -224,3 +224,74 @@ func (s *ReportStore) OpenSessions(ctx context.Context, start, end time.Time) (i
 		WHERE status = 'OPEN' AND opened_at >= $1 AND opened_at < $2;`, start, end).Scan(&n)
 	return n, err
 }
+
+// Restock devuelve los productos para reponer (R-01): activos, que no son
+// combos, y
+//   - con punto de pedido cargado y el stock en él o por debajo, o
+//   - sin punto de pedido, sin stock y con ventas desde since (se agotaron:
+//     el catálogo importado entra con punto de pedido 0, y si no fuera por
+//     las ventas saldrían miles de productos que nunca se compraron).
+//
+// Con el stock de todos los locales, el proveedor preferido y lo vendido
+// (ventas COMPLETED) desde since. El orden lo pone quien llama.
+func (s *ReportStore) Restock(ctx context.Context, since time.Time) ([]model.RestockItem, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH sold AS (
+			SELECT si.product_id, SUM(si.quantity) AS q
+			FROM sale_items si JOIN sales s ON s.id = si.sale_id
+			WHERE s.status = 'COMPLETED' AND s.created_at >= $1
+			GROUP BY si.product_id
+		), bal AS (
+			SELECT product_id, SUM(quantity) AS q FROM stock_balances GROUP BY product_id
+		)
+		SELECT p.id, p.sku, p.name, p.sale_type, p.preferred_supplier_id, sup.name,
+		       COALESCE(bal.q, 0), p.reorder_point, p.max_stock, COALESCE(sold.q, 0)
+		FROM products p
+		LEFT JOIN bal ON bal.product_id = p.id
+		LEFT JOIN sold ON sold.product_id = p.id
+		LEFT JOIN suppliers sup ON sup.id = p.preferred_supplier_id
+		WHERE p.is_active AND p.sale_type <> 'COMPOSITE'
+		  AND ((p.reorder_point > 0 AND COALESCE(bal.q, 0) <= p.reorder_point)
+		    OR (p.reorder_point = 0 AND COALESCE(bal.q, 0) = 0 AND COALESCE(sold.q, 0) > 0))
+		ORDER BY p.id;`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.RestockItem
+	for rows.Next() {
+		var it model.RestockItem
+		if err := rows.Scan(&it.ProductID, &it.SKU, &it.Name, &it.SaleType, &it.SupplierID, &it.SupplierName,
+			&it.Quantity, &it.ReorderPoint, &it.MaxStock, &it.Sold); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// Expiring devuelve los lotes con stock que vencen hasta until (incluido;
+// también los ya vencidos), el que vence primero arriba (R-02). Entran los
+// de productos desactivados: la mercadería se vence igual.
+func (s *ReportStore) Expiring(ctx context.Context, until string) ([]model.ExpiringBatch, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT b.id, b.batch_number, p.id, p.sku, p.name, p.is_active, p.sale_type,
+		       b.expiry_date::text, b.remaining_quantity, b.unit_cost
+		FROM product_batches b JOIN products p ON p.id = b.product_id
+		WHERE b.remaining_quantity > 0 AND b.expiry_date IS NOT NULL AND b.expiry_date <= $1::date
+		ORDER BY b.expiry_date, p.name, b.id;`, until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.ExpiringBatch
+	for rows.Next() {
+		var b model.ExpiringBatch
+		if err := rows.Scan(&b.BatchID, &b.BatchNumber, &b.ProductID, &b.SKU, &b.Name, &b.ProductActive, &b.SaleType,
+			&b.Expiry, &b.Remaining, &b.UnitCost); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}

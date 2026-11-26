@@ -8,7 +8,9 @@
      adjustment_product.gohtml), .Last (lo último anotado) y .Error. */}}
 <div id="adjustment-panel">
   {{$focus := "product"}}
-  {{if and .Error .Form.ProductID}}{{$focus = "quantity"}}{{end}}
+  {{/* Con el producto ya elegido (un error, o abierta desde "Dar de baja"
+       de R-02), se sigue por la cantidad. */}}
+  {{if .Form.ProductID}}{{$focus = "quantity"}}{{end}}
   <form id="adjustment-form" data-picker-line hx-post="/adjustments" hx-target="#adjustment-panel" hx-swap="outerHTML"
         class="p-4 border-2 rounded-md bg-surface space-y-3 {{if .Error}}border-danger{{else}}border-line{{end}}">
     {{if .Error}}

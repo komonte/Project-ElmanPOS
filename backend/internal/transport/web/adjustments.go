@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,10 +32,14 @@ type adjustmentLast struct {
 	InOpenCount  bool
 }
 
-// AdjustmentsPage handles GET /adjustments.
+// AdjustmentsPage handles GET /adjustments. Se puede abrir con el producto,
+// el lote y el motivo ya puestos (?product_id=&batch_id=&reason=): así lo
+// abre "Dar de baja" del reporte de vencimientos (R-02). Un producto que no
+// existe o un motivo desconocido se ignoran; un lote que no es del producto
+// lo rechaza la salida al anotar.
 func (h *WebHandler) AdjustmentsPage(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"Section": "adjustments", "TitleKey": "adjustment.title"}
-	form, err := h.adjustmentFormData(r, adjustmentForm{Reason: model.ReasonOwnConsumption}, nil, "")
+	form, err := h.adjustmentFormData(r, h.adjustmentPrefill(r), nil, "")
 	if err != nil {
 		data["Error"] = h.errMsg(r, err)
 	}
@@ -45,6 +50,28 @@ func (h *WebHandler) AdjustmentsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	data["Recent"] = map[string]any{"Adjustments": recent}
 	h.render(w, r, "adjustments.gohtml", data)
+}
+
+// adjustmentPrefill es el formulario vacío, o con lo que trae la dirección.
+func (h *WebHandler) adjustmentPrefill(r *http.Request) adjustmentForm {
+	form := adjustmentForm{Reason: model.ReasonOwnConsumption}
+	q := r.URL.Query()
+	if reason := q.Get("reason"); slices.Contains(model.ExitReasons, reason) {
+		form.Reason = reason
+	}
+	id, _ := strconv.ParseInt(q.Get("product_id"), 10, 64)
+	if id <= 0 {
+		return form
+	}
+	p, err := h.productSvc.GetByID(r.Context(), id)
+	if err != nil {
+		return form
+	}
+	form.ProductID, form.ProductQ = strconv.FormatInt(p.ID, 10), p.Name
+	if batch, err := strconv.ParseInt(q.Get("batch_id"), 10, 64); err == nil && batch > 0 {
+		form.BatchID = strconv.FormatInt(batch, 10)
+	}
+	return form
 }
 
 // AdjustmentsRecord handles POST /adjustments: anota la salida y responde el

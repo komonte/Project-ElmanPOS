@@ -154,6 +154,9 @@ func webRoutes(h *web.WebHandler) []route {
 		// Reportes de ventas, caja y margen: solo el admin.
 		{"GET /reports/sales", reports, h.ReportsSales},
 		{"GET /reports/cash", reports, h.ReportsCash},
+		// Reposición y vencimientos: el admin y el repositor.
+		{"GET /reports/restock", stock, h.ReportsRestock},
+		{"GET /reports/expiring", stock, h.ReportsExpiring},
 	}
 }
 

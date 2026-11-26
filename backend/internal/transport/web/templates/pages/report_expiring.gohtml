@@ -1,0 +1,89 @@
+{{define "content"}}
+{{/* Por vencer (R-02). Datos: .Report (reports.Expiring), .Options
+     (dayOption) y .Expired / .Soon (expiringRow). "Dar de baja" abre
+     Salidas de stock con el producto, el lote y el motivo ya puestos. */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "report.expiring_title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "report.expiring_hint"}}</p>
+</header>
+
+<nav aria-label="{{t "report.expiring_days"}}" class="mb-8 flex flex-wrap items-center gap-2">
+  <span class="font-bold mr-1">{{t "report.expiring_days"}}</span>
+  {{range .Options}}
+  <a href="/reports/expiring?days={{.Days}}" data-days="{{.Days}}" {{if .Active}}aria-current="true"{{end}}
+     class="px-3 py-1 rounded-md border-2 font-bold {{if .Active}}border-ink bg-ink text-white{{else}}border-line bg-surface hover:border-ink{{end}}">{{printf (t "report.n_days") .Days}}</a>
+  {{end}}
+</nav>
+
+{{with .Report}}
+<section aria-label="{{t "report.summary"}}" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 max-w-3xl">
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.expired"}}</p>
+    <p id="report-expired-value" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap {{if .Expired}}text-danger{{end}}">{{money .ExpiredValue}}</p>
+    <p class="text-muted">{{if eq (len .Expired) 1}}{{t "report.n_batches_one"}}{{else}}{{printf (t "report.n_batches") (len .Expired)}}{{end}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{printf (t "report.expiring_within") .Days}}</p>
+    <p id="report-soon-value" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .SoonValue}}</p>
+    <p class="text-muted">{{if eq (len .Soon) 1}}{{t "report.n_batches_one"}}{{else}}{{printf (t "report.n_batches") (len .Soon)}}{{end}}</p>
+  </div>
+</section>
+<p class="mb-6 text-muted max-w-3xl">{{t "report.expiring_value_hint"}}</p>
+
+{{if and (not .Expired) (not .Soon)}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{printf (t "report.expiring_empty") .Days}}</p>
+{{end}}
+{{end}}
+
+{{if .Expired}}
+<section id="report-expired" class="mb-8">
+  <h2 class="font-display font-bold text-3xl mb-3">{{t "report.expired"}}</h2>
+  {{template "expiring-table" .Expired}}
+</section>
+{{end}}
+{{if .Soon}}
+<section id="report-soon" class="mb-8">
+  <h2 class="font-display font-bold text-3xl mb-3">{{printf (t "report.expiring_within") .Report.Days}}</h2>
+  {{template "expiring-table" .Soon}}
+</section>
+{{end}}
+{{end}}
+
+{{define "expiring-table"}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_product"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_batch"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_expiry"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_left"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_value"}}</th>
+        <th scope="col" class="px-3 py-3"><span class="sr-only">{{t "common.actions"}}</span></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .}}
+      <tr data-batch="{{.BatchID}}">
+        <th scope="row" class="px-3 py-2 font-normal">
+          <span class="block font-bold">{{.Name}}</span>
+          <span class="block text-sm text-muted">{{.SKU}}{{if not .ProductActive}} · {{t "report.product_inactive"}}{{end}}</span>
+        </th>
+        <td class="px-3 py-2 whitespace-nowrap">{{.BatchNumber}}</td>
+        <td class="px-3 py-2 whitespace-nowrap">
+          <span class="block">{{.Date}}</span>
+          <span class="block text-sm {{if lt .DaysLeft 0}}text-danger font-bold{{else}}text-muted{{end}}">
+            {{if lt .DaysLeft -1}}{{printf (t "report.expired_ago") .Ago}}{{else if eq .DaysLeft -1}}{{t "report.expired_yesterday"}}{{else if eq .DaysLeft 0}}{{t "report.expires_today"}}{{else if eq .DaysLeft 1}}{{t "report.expires_tomorrow"}}{{else}}{{printf (t "report.expires_in") .DaysLeft}}{{end}}</span>
+        </td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{qty .Remaining}}{{if eq (printf "%s" .SaleType) "WEIGHT"}} kg{{end}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{money .Value}}</td>
+        <td class="px-3 py-2 text-right">
+          {{if .ProductActive}}<a href="/adjustments?product_id={{.ProductID}}&amp;batch_id={{.BatchID}}&amp;reason=EXPIRATION" data-write-off
+             class="font-bold whitespace-nowrap underline-offset-4 hover:underline">{{t "report.write_off"}}</a>{{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

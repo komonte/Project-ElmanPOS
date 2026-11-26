@@ -43,6 +43,27 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// openDB abre el pool de conexiones a Postgres con DB_* y prueba que llegue.
+func openDB() (*sql.DB, error) {
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		getEnv("DB_USER", ""), getEnv("DB_PASSWORD", ""), getEnv("DB_HOST", "localhost"),
+		getEnv("DB_PORT", "5432"), getEnv("DB_NAME", ""), getEnv("DB_SSLMODE", "disable"))
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database connection pool: %w", err)
+	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
 func main() {
 
 	// conectar Postgres
@@ -51,31 +72,18 @@ func main() {
 		slog.Warn("no .env file found, using system environment variables")
 	}
 
-	dbHost := getEnv("DB_HOST", "localhost")
-	dbPort := getEnv("DB_PORT", "5432")
-	dbUser := getEnv("DB_USER", "")
-	dbPass := getEnv("DB_PASSWORD", "")
-	dbName := getEnv("DB_NAME", "")
-	sslMode := getEnv("DB_SSLMODE", "disable")
-
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		dbUser, dbPass, dbHost, dbPort, dbName, sslMode)
-
-	db, err := sql.Open("postgres", dsn)
+	db, err := openDB()
 	if err != nil {
-		slog.Error("failed to open database conection pool", "error", err)
+		slog.Error("cannot reach postgres database", "error", err)
 		os.Exit(1)
 	}
 	defer db.Close()
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
-	if err := db.Ping(); err != nil {
-		slog.Error("cannot reach postgres database", "error", err)
-		os.Exit(1)
+	// Comandos de administración: elmanpos passwd <usuario>.
+	if len(os.Args) > 1 {
+		os.Exit(runCommand(db, os.Args[1:]))
 	}
+
 	slog.Info("connected to PostgreSQL successfully")
 
 	// Inyectar dependencias

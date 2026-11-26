@@ -52,7 +52,8 @@ erDiagram
     purchases ||--o{ purchase_items : "contains"
     product_batches ||--o{ purchase_items : ""
     cash_registers ||--o{ cashier_sessions : ""
-    users ||--o{ cashier_sessions : "opens"
+    users ||--o{ cashier_sessions : "opens / closes"
+    users ||--o{ sales : "charges"
     cashier_sessions ||--o{ sales : ""
     sales ||--o{ sale_items : "contains"
     sale_items ||--o{ sale_item_batches : "allocated from"
@@ -305,7 +306,7 @@ Indexes: `(product_id, remaining_quantity, expiry_date)` — FIFO scan picks old
 | purchase_id | BIGINT | FK → purchases.id, NULL | |
 | count_id | BIGINT | FK → stock_counts.id, NULL | |
 | adjustment_id | BIGINT | FK → stock_adjustments.id, NULL | Known exit (F-09b, migration `0016`). |
-| performed_by | BIGINT | FK → users.id, NULL | Who made the movement. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
+| performed_by | BIGINT | FK → users.id, NULL | Who made the movement: who sold, voided, received, confirmed the count or wrote the exit (F-13). `NULL` only in rows from before the login. (migration `0013` made it nullable). |
 | notes | VARCHAR(500) | NULL | Free-text context. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -349,7 +350,7 @@ Also the initial inventory (F-09). Migration `0015` added the sectors, cost and 
 | id | BIGSERIAL | PK | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
 | status | count_status | NOT NULL DEFAULT 'DRAFT' | |
-| created_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13), like `0013`. |
+| created_by | BIGINT | FK → users.id, NULL | Who opened the count (F-13). `NULL` only in rows from before the login. Who confirmed it is the `performed_by` of its movements and the `audit_log.user_id`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | confirmed_at | TIMESTAMPTZ | NULL | |
@@ -390,16 +391,17 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | cash_register_id | BIGINT | FK → cash_registers.id, NOT NULL | |
-| opened_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13, migration `0017`). |
+| opened_by | BIGINT | FK → users.id, NULL | Who opened the session (F-13). `NULL` only in rows from before the login. |
 | opening_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Initial cash float. |
 | closing_amount | NUMERIC(12,2) | NULL | Cash **declared** at close (what was counted in the drawer, float included): the `CASH` row of `cash_audits`. Not the expected amount, and not the difference (§4.20). |
 | status | session_status | NOT NULL DEFAULT 'OPEN' | |
 | opened_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | closed_at | TIMESTAMPTZ | NULL | |
+| closed_by | BIGINT | FK → users.id, NULL | Who closed it (F-12, migration `0020`). The register is shared at shift change, so `opened_by` alone does not say it. `NULL` while open and in sessions closed before the login. |
 
 > A sale requires an `OPEN` session (**BR-02**). At most one `OPEN` session per register: the partial unique index `uq_cashier_sessions_one_open` on `(cash_register_id) WHERE status = 'OPEN'` (migration `0017`) rejects a second one even when two screens open the same register at the same time.
 >
-> Closing (F-12) sets `status = 'CLOSED'`, `closing_amount` and `closed_at` in the same transaction that writes the `cash_audits` rows. A closed session never reopens, and its sales can no longer be voided (F-08), so its cash audit never changes.
+> Closing (F-12) sets `status = 'CLOSED'`, `closing_amount`, `closed_at` and `closed_by` in the same transaction that writes the `cash_audits` rows. A closed session never reopens, and its sales can no longer be voided (F-08), so its cash audit never changes.
 
 ### 4.16 `sales`
 
@@ -417,6 +419,7 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | voided_at | TIMESTAMPTZ | NULL | When the sale was voided (F-08, migration `0018`). |
 | void_reason | VARCHAR(300) | NULL | Why it was voided: required, trimmed, up to 300 characters (F-08, migration `0018`). Also kept in `audit_log`. |
+| created_by | BIGINT | FK → users.id, NULL | Who charged the sale (F-07, migration `0020`): the session's `opened_by` is not enough when the register changes hands. `NULL` in sales from before the login. Who voided it is in `audit_log` (`VOID`) and in the `performed_by` of the `RETURN` movements, not in a column. |
 
 UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "never repeats per register" is kept by the app (one `OPEN` session per register, and the number is read with that session locked).
 
@@ -489,7 +492,7 @@ UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migrat
 | status | purchase_status | NOT NULL DEFAULT 'RECEIVED' | |
 | total | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Invoice subtotal **without IVA**, as typed. If it does not match the sum of the lines, the purchase is saved anyway with a warning (F-06). |
 | received_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
-| received_by | BIGINT | FK → users.id, NULL | Who received the purchase. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
+| received_by | BIGINT | FK → users.id, NULL | Who received the purchase (F-13). `NULL` only in rows from before the login. (migration `0013` made it nullable). |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
@@ -542,7 +545,7 @@ UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migrat
 > - each login (F-13): `table_name = 'users'`, `action = 'LOGIN'`, `record_id` and `user_id` = the user, `new_data` = `session_id` and `expires_at`;
 > - each password set (F-13, `elmanpos passwd`): `table_name = 'users'`, `action = 'PASSWORD'`, `user_id` `NULL` (the command runs on the PC, nobody is logged in), `new_data` = `username` and `sessions_closed`. Never the password or its hash.
 >
-> Failed logins go to the server log, not here. Apart from `LOGIN`, `user_id` stays `NULL` until the actions record who did them (§7 of `03-flows-and-transactions.md`).
+> Every row written by a logged-in user carries its `user_id`: prices, costs, purchases, voids, closes, counts and exits too (F-13). `NULL` means the `elmanpos passwd` command or a row from before the login. Failed logins go to the server log, not here.
 
 ### 4.25 `app_settings` — global business configuration
 
@@ -576,7 +579,7 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 | reason | adjustment_reason | NOT NULL, CHECK (IN ('OWN_CONSUMPTION', 'DAMAGE', 'EXPIRATION', 'OTHER')) | No `THEFT` (an unexplained loss shows up in a count) and no `COUNT` (the count's own). |
 | quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | What left, positive; the movements carry the sign. |
 | notes | VARCHAR(500) | NULL | Required for `OTHER` (`CHECK (reason <> 'OTHER' OR btrim(COALESCE(notes, '')) <> '')`). |
-| created_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13). |
+| created_by | BIGINT | FK → users.id, NULL | Who wrote the exit (F-13). `NULL` only in rows from before the login. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > **Append-only:** a trigger rejects `UPDATE` and `DELETE`, like the ledger it explains. A mistake is fixed with a count.

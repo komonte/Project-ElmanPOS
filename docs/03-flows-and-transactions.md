@@ -94,7 +94,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **DB transaction** (`usecase/prices`, one `TxRunner.InTx`):
   1. Read the product: missing → 404; inactive → rejected (409).
   2. `INSERT INTO prices (product_id, unit_price, valid_from) VALUES (..., clock_timestamp())`.
-  3. `INSERT INTO audit_log (user_id, 'prices', 'INSERT', price_id, new_data)` — price changes are audited (**NFR-03**). `new_data` is the saved price as JSON. `user_id` is `NULL` until there is a login (F-13).
+  3. `INSERT INTO audit_log (user_id, 'prices', 'INSERT', price_id, new_data)` — price changes are audited (**NFR-03**). `new_data` is the saved price as JSON. `user_id` is who changed it (F-13).
 - **Invariants:**
   - Rows are only appended: a change never edits or deletes an earlier price.
   - `UNIQUE(product_id, valid_from)` — no overlapping vigencias.
@@ -136,7 +136,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   2. Lock and read the stock (`StockBalanceStore.LockOnHand`: the product row `FOR NO KEY UPDATE` and its balances `FOR UPDATE`, summed over all stores), **then** read the current cost (`CostStore.Current`). Locking first makes a manual entry wait for a reception of the same product in progress and read the cost it left; reading the cost first would keep the old average and save it over the new one.
   3. Compute `avg_cost` with `new_qty = 0`.
   4. `INSERT INTO product_costs (product_id, unit_cost, avg_cost, valid_from) VALUES (..., clock_timestamp())` — `clock_timestamp()` for the same reason as F-03 (a purchase with two lines of the same product saves two costs in one transaction).
-  5. `INSERT INTO audit_log (user_id, 'product_costs', 'INSERT', cost_id, new_data)`; `user_id` is `NULL` until F-13.
+  5. `INSERT INTO audit_log (user_id, 'product_costs', 'INSERT', cost_id, new_data)`; `user_id` is who changed it (F-13).
 - **From a purchase (F-06):** the same row and formula, inside the reception transaction, with `new_qty` = the received quantity. It locks the same way before reading the cost and the stock (`LockOnHand`), so two receptions at once, or a reception and a manual entry, do not average against stale data.
 - **Validation:** `unit_cost > 0`, at most 2 decimals, fits `NUMERIC(12,2)`; the web form takes a decimal comma or point, like the price.
 - **Invariants:** rows are only appended; the current cost is the latest `valid_from`; past margins are protected by line-item snapshots (**BR-03**).
@@ -164,7 +164,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-06: Purchase Reception
 
-- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin (permission `stock`, F-13). "Use as price" on the result changes a price: Admin only (`prices`); a Stock Clerk sees the suggestion without the button. `received_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
+- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin (permission `stock`, F-13). "Use as price" on the result changes a price: Admin only (`prices`); a Stock Clerk sees the suggestion without the button. Who received it goes in `received_by`, the `performed_by` of the movements and the `audit_log.user_id`.
 - **Trigger:** Goods arrive with a supplier invoice / remito.
 - **Preconditions:** the supplier exists and is active; each product exists, is active and is not `COMPOSITE`; there is **exactly one active store** (`stores.is_active`), where the stock goes.
 - **Amounts are without IVA:** `unit_cost` and the typed `total` are net amounts, like every cost (F-04).
@@ -214,7 +214,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-07: Atomic Sale (Core Flow)
 
-- **Actor / Role:** Cashier (`CASHIER`) or Admin (permission `sell`, F-13). `performed_by` on the movements stays `NULL` until the actions record who did them (§7).
+- **Actor / Role:** Cashier (`CASHIER`) or Admin (permission `sell`, F-13). Who charged goes in `sales.created_by` and the `performed_by` of the movements; the register's sales list shows it ("Charged by").
 - **Trigger:** Barcode scanned or product searched on the sell screen (`/pos`, "Vender", first in the menu).
 - **Preconditions:**
   - There is **exactly one active store**, it has **exactly one active register**, and that register has an `OPEN` session (**BR-02**, F-11). Otherwise the screen says the register is closed and links to `/cash`; with several stores or registers nothing is guessed (409).
@@ -268,7 +268,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-08: Full Void
 
-- **Actor / Role:** Admin only (permission `void`, F-13; voids are sensitive, **NFR-03**): a cashier does not see "Void" and the server answers 403. `performed_by` / the audit user stay `NULL` until the actions record who did them (§7). The required reason and the `audit_log` row remain the trail.
+- **Actor / Role:** Admin only (permission `void`, F-13; voids are sensitive, **NFR-03**): a cashier does not see "Void" and the server answers 403. Who voided goes in the `performed_by` of the `RETURN` movements and the `audit_log.user_id`, with the required reason.
 - **Trigger:** A sale charged today must be entirely undone (charged twice, wrong product, the customer changed their mind).
 - **Preconditions:**
   - The register has an `OPEN` session, and the sale belongs to **that** session. A sale of a closed session is not voided: its money was already counted in that close (F-12), and its cash audit must never change. Undoing it is a return with its own cash movement (§7).
@@ -312,7 +312,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 Also the **initial inventory**: the stock already on the shelves when the system starts is not loaded as a purchase, it is counted.
 
-- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13): both count and confirm, including the cost of a surplus product without cost (part of closing the count, not a cost change). `stock_counts.created_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
+- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13): both count and confirm, including the cost of a surplus product without cost (part of closing the count, not a cost change). Who opened the count goes in `stock_counts.created_by`; who confirmed it, in the `performed_by` of the adjustments and the `audit_log.user_id`. Who loaded each sector is not stored.
 - **Trigger:** periodic physical inventory (weekly / monthly), full or by sectors; the initial inventory.
 - **Preconditions:** **exactly one active store** (as F-06): the count is for it. At most **one `DRAFT` count per store** (partial unique index): the screen always continues the open one. No restriction on concurrent purchases (or, later, sales): see the snapshot below.
 - **Business flow** (Inventory → Stock count, `/counts`):
@@ -360,7 +360,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-09b: Known Exits (own consumption, damage, expired goods)
 
-- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13). `created_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
+- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13). Who wrote it goes in `created_by`, the `performed_by` of the movements and the `audit_log.user_id`; the latest exits show it ("By").
 - **Trigger:** goods leave the store without being sold: the family takes something, something breaks, something expires. Usually written on paper first and logged later.
 - **Preconditions:** exactly one active store (as F-06); the product is active and not `COMPOSITE`; there is enough stock in the store.
 - **Business flow** (Inventory → Stock exits, `/adjustments`), one exit per submit:
@@ -411,21 +411,21 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-11: Session Open
 
-- **Actor / Role:** Cashier or Admin (permission `cash`, F-13). Creating "Caja 1" when the store has none: Admin only (`cash_setup`); a cashier sees "Ask an administrator to create the register." `opened_by` stays `NULL` until the session records who opened it (§7).
+- **Actor / Role:** Cashier or Admin (permission `cash`, F-13). Creating "Caja 1" when the store has none: Admin only (`cash_setup`); a cashier sees "Ask an administrator to create the register." Who opened goes in `opened_by`, and `/cash` shows it.
 - **Trigger:** Start of shift.
 - **Preconditions:** exactly one active store with exactly one active register, and that register has **no** `OPEN` session.
 - **Business flow** (Cash → "Open register", `/cash`). The screen shows one of three states:
   1. **The store has no register** (a database with the real catalog): "Create «Caja 1»" (`POST /cash/register`, `sessions.CreateRegister`). It locks the store row (`StoreStore.Lock`), so two clicks create one register; if one already exists it returns that one.
   2. **Register closed:** the "Opening cash (float)" field and "Open register" (`POST /cash/open`). The amount is written like money: "15.000" is fifteen thousand; "15000", "1.500,50" and "$ 2.000" work too. A bad amount returns the form with what was typed and the message.
   3. **Register open:** since when and with how much float, and "Go sell" (`/pos`).
-- **DB transaction** (`sessions.Open`): find the register as above, then `INSERT INTO cashier_sessions (cash_register_id, opened_by NULL, opening_amount, status='OPEN')`.
+- **DB transaction** (`sessions.Open`): find the register as above, then `INSERT INTO cashier_sessions (cash_register_id, opened_by = <the user>, opening_amount, status='OPEN')`.
 - **Invariants:** at most one `OPEN` session per register (**BR-02**): the app checks it, and the partial unique index `uq_cashier_sessions_one_open` makes a second `OPEN` row impossible even when two screens open at once.
 - **Errors / rollback:** double-open → 409 "The register is already open". No / several stores or registers → 409. Bad amount → 400.
 - **Edge cases:** opening with a `0` float is allowed; the opening float is excluded from sales totals but included in CASH expected value at close (F-12).
 
 ### F-12: Session Close / Cash Audit (Arqueo)
 
-- **Actor / Role:** Cashier or Admin (permission `cash`, F-13): any of them closes the open session (one register, shared at shift change). Who closed is not stored yet (§7).
+- **Actor / Role:** Cashier or Admin (permission `cash`, F-13): any of them closes the open session (one register, shared at shift change). Who closed goes in `closed_by` and the `audit_log.user_id`; the summary shows "Opened by … · Closed by …" ("—" for sessions from before the login).
 - **Trigger:** End of the day.
 - **Preconditions:** the session is `OPEN`.
 - **Business flow** (`/cash` with the register open, "Close the register", folded by default):
@@ -441,11 +441,11 @@ Also the **initial inventory**: the stock already on the shelves when the system
   5. A bad amount returns the form open, with what was typed and the method marked. No summary exists for an open session (`ErrSessionStillOpen` → redirect to `/cash`): seeing the expected amounts before counting would defeat the blind close.
   6. With the register closed, `/cash` offers "See the last close" (`CashierSessionStore.LastClosed`, newest `closed_at`) with when it closed, to review yesterday's close before opening.
 - **Expected per method** (`model.NewCloseSummary`, computed and never stored): `CASH = opening_amount + Σ payments(CASH)`; other methods = `Σ payments(method)`, all from **`COMPLETED` sales only** (`SaleStore.PaidByMethod`). A voided sale is simply not counted — there is no "− Σ voids" term, because a void (F-08) never touches `payments` and only happens while the session is open. Difference = declared − expected.
-- **DB transaction** (`sessions.Close(sessionID, declared)`, one `TxRunner.InTx`; the session comes from the form, not "the open one": if someone closed it and opened another while counting, the new one is not closed):
+- **DB transaction** (`sessions.Close(by, sessionID, declared)`, one `TxRunner.InTx`; the session comes from the form, not "the open one": if someone closed it and opened another while counting, the new one is not closed):
   1. `CashierSessionStore.LockOpen` (`FOR UPDATE`, `status = 'OPEN'`; else `ErrSessionNotOpen`). A sale or void in progress finishes first, and none starts after.
   2. Compute the summary: expected per method, the declared amounts (validated: `>= 0`, 2 decimals, no method twice), sales and voided counts, total sold.
   3. `INSERT INTO cash_audits`: **5 rows**, one per method, `0` for the empty ones (`uq_cash_audits_session_method`).
-  4. `CashierSessionStore.Close`: `UPDATE cashier_sessions SET status = 'CLOSED', closing_amount = <declared cash>, closed_at = now() WHERE id = $1 AND status = 'OPEN'`.
+  4. `CashierSessionStore.Close`: `UPDATE cashier_sessions SET status = 'CLOSED', closing_amount = <declared cash>, closed_at = now(), closed_by = <the user> WHERE id = $1 AND status = 'OPEN'`.
   5. `INSERT INTO audit_log` (`cashier_sessions`, `CLOSE`) **always**, with or without difference (**NFR-03**): the session, sales and voided counts, total, and per method expected / declared / difference, plus `has_difference`.
   6. `COMMIT`.
 - **Invariants:** no sale or void enters a closed session; `cash_audits` has exactly one row per method for every closed session; the summary of a closed session never changes (its sales cannot be voided any more); a negative difference is a shortage, a positive one a surplus — shown, never silently ignored.
@@ -495,6 +495,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
 - **Without the permission** (`transport.Guard.Require`, after `AuthMiddleware`): a page → 403 "No permission" with the role's menu, "Your user is Cashier and cannot open this page." and "Back" to the role's start; htmx → 403 with the message as text (the toast shows it); API → 403 `{"error": "forbidden"}`. The server log records who, which permission and which path; `audit_log` does not (noise).
 - **Menu and buttons by role:** the menu, the start page and the buttons show only what the role can use: a cashier sees Sell, Start and Cash, without "Void"; a stock clerk sees the catalog (without taxes) and inventory, and the product's price and cost without their forms. Hiding is comfort: the server rejects anyway.
+- **Who did what:** every use case that writes takes the user explicitly (`by`: `sessions.Open(ctx, by, amount)`, `sales.Void(ctx, by, saleID, reason)`, `prices.Set(ctx, by, productID, price)`…), and the web and API handlers pass the logged-in one (`transport.UserID`). A handler that forgets it does not compile. It goes in `opened_by` / `closed_by`, `sales.created_by`, `received_by`, `stock_counts.created_by`, `stock_adjustments.created_by`, every movement's `performed_by` and every `audit_log.user_id`. The screens show it where it helps: the register ("Opened by", "Charged by"), the close summary and the latest exits. Older rows keep `NULL` ("—").
 - **Where each role lands:** after logging in without a page to return to, a cashier goes straight to `/pos`; the others go to `/`.
 - **DB:** login: `SELECT … FROM users WHERE username = $1` (stored lower-cased, `uq_users_username_lower`) + bcrypt compare; then, in one transaction, `DELETE FROM user_sessions WHERE expires_at <= now()`, `INSERT INTO user_sessions` and `INSERT INTO audit_log`. Each request: `SELECT … FROM user_sessions JOIN users … WHERE token_hash = $1 AND expires_at > now() AND is_active`.
 - **Invariants:** passwords stored only as bcrypt hashes, never logged or audited; tokens stored only as SHA-256; deactivated users cannot authenticate and their sessions stop working; every check is server-side (**NFR-02**).
@@ -552,9 +553,8 @@ Also the **initial inventory**: the stock already on the shelves when the system
 The following are intentionally **out of scope** and must not be assumed to work:
 - **Partial returns** (refund of a single line item) — v1 is full void only (F-08).
 - **Voiding sales of a closed session / returns on another day** — F-08 only voids sales of the open session, so a closed cash audit never changes. A return of a past sale needs its own flow with a **cash movement** in the current session (money out of today's drawer), plus the stock return.
-- **"Own session" for the cashier** — a cashier closes whichever session is open and sees any closed summary (one register, shared at shift change). Limiting them to their own session needs `opened_by`, which is still `NULL` (next item).
+- **"Own session" for the cashier** — a cashier closes whichever session is open and sees any closed summary (one register, shared at shift change). `opened_by` and `closed_by` are now recorded, so it can be limited later if needed.
 - **The margin of a product** — `products.margin_percent` is in the product form, so a Stock Clerk can change it. It only changes the *suggested* price; the price itself stays Admin only.
-- **Who did what** — the actions do not record the logged-in user yet: `cashier_sessions.opened_by`, `stock_movements.performed_by`, `stock_adjustments.created_by`, `purchases.received_by`, `stock_counts.created_by` and `audit_log.user_id` (except `LOGIN`) stay `NULL`. Who closed a register is not stored at all.
 - **Users page** — creating, editing and deactivating users (deactivating must close their sessions) and resetting a password from the app. Until then: `make passwd U=<username>` on the store's PC, and users are created in SQL.
 - **Persistent lockout** — the 5-failure lockout (F-13) lives in memory: restarting the server forgets it.
 - **Consignment settlement** — `is_consignment` flag exists; payment/stock accounting for consigned goods is undefined in v1.

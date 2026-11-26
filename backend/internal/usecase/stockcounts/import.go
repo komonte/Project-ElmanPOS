@@ -152,6 +152,9 @@ func checkRow(ctx context.Context, tx postgres.DBTX, row countcsv.Row) (ImportLi
 	case prod.SaleType == model.SaleTypeComposite:
 		return ImportLine{}, ErrCompositeProduct
 	}
+	if err := prod.CheckWholeQuantity(row.Quantity); err != nil {
+		return ImportLine{}, fmt.Errorf("%w: %w", service.ErrValidation, err)
+	}
 	entry := &model.StockCountEntry{ProductID: prod.ID, Sector: row.Sector, Quantity: row.Quantity}
 	if err := entry.Validate(); err != nil {
 		return ImportLine{}, err

@@ -161,7 +161,13 @@ func (s *Service) AddEntry(ctx context.Context, countID int64, e *model.StockCou
 		if err != nil {
 			return err
 		}
-		if _, err := countableProduct(ctx, tx, in.ProductID); err != nil {
+		prod, err := countableProduct(ctx, tx, in.ProductID)
+		if err == nil {
+			if werr := prod.CheckWholeQuantity(in.Quantity); werr != nil {
+				err = fmt.Errorf("%w: %w", service.ErrValidation, werr)
+			}
+		}
+		if err != nil {
 			return err
 		}
 		item, err = addEntry(ctx, tx, c, &in)

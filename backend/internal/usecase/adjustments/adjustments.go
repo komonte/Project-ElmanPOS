@@ -108,6 +108,11 @@ func (s *Service) Record(ctx context.Context, by int64, a *model.StockAdjustment
 			return err
 		}
 		prod, err := exitProduct(ctx, tx, in.ProductID)
+		if err == nil {
+			if werr := prod.CheckWholeQuantity(in.Quantity); werr != nil {
+				err = fmt.Errorf("%w: %w", service.ErrValidation, werr)
+			}
+		}
 		if err != nil {
 			return err
 		}

@@ -388,6 +388,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
   - Merma report (explained vs. unexplained per period): later.
 - **Invariants:** ledger, balance and batch `remaining_quantity` go down by the same amount; a known-exit movement is always `ADJUSTMENT` and negative (`CHECK`); the store balance never goes below 0.
 - **Errors / rollback:** any failure → full rollback (no exit row, no movement, no batch change, no audit row). Bad input → the form comes back with what was typed and the message.
+- **Opened from R-02:** `GET /adjustments?product_id=&batch_id=&reason=` fills the product, the batch and the reason ("Write off" in the expiring report) and puts the cursor on the quantity. An unknown product or reason is ignored; a batch of another product is rejected when logging, as always.
 - **Web routes:** `GET /adjustments` (page), `POST /adjustments` (log; returns the form and the latest exits out of band), `GET /adjustments/product?product_id=` (the product's batches and the open-count warning). The search, quick create and add-code are the shared `/picker/...` routes. No JSON API yet.
 
 ### F-10: WEIGHT Sale Mode (a granel)
@@ -498,7 +499,8 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
   | Sales and cash & margin reports (R-06, R-07) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
-  | Stock reports (R-01, R-02, R-04, R-05; pending) | ✓ | ✗ | ✓ |
+  | Restock and expiring reports (R-01, R-02) | ✓ | ✗ | ✓ |
+  | Other stock reports (R-03, R-04, R-05; pending) | ✓ | ✗ | ? |
   | User management | ✓ | ✗ | ✗ |
 - **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports` (admin only). An unknown role or an inactive user has none.
 - **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
@@ -515,15 +517,20 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ## 5. Reports (computed via queries — never stored)
 
+**R-01 and R-02** are for the Admin and the Stock Clerk (permission `stock`; menu "Reports" → Restock, Expiring). Code: `usecase/reports` (`stock.go`), `postgres.ReportStore`, `web/reports_stock.go`.
+
 ### R-01: Replenishment (reorder list)
-- **Semantics:** products where `is_active = TRUE` and `stock_balances.quantity <= reorder_point`.
-- **Output:** product, current quantity, `reorder_point`, `max_stock`, preferred supplier (if set), suggested order qty (`min(max_stock − quantity, historical_velocity)`; capped by `max_stock` when configured).
-- **Ordering:** most critical first (`quantity / reorder_point` ascending) → grouped by `preferred_supplier_id`.
+- **Semantics** (`/reports/restock`, `ReportStore.Restock`): active products that are not `COMPOSITE`, with the stock of all stores, in two sections:
+  1. **Below the reorder point:** `reorder_point > 0` and `quantity <= reorder_point` (a product that never had stock counts as 0).
+  2. **Ran out:** `reorder_point = 0`, no stock, and sold (`COMPLETED`) in the last 30 days, with a hint to set a reorder point. The imported catalog comes with `reorder_point = 0`: with the plain rule, thousands of products never bought would show as "0 ≤ 0".
+- **Output:** product (name and SKU), stock, reorder point, max, sold in the last 30 days and the **suggested order** (`RestockItem.Suggested`): up to `max_stock` (`max − stock`) when it is set; otherwise a month of sales (`sold in 30 days − stock`). Rounded up for unit products, to grams for weight ones; 0 or less → "—" (the person decides).
+- **Ordering:** grouped by preferred supplier (by name; "No supplier" last); inside each group the most critical first (`quantity / reorder_point` ascending), then by name. "Ran out" by name.
+- **Print:** a "Print" button (`window.print()`); the menu and the buttons are `print:hidden`, the date it was made is printed.
 
 ### R-02: Expiring Soon
-- **Semantics:** `product_batches` where `expiry_date <= now() + app_settings['expiry_warning_days']` and `remaining_quantity > 0`.
-- **Output:** product, batch number, expiry date, `remaining_quantity`, current value at batch `unit_cost`.
-- **Action link:** batch may be written off directly (F-09b known exit with `reason = 'EXPIRATION'` and that batch).
+- **Semantics** (`/reports/expiring`, `ReportStore.Expiring`): `product_batches` with `remaining_quantity > 0` and `expiry_date <= today + N days` (today in the store's time zone), including inactive products' batches (the goods expire anyway). N is `app_settings.expiry_warning_days` (missing, not a whole number, ≤ 0 or > 366 → 30, logged); the page can look 7, 15, 30, 60 or the configured days ahead (`?days=`) without changing the setting.
+- **Output:** two sections, **Expired** (oldest first) and **Expires in the next N days**: product, batch, expiry date with "expired 3 days ago" / "expires today" / "in 12 days", `remaining_quantity` (kg for weight products) and its value at the batch `unit_cost`; totals in $ for both.
+- **Action link:** "Write off" opens Stock exits (F-09b) with the product, the batch and the reason `EXPIRATION` already set (`/adjustments?product_id=&batch_id=&reason=EXPIRATION`) and the cursor on the quantity. Not offered for an inactive product (the exit would reject it).
 
 ### R-03: Top Products / ABC
 - **Semantics:** aggregate `sale_items` by `product_id` for a period: units, revenue, margin (via `unit_cost` snapshots).

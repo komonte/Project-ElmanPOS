@@ -165,7 +165,7 @@ Indexes: `(category_id)`, `(brand_id)`, `(is_active)`; for the large catalog (mi
 
 > **Validated by the app, not the DB:** the `WEIGHT`/`KILOGRAM`, `COMPOSITE`/no-batches and `margin_percent < 100` rules above live in `model.Product.Validate()`; quantities are also limited to 3 decimals and the margin to 2 (Postgres would round silently).
 
-> **Reorder semantics:** the alert is not stored — it is computed at query time: `products.is_active = TRUE AND stock_balances.quantity <= reorder_point`. The report (ordering, suggested order size capped by `max_stock`) is defined in `03-flows-and-transactions.md`.
+> **Reorder semantics:** the alert is not stored — it is computed at query time: `products.is_active = TRUE AND stock_balances.quantity <= reorder_point`, only for products with `reorder_point > 0` (the imported catalog starts at 0; those show in R-01's "ran out" section only when they sold and have no stock). The report (ordering, suggested order size capped by `max_stock`) is defined in `03-flows-and-transactions.md`.
 
 ### 4.5 `product_codes`
 
@@ -565,7 +565,7 @@ Keys in use:
 
 | Key | Value | Set by | Read by |
 |---|---|---|---|
-| `expiry_warning_days` | days, e.g. `30` | seed | R-02 (not built yet) |
+| `expiry_warning_days` | days, e.g. `30` | seed | R-02: how far ahead the expiring report looks by default. Missing or not a whole number from 1 to 366 → 30. |
 | `currency` | `"ARS"` | seed | nothing yet |
 | `max_sale_weight_kg` | kg, `50` | migration `0017` (not the seed: a database with the real catalog needs it too) | F-10: a heavier sale line is rejected as a typing mistake. Missing key → 50. |
 

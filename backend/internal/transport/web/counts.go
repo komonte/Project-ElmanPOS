@@ -41,6 +41,10 @@ type countLast struct {
 // para empezar uno. Mirar la página no abre un conteo.
 func (h *WebHandler) CountsPage(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{"Section": "counts", "TitleKey": "count.title"}
+	// Al volver de importar una planilla: cuántas filas se cargaron.
+	if n, err := strconv.Atoi(r.FormValue("imported")); err == nil && n >= 0 {
+		data["Imported"], data["HasImported"] = n, true
+	}
 	c, err := h.stockCounts.Current(r.Context())
 	switch {
 	case errors.Is(err, service.ErrNotFound):

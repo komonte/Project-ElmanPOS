@@ -162,31 +162,39 @@ func (s *Service) AddEntry(ctx context.Context, countID int64, e *model.StockCou
 		if _, err := countableProduct(ctx, tx, in.ProductID); err != nil {
 			return err
 		}
-
-		it, err := counts.Item(ctx, countID, in.ProductID)
-		if errors.Is(err, store.ErrNotFound) {
-			// Primera carga del producto: la foto del saldo. El conteo está
-			// trabado, así que nadie más crea este renglón a la vez.
-			var onHand decimal.Decimal
-			onHand, err = postgres.NewStockBalanceStore(tx).OnHandAt(ctx, in.ProductID, c.StoreID)
-			if err != nil {
-				return err
-			}
-			it, err = counts.CreateItem(ctx, countID, in.ProductID, onHand)
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := counts.AddEntry(ctx, it.ID, in.Sector, in.Quantity); err != nil {
-			return err
-		}
-		item, err = counts.Item(ctx, countID, in.ProductID)
+		item, err = addEntry(ctx, tx, c, &in)
 		return err
 	})
 	if err != nil {
 		return nil, translate(err)
 	}
 	return item, nil
+}
+
+// addEntry guarda una carga ya validada en un conteo trabado (LockDraft) y
+// devuelve el renglón del producto con el total. La primera carga del
+// producto crea el renglón con la foto del saldo del local. Lo usan la carga
+// a mano y la importación.
+func addEntry(ctx context.Context, tx postgres.DBTX, c *model.StockCount, in *model.StockCountEntry) (*model.StockCountItem, error) {
+	counts := postgres.NewStockCountStore(tx)
+	it, err := counts.Item(ctx, c.ID, in.ProductID)
+	if errors.Is(err, store.ErrNotFound) {
+		// Primera carga del producto: la foto del saldo. El conteo está
+		// trabado, así que nadie más crea este renglón a la vez.
+		var onHand decimal.Decimal
+		onHand, err = postgres.NewStockBalanceStore(tx).OnHandAt(ctx, in.ProductID, c.StoreID)
+		if err != nil {
+			return nil, err
+		}
+		it, err = counts.CreateItem(ctx, c.ID, in.ProductID, onHand)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err := counts.AddEntry(ctx, it.ID, in.Sector, in.Quantity); err != nil {
+		return nil, err
+	}
+	return counts.Item(ctx, c.ID, in.ProductID)
 }
 
 // RemoveEntry quita una carga del conteo. Si era la última del producto, el

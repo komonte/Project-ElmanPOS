@@ -1,12 +1,14 @@
 package web
 
 import (
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 
+	"github.com/komonte/Project-ElmanPOS/backend/internal/countcsv"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
@@ -223,6 +225,19 @@ var errorKeys = []struct {
 	{adjustments.ErrCompositeProduct, "error.line_composite"},
 	{adjustments.ErrBatchNotAllowed, "error.adjustment_batch_invalid"},
 	{adjustments.ErrUnknownBatch, "error.adjustment_batch_invalid"},
+	// Importar un conteo desde una planilla (F-09). La columna que falta y el
+	// tamaño los arma importErrMsg.
+	{countcsv.ErrEmptyFile, "error.import_empty"},
+	{countcsv.ErrCodeMissing, "error.import_code_missing"},
+	{countcsv.ErrCodeScientific, "error.import_code_scientific"},
+	{countcsv.ErrQuantityMissing, "error.import_quantity_missing"},
+	{countcsv.ErrQuantityInvalid, "error.import_quantity_invalid"},
+	{countcsv.ErrCostInvalid, "error.import_cost_invalid"},
+	{countcsv.ErrExpiryInvalid, "error.import_expiry_invalid"},
+	{csv.ErrQuote, "error.import_bad_row"},
+	{csv.ErrBareQuote, "error.import_bad_row"},
+	{stockcounts.ErrCodeNotFound, "error.import_code_not_found"},
+	{stockcounts.ErrImportSectorRequired, "error.count_sector_required"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

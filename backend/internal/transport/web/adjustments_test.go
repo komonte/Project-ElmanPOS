@@ -86,7 +86,7 @@ func TestRenderAdjustments(t *testing.T) {
 
 	t.Run("page", func(t *testing.T) {
 		html := render(t, "adjustments.gohtml", map[string]any{"Section": "adjustments", "TitleKey": "adjustment.title",
-			"Form": formData(adjustmentForm{Reason: model.ReasonOwnConsumption}, nil, nil, ""),
+			"Form":   formData(adjustmentForm{Reason: model.ReasonOwnConsumption}, nil, nil, ""),
 			"Recent": map[string]any{"Adjustments": recent}})
 		for _, s := range []string{`href="/adjustments" aria-current="page"`,
 			`<form id="adjustment-form" data-picker-line hx-post="/adjustments"`,

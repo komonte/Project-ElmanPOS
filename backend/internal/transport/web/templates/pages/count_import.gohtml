@@ -1,0 +1,117 @@
+{{define "content"}}
+{{/* Importar una planilla al conteo en borrador (F-09). Primero el archivo y
+     el sector por defecto; después la vista previa: qué filas entran (las
+     primeras 200) y cuáles no, con el botón para cargar. Nada se guarda hasta
+     "Cargar".
+
+     Datos: .Count, .Sectors, .Sector, .Error y .Preview (.Lines, .LineCount,
+     .Hidden, .Problems [importProblemRow], .FileData). */}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "count.import_title"}}</h1>
+  <p class="mt-2 text-muted max-w-2xl">{{t "count.import_hint"}}</p>
+</header>
+
+<div class="space-y-6">
+  {{if .Error}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+  {{end}}
+
+  {{with .Preview}}
+  <section aria-labelledby="import-preview-title" class="space-y-4">
+    <h2 id="import-preview-title" class="font-display font-bold text-2xl">{{t "count.import_preview"}}</h2>
+    <p class="text-lg">{{printf (t "count.import_summary") .LineCount (len .Problems)}}</p>
+
+    {{if .Problems}}
+    <div class="space-y-2">
+      <h3 class="font-bold">{{t "count.import_problems"}}</h3>
+      <p class="text-sm text-muted">{{t "count.import_problems_hint"}}</p>
+      <div class="overflow-x-auto border-2 border-danger rounded-md bg-surface">
+        <table class="min-w-full text-left">
+          <thead class="border-b-2 border-line text-muted">
+            <tr>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.import_line"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.import_code"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.import_problem"}}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            {{range .Problems}}
+            <tr>
+              <td class="px-3 py-2 tabular">{{.Line}}</td>
+              <td class="px-3 py-2 tabular">{{.Code}}</td>
+              <td class="px-3 py-2">{{.Message}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {{end}}
+
+    {{if .Lines}}
+    <div class="space-y-2">
+      <h3 class="font-bold">{{t "count.import_ok"}}</h3>
+      <div class="overflow-x-auto border-2 border-line rounded-md bg-surface">
+        <table class="min-w-full text-left">
+          <thead class="border-b-2 border-line text-muted">
+            <tr>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.import_line"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "picker.product"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.sector"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold text-right">{{t "count.quantity"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold text-right">{{t "count.cost"}}</th>
+              <th scope="col" class="px-3 py-2 font-bold">{{t "count.expiry"}}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            {{range .Lines}}
+            <tr>
+              <td class="px-3 py-2 tabular">{{.Line}}</td>
+              <td class="px-3 py-2 font-bold">{{.ProductName}}</td>
+              <td class="px-3 py-2">{{.Sector}}</td>
+              <td class="px-3 py-2 text-right tabular">{{qty .Quantity}}</td>
+              <td class="px-3 py-2 text-right tabular">{{if .Cost}}{{money .Cost}}{{end}}</td>
+              <td class="px-3 py-2">{{.Expiry}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{if .Hidden}}<p class="text-sm text-muted">{{printf (t "count.import_hidden") .Hidden}}</p>{{end}}
+    </div>
+    {{end}}
+
+    <div class="flex flex-wrap items-center gap-4">
+      {{if .LineCount}}
+      <form method="post" action="/counts/{{$.Count.ID}}/import/apply">
+        <input type="hidden" name="sector" value="{{$.Sector}}">
+        <input type="hidden" name="file_data" value="{{.FileData}}">
+        <button type="submit" class="btn-primary">{{printf (t "count.import_apply") .LineCount}}</button>
+      </form>
+      {{end}}
+      <a href="/counts/{{$.Count.ID}}/import" class="btn-secondary">{{t "count.import_other"}}</a>
+    </div>
+  </section>
+  {{else}}
+  <form method="post" action="/counts/{{.Count.ID}}/import" enctype="multipart/form-data"
+        class="p-4 border-2 border-line rounded-md bg-surface space-y-4 max-w-2xl">
+    <label class="field-label">{{t "count.import_file"}}
+      <input type="file" name="file" accept=".csv,text/csv" required class="field">
+    </label>
+    <label class="field-label">{{t "count.import_sector"}}
+      <input type="text" name="sector" list="import-sectors" autocomplete="off" maxlength="60" required
+             value="{{.Sector}}" placeholder="{{t "count.sector_placeholder"}}" class="field">
+    </label>
+    <datalist id="import-sectors">{{range .Sectors}}<option value="{{.}}"></option>{{end}}</datalist>
+    <div class="text-sm text-muted space-y-1">
+      <p>{{t "count.import_format"}}</p>
+      <p class="font-bold tabular">codigo;cantidad;sector;costo;vencimiento</p>
+      <p>{{t "count.import_format_more"}}</p>
+    </div>
+    <button type="submit" class="btn-primary">{{t "count.import_preview_button"}}</button>
+  </form>
+  {{end}}
+
+  <a href="/counts" class="btn-secondary">{{t "count.back"}}</a>
+</div>
+{{end}}

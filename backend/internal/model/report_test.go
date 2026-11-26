@@ -140,3 +140,31 @@ func TestMargin(t *testing.T) {
 		t.Error("no sales: 0%")
 	}
 }
+
+func TestRestockSuggested(t *testing.T) {
+	d := decimal.RequireFromString
+	max := d("24")
+	for _, c := range []struct {
+		name string
+		it   RestockItem
+		want string
+	}{
+		{"up to the max", RestockItem{Quantity: d("3"), MaxStock: &max, Sold: d("100")}, "21"},
+		{"without max: a month of sales", RestockItem{Quantity: d("2"), Sold: d("10")}, "8"},
+		{"units round up", RestockItem{Quantity: d("2.5"), Sold: d("10")}, "8"},
+		{"kg to grams", RestockItem{SaleType: SaleTypeWeight, Quantity: d("0.2504"), Sold: d("3")}, "2.75"},
+		{"enough stock", RestockItem{Quantity: d("12"), Sold: d("10")}, "0"},
+		{"nothing to go by", RestockItem{Quantity: d("0")}, "0"},
+	} {
+		if got := c.it.Suggested(); !got.Equal(d(c.want)) {
+			t.Errorf("%s: got %v, want %s", c.name, got, c.want)
+		}
+	}
+}
+
+func TestExpiringBatchValue(t *testing.T) {
+	d := decimal.RequireFromString
+	if v := (ExpiringBatch{Remaining: d("1.255"), UnitCost: d("1000.10")}).Value(); !v.Equal(d("1255.13")) {
+		t.Errorf("value: %v", v)
+	}
+}

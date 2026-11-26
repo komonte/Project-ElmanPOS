@@ -215,3 +215,56 @@ type SessionTally struct {
 	Declared []*CashAudit               `json:"declared"`
 	Margin   Margin                     `json:"margin"`
 }
+
+// RestockItem es un producto del reporte de reposición (R-01).
+type RestockItem struct {
+	ProductID    int64            `json:"product_id"`
+	SKU          string           `json:"sku"`
+	Name         string           `json:"name"`
+	SaleType     SaleType         `json:"sale_type"`
+	SupplierID   *int64           `json:"supplier_id"`
+	SupplierName *string          `json:"supplier_name"`
+	Quantity     decimal.Decimal  `json:"quantity"` // el stock de hoy
+	ReorderPoint decimal.Decimal  `json:"reorder_point"`
+	MaxStock     *decimal.Decimal `json:"max_stock"`
+	// Sold son las unidades (o kg) vendidas en los últimos 30 días.
+	Sold decimal.Decimal `json:"sold"`
+}
+
+// Suggested es cuánto pedir: hasta el máximo si está cargado; si no, lo que
+// se vende en un mes (lo vendido en 30 días) menos el stock. Por unidad se
+// redondea para arriba; por peso, a gramos. 0 si no hace falta o no hay con
+// qué calcularlo.
+func (it RestockItem) Suggested() decimal.Decimal {
+	target := it.Sold
+	if it.MaxStock != nil {
+		target = *it.MaxStock
+	}
+	s := target.Sub(it.Quantity)
+	if !s.IsPositive() {
+		return decimal.Zero
+	}
+	if it.SaleType == SaleTypeWeight {
+		return s.Round(3)
+	}
+	return s.Ceil()
+}
+
+// ExpiringBatch es un lote con stock que vence pronto o ya venció (R-02).
+type ExpiringBatch struct {
+	BatchID       int64           `json:"batch_id"`
+	BatchNumber   string          `json:"batch_number"`
+	ProductID     int64           `json:"product_id"`
+	SKU           string          `json:"sku"`
+	Name          string          `json:"name"`
+	ProductActive bool            `json:"product_active"`
+	SaleType      SaleType        `json:"sale_type"`
+	Expiry        string          `json:"expiry"` // 2026-11-26
+	Remaining     decimal.Decimal `json:"remaining"`
+	UnitCost      decimal.Decimal `json:"unit_cost"`
+}
+
+// Value es lo que vale lo que queda del lote, a su costo.
+func (b ExpiringBatch) Value() decimal.Decimal {
+	return b.Remaining.Mul(b.UnitCost).Round(2)
+}

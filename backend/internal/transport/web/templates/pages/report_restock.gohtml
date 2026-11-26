@@ -1,0 +1,85 @@
+{{define "content"}}
+{{/* Reposición (R-01). Datos: .Report (reports.Restock), .SoldDays y
+     .Generated. Se imprime para llevarla al proveedor: el menú y los botones
+     no salen en el papel (print:hidden), la fecha sí. */}}
+<header class="flex flex-wrap items-end justify-between gap-4 mb-6">
+  <div>
+    <h1 class="shelf-title">{{t "report.restock_title"}}</h1>
+    <p class="mt-4 text-lg text-muted max-w-2xl print:hidden">{{t "report.restock_hint"}}</p>
+    <p class="mt-2 text-muted">{{printf (t "report.generated") (formatTime .Generated)}}</p>
+  </div>
+  <button id="report-print" type="button" onclick="window.print()" class="btn-secondary print:hidden">{{t "report.print"}}</button>
+</header>
+
+{{with .Report}}
+{{if eq .Count 0}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{t "report.restock_empty"}}</p>
+{{end}}
+
+{{range .Below}}
+<section class="mb-8 break-inside-avoid" data-supplier="{{if .SupplierID}}{{.SupplierID}}{{else}}none{{end}}">
+  <h2 class="font-display font-bold text-3xl mb-3">{{if .SupplierName}}{{.SupplierName}}{{else}}{{t "report.no_supplier"}}{{end}}</h2>
+  <div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+    <table class="min-w-full text-left">
+      <thead class="border-b-2 border-line text-muted">
+        <tr>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_product"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_stock"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_reorder"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_max"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{printf (t "report.col_sold") $.SoldDays}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_suggested"}}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {{range .Items}}{{template "restock-row" .}}{{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+
+{{if .RanOut}}
+<section id="report-ran-out" class="mb-8 break-inside-avoid">
+  <h2 class="font-display font-bold text-3xl">{{t "report.ran_out"}}</h2>
+  <p class="mt-1 mb-3 text-muted max-w-3xl">{{t "report.ran_out_hint"}}</p>
+  <div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+    <table class="min-w-full text-left">
+      <thead class="border-b-2 border-line text-muted">
+        <tr>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_product"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_supplier"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{printf (t "report.col_sold") $.SoldDays}}</th>
+          <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_suggested"}}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {{range .RanOut}}
+        <tr data-product="{{.ProductID}}">
+          <th scope="row" class="px-3 py-2 font-normal"><span class="block font-bold">{{.Name}}</span><span class="block text-sm text-muted">{{.SKU}}</span></th>
+          <td class="px-3 py-2">{{if .SupplierName}}{{.SupplierName}}{{else}}—{{end}}</td>
+          <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{template "restock-qty" (dict "Q" .Sold "Type" .SaleType)}}</td>
+          <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold" data-suggested>{{if .Suggested.IsZero}}—{{else}}{{template "restock-qty" (dict "Q" .Suggested "Type" .SaleType)}}{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</section>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "restock-row"}}
+<tr data-product="{{.ProductID}}">
+  <th scope="row" class="px-3 py-2 font-normal"><span class="block font-bold">{{.Name}}</span><span class="block text-sm text-muted">{{.SKU}}</span></th>
+  <td class="px-3 py-2 text-right tabular whitespace-nowrap {{if .Quantity.IsZero}}text-danger font-bold{{end}}">{{template "restock-qty" (dict "Q" .Quantity "Type" .SaleType)}}</td>
+  <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{template "restock-qty" (dict "Q" .ReorderPoint "Type" .SaleType)}}</td>
+  <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{with .MaxStock}}{{template "restock-qty" (dict "Q" . "Type" $.SaleType)}}{{else}}—{{end}}</td>
+  <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{template "restock-qty" (dict "Q" .Sold "Type" .SaleType)}}</td>
+  <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold" data-suggested>{{if .Suggested.IsZero}}—{{else}}{{template "restock-qty" (dict "Q" .Suggested "Type" .SaleType)}}{{end}}</td>
+</tr>
+{{end}}
+
+{{/* Una cantidad con su unidad: "3" o "1,25 kg". */}}
+{{define "restock-qty"}}{{qty .Q}}{{if eq (printf "%s" .Type) "WEIGHT"}} kg{{end}}{{end}}

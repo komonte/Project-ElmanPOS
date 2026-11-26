@@ -228,3 +228,18 @@ func (p *Product) Validate() error {
 func validQuantity(d decimal.Decimal) bool {
 	return !d.IsNegative() && !d.GreaterThan(maxQuantity) && d.Equal(d.Round(3))
 }
+
+// ErrQuantityNotWhole: un producto que no se vende por peso se cuenta, se
+// compra y sale de a unidades enteras (2026-11-26). Vender ya lo exigía
+// (ErrSaleQuantityNotWhole); conteos, salidas y compras también.
+var ErrQuantityNotWhole = errors.New("this product goes by unit: the quantity must be a whole number")
+
+// CheckWholeQuantity revisa que la cantidad sea entera si el producto no se
+// vende por peso. Los de peso van en kg, con hasta 3 decimales (eso lo
+// revisa cada Validate).
+func (p *Product) CheckWholeQuantity(q decimal.Decimal) error {
+	if p.SaleType != SaleTypeWeight && !q.IsInteger() {
+		return ErrQuantityNotWhole
+	}
+	return nil
+}

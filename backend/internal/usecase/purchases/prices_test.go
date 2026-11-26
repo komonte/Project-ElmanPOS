@@ -2,6 +2,7 @@ package purchases
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,5 +94,19 @@ func TestMissingPricesAndPending(t *testing.T) {
 		if m.ProductID == f.plain {
 			t.Error("a product with a price is not missing")
 		}
+	}
+}
+
+// Un producto por unidad se recibe en números enteros; el error dice el
+// renglón.
+func TestReceiveWholeUnits(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Receive(f.ctx, f.userID, &model.Purchase{SupplierID: f.supplierID, Total: dec("100"),
+		Items: []*model.PurchaseItem{line(f.batched, "1.5", "50"), line(f.plain, "2.5", "10")}})
+	if !errors.Is(err, model.ErrQuantityNotWhole) || !errors.Is(err, service.ErrValidation) {
+		t.Fatalf("unit 2.5: got %v", err)
+	}
+	if !strings.Contains(err.Error(), "line 2") {
+		t.Errorf("the error must name line 2: %v", err)
 	}
 }

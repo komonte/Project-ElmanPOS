@@ -11,7 +11,7 @@
   {{/* Con el producto ya elegido (un error, o abierta desde "Dar de baja"
        de R-02), se sigue por la cantidad. */}}
   {{if .Form.ProductID}}{{$focus = "quantity"}}{{end}}
-  <form id="adjustment-form" data-picker-line hx-post="/adjustments" hx-target="#adjustment-panel" hx-swap="outerHTML"
+  <form id="adjustment-form" data-picker-line data-heavy-check hx-post="/adjustments" hx-target="#adjustment-panel" hx-swap="outerHTML"
         class="p-4 border-2 rounded-md bg-surface space-y-3 {{if .Error}}border-danger{{else}}border-line{{end}}">
     {{if .Error}}
     <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
@@ -38,9 +38,10 @@
         <input type="hidden" name="product_id" value="{{.Form.ProductID}}">
       </div>
       <label class="field-label">{{t "count.quantity"}}
-        <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Form.Quantity}}"
-               {{if eq $focus "quantity"}}data-focus autofocus{{end}}
+        <input type="text" name="quantity" inputmode="{{if and .Form.Unit (not .Form.Weight)}}numeric{{else}}decimal{{end}}" autocomplete="off" value="{{.Form.Quantity}}"
+               {{if .Form.Weight}}data-weight="1"{{end}} {{if eq $focus "quantity"}}data-focus autofocus{{end}}
                class="field tabular">
+        <span data-qty-unit data-kg="{{t "unit.kg_hint"}}" data-units="{{t "unit.units_hint"}}" class="block text-sm font-normal text-muted">{{if .Form.Unit}}{{if .Form.Weight}}{{t "unit.kg_hint"}}{{else}}{{t "unit.units_hint"}}{{end}}{{end}}</span>
       </label>
       <label class="field-label">{{t "adjustment.reason"}}
         <select name="reason" class="field">

@@ -92,7 +92,7 @@ func TestRenderAdjustments(t *testing.T) {
 			"Form":   formData(adjustmentForm{Reason: model.ReasonOwnConsumption}, nil, nil, ""),
 			"Recent": map[string]any{"Adjustments": recent}})
 		for _, s := range []string{`href="/adjustments" aria-current="page"`,
-			`<form id="adjustment-form" data-picker-line hx-post="/adjustments"`,
+			`<form id="adjustment-form" data-picker-line data-heavy-check hx-post="/adjustments"`,
 			`hx-get="/picker/product-options"`, `onkeydown="pickerSearchEnter(event, this)"`,
 			`<option value="OWN_CONSUMPTION" selected>Consumo propio</option>`, ">Rotura<", ">Vencido<", ">Otro<",
 			"function pickerSetProduct", "'/adjustments/product'", "addEventListener('productChosen'",

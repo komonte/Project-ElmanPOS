@@ -274,6 +274,7 @@ func TestRecordErrors(t *testing.T) {
 		{"another product's batch", &model.StockAdjustment{ProductID: f.batched, Reason: model.ReasonDamage, Quantity: dec("1"), BatchID: &batch}, ErrUnknownBatch},
 		{"inactive", &model.StockAdjustment{ProductID: inactive, Reason: model.ReasonDamage, Quantity: dec("1")}, ErrProductInactive},
 		{"composite", &model.StockAdjustment{ProductID: f.composite, Reason: model.ReasonDamage, Quantity: dec("1")}, ErrCompositeProduct},
+		{"half a unit", &model.StockAdjustment{ProductID: f.plain, Reason: model.ReasonDamage, Quantity: dec("0.5")}, model.ErrQuantityNotWhole},
 		{"unknown", &model.StockAdjustment{ProductID: 999999999, Reason: model.ReasonDamage, Quantity: dec("1")}, ErrUnknownProduct},
 	}
 	for _, tt := range tests {

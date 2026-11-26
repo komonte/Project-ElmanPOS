@@ -331,6 +331,9 @@ func checkProduct(ctx context.Context, tx postgres.DBTX, it *model.PurchaseItem)
 	case !prod.ControlsBatches && (it.BatchNumber != "" || it.ExpiryDate != ""):
 		return nil, ErrBatchNotAllowed
 	}
+	if err := prod.CheckWholeQuantity(it.Quantity); err != nil {
+		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
+	}
 	return prod, nil
 }
 

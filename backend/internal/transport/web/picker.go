@@ -138,7 +138,8 @@ func (h *WebHandler) PickerQuickProductCreate(w http.ResponseWriter, r *http.Req
 // shelf_life es null sin días de vida.
 func productChosenTrigger(p *model.Product) (string, error) {
 	b, err := json.Marshal(map[string]any{"productChosen": map[string]any{
-		"id": p.ID, "name": p.Name, "batches": p.ControlsBatches, "shelf_life": p.ShelfLifeDays}})
+		"id": p.ID, "name": p.Name, "batches": p.ControlsBatches, "shelf_life": p.ShelfLifeDays,
+		"weight": p.SaleType == model.SaleTypeWeight}})
 	return string(b), err
 }
 

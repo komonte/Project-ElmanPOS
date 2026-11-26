@@ -230,3 +230,21 @@ func TestProductValidateNil(t *testing.T) {
 		t.Fatalf("error: got %v, want ErrNilProduct", err)
 	}
 }
+
+func TestCheckWholeQuantity(t *testing.T) {
+	d := dec
+	unit := &model.Product{SaleType: model.SaleTypeUnit}
+	weight := &model.Product{SaleType: model.SaleTypeWeight}
+	if err := unit.CheckWholeQuantity(d("3")); err != nil {
+		t.Errorf("unit 3: %v", err)
+	}
+	if err := unit.CheckWholeQuantity(d("0")); err != nil {
+		t.Errorf("unit 0 (a count can be 0): %v", err)
+	}
+	if err := unit.CheckWholeQuantity(d("2.5")); !errors.Is(err, model.ErrQuantityNotWhole) {
+		t.Errorf("unit 2.5: %v", err)
+	}
+	if err := weight.CheckWholeQuantity(d("0.375")); err != nil {
+		t.Errorf("weight 0.375: %v", err)
+	}
+}

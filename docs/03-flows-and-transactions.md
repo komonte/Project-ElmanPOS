@@ -163,6 +163,9 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ## 3. Stock & Sales
 
+> **Quantities by unit or by weight** (2026-11-26, F-06, F-09, F-09b): the product decides the unit; whoever loads it does not choose it. A product that is not sold by weight is received, counted (also from the CSV import) and exited in **whole units** (`Product.CheckWholeQuantity` → `model.ErrQuantityNotWhole`, 400 "This product goes by unit: type a whole number"), as a sale already required (F-07). Weight products go in kg with up to 3 decimals. On screen, once a product is picked, the quantity says "whole units" (numeric keypad) or "in kg (500 g = 0.5)" (`pickerSetUnit`). In counts and exits (`data-heavy-check`), more than **50 kg** of a weight product asks "Are you sure it is 500 kg?" before sending (grams typed as kg); a purchase does not ask (60 kg on an invoice can be real).
+
+
 ### F-06: Purchase Reception
 
 - **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin (permission `stock`, F-13). Setting the prices of an invoice is Admin only (`prices`); a Stock Clerk sees the invoice and its price states without the form. Who received it goes in `received_by`, the `performed_by` of the movements and the `audit_log.user_id`.

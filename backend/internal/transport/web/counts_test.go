@@ -99,7 +99,7 @@ func TestRenderCounts(t *testing.T) {
 
 	t.Run("sheet", func(t *testing.T) {
 		html := render(t, "count_sheet.gohtml", sheet(countEntryForm{Sector: "Depósito"}, nil, ""))
-		for _, s := range []string{`<form id="count-entry" data-picker-line hx-post="/counts/5/entries"`,
+		for _, s := range []string{`<form id="count-entry" data-picker-line data-heavy-check hx-post="/counts/5/entries"`,
 			`hx-get="/picker/product-options"`, `hx-target="next ul" hx-swap="innerHTML"`,
 			`onkeydown="pickerSearchEnter(event, this)"`, `name="sector" list="count-sectors"`,
 			`value="Depósito"`, `<option value="Góndola 3"></option>`,

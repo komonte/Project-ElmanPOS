@@ -68,6 +68,7 @@
   // si está vacío o si lo había precargado otro producto (se cambió de
   // producto): un vencimiento escrito a mano no se toca.
   function pickerSetProduct(row, product) {
+    pickerSetUnit(row, product);
     row.querySelector('[name=product_id]').value = product.id;
     row.querySelector('[name=product_q]').value = product.name;
     row.querySelector('[name=batches]').value = product.batches ? '1' : '';

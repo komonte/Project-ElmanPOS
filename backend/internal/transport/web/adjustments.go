@@ -23,6 +23,9 @@ const adjustmentRecentLimit = 50
 // anotan varias del mismo motivo seguidas.
 type adjustmentForm struct {
 	ProductID, ProductQ, Quantity, Reason, BatchID, Notes string
+	// Weight: el producto ya elegido va por peso (abierta desde "Dar de
+	// baja"; si no, la unidad la pone el JavaScript al elegir).
+	Weight, Unit bool
 }
 
 // adjustmentLast es lo último que se anotó, para confirmarlo en pantalla.
@@ -68,6 +71,7 @@ func (h *WebHandler) adjustmentPrefill(r *http.Request) adjustmentForm {
 		return form
 	}
 	form.ProductID, form.ProductQ = strconv.FormatInt(p.ID, 10), p.Name
+	form.Unit, form.Weight = true, p.SaleType == model.SaleTypeWeight
 	if batch, err := strconv.ParseInt(q.Get("batch_id"), 10, 64); err == nil && batch > 0 {
 		form.BatchID = strconv.FormatInt(batch, 10)
 	}

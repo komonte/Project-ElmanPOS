@@ -26,6 +26,7 @@
   // Deja el producto elegido en la carga y pasa a la cantidad. Lo llama el
   // buscador compartido (picker_script.gohtml).
   function pickerSetProduct(row, product) {
+    pickerSetUnit(row, product);
     row.querySelector('[name=product_id]').value = product.id;
     row.querySelector('[name=product_q]').value = product.name;
     row.querySelector('ul[role=listbox]').replaceChildren();

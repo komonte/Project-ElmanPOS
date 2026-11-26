@@ -50,3 +50,15 @@ func TestStoreStore_ActiveID(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreStore_Lock(t *testing.T) {
+	f := newProductFixture(t)
+	stores := postgres.NewStoreStore(f.tx)
+	id := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test lock') RETURNING id;`)
+	if err := stores.Lock(f.ctx, id); err != nil {
+		t.Errorf("lock: %v", err)
+	}
+	if err := stores.Lock(f.ctx, -1); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown store: got %v, want %v", err, store.ErrNotFound)
+	}
+}

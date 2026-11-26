@@ -252,6 +252,11 @@ var errorKeys = []struct {
 	// Cierre (F-12).
 	{store.ErrSessionNotOpen, "error.cash_session_not_open"},
 	{model.ErrInvalidDeclaredAmount, "error.cash_declared_invalid"},
+	// Anular (F-08).
+	{sales.ErrSaleOtherSession, "error.void_other_session"},
+	{model.ErrSaleAlreadyVoided, "error.void_already_voided"},
+	{model.ErrVoidReasonRequired, "error.void_reason_required"},
+	{model.ErrVoidReasonTooLong, "error.void_reason_too_long"},
 	// Venta (F-07, F-10). Los de un renglón llevan el producto adelante y la
 	// falta de stock dice cuánto hay (posErrMsg).
 	{sales.ErrRegisterClosed, "error.sale_register_closed"},

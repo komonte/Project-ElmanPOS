@@ -3,7 +3,9 @@
      .Session, nil si no hay), .Amount (lo escrito si abrir falló), .Error,
      y con la caja abierta .Sales (las ventas de la sesión, la última
      primero), .CloseFields (un closeField por medio) y .CloseError (si
-     cerrar falló: el formulario de cierre vuelve abierto). */}}
+     cerrar falló: el formulario de cierre vuelve abierto). Anular: .Refund
+     (qué devolver, después de anular) y, si falló, .VoidError, .VoidSaleID
+     y .VoidReason (la fila vuelve abierta). */}}
 <header class="mb-8">
   <h1 class="shelf-title">{{t "cash.title"}}</h1>
   <p class="mt-2 text-muted max-w-2xl">{{t "cash.hint"}}</p>
@@ -11,6 +13,9 @@
 
 {{if .Error}}
 <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+{{end}}
+{{with .Refund}}
+<div id="cash-refund" role="status" class="mb-6 p-4 bg-surface border-l-8 border-tag rounded-sm font-bold text-lg max-w-3xl">{{.}}</div>
 {{end}}
 
 {{with .State}}
@@ -31,7 +36,9 @@
 </section>
 
 {{/* Ventas de esta caja (F-08): la última primero. La anulada queda
-     tachada, con su motivo. El ticket se reimprime en otra pestaña. */}}
+     tachada, con su motivo. El ticket se reimprime en otra pestaña.
+     "Anular" abre debajo de la fila el motivo y "Confirmar anulación", que
+     pide confirmar antes de mandar. */}}
 <section id="cash-sales" class="mt-8 max-w-3xl">
   <h2 class="font-display font-bold text-2xl mb-3">{{t "cash.sales_title"}}</h2>
   {{if not $.Sales}}
@@ -51,18 +58,43 @@
     <tbody>
       {{range $.Sales}}
       {{$voided := eq .Status "VOIDED"}}
+      {{$failed := and $.VoidError (eq $.VoidSaleID .ID)}}
       <tr id="sale-{{.ID}}" data-status="{{.Status}}" class="border-b border-line align-top{{if $voided}} text-muted{{end}}">
         <th scope="row" class="p-3 text-left tabular{{if $voided}} line-through{{end}}">{{.SaleNumber}}</th>
         <td class="p-3 tabular{{if $voided}} line-through{{end}}">{{formatClock .CreatedAt}}</td>
-        <td class="p-3 text-right tabular font-bold{{if $voided}} line-through{{end}}">{{money .Total}}</td>
+        <td class="p-3 text-right tabular font-bold whitespace-nowrap{{if $voided}} line-through{{end}}">{{money .Total}}</td>
         <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}</td>
         <td class="p-3">{{if $voided}}<span class="font-bold text-danger">{{t "cash.sale_voided"}}</span>
           <span class="block text-sm" data-void-reason>{{printf (t "cash.sale_void_reason") .VoidReason}}</span>{{else}}{{t "cash.sale_completed"}}{{end}}</td>
         <td class="p-3 text-right">
-          <a href="/pos/sales/{{.ID}}/ticket" target="_blank" rel="noopener" class="btn-secondary"
-             aria-label="{{printf (t "cash.ticket_of") .SaleNumber}}">{{t "cash.ticket"}}</a>
+          <div class="flex justify-end gap-2">
+            <a href="/pos/sales/{{.ID}}/ticket" target="_blank" rel="noopener" class="btn-secondary px-3 py-1"
+               aria-label="{{printf (t "cash.ticket_of") .SaleNumber}}">{{t "cash.ticket"}}</a>
+            {{if not $voided}}
+            <button type="button" id="void-open-{{.ID}}" class="btn-secondary px-3 py-1" aria-controls="void-{{.ID}}"
+                    aria-expanded="{{if $failed}}true{{else}}false{{end}}" onclick="cashToggleVoid(this)"
+                    aria-label="{{printf (t "cash.void_of") .SaleNumber}}">{{t "cash.void"}}</button>
+            {{end}}
+          </div>
         </td>
       </tr>
+      {{if not $voided}}
+      <tr id="void-{{.ID}}" class="border-b border-line bg-danger-soft"{{if not $failed}} hidden{{end}}>
+        <td colspan="6" class="p-4">
+          <form method="post" action="/cash/sales/{{.ID}}/void" class="space-y-3" onsubmit="return cashConfirmVoid(this)"
+                data-ask="{{printf (t "cash.void_confirm") .SaleNumber (money .Total)}}"
+                data-reason="{{t "cash.void_reason"}}" data-final="{{t "cash.void_confirm_final"}}">
+            {{if $failed}}<div role="alert" class="p-4 bg-surface border-l-8 border-danger rounded-sm font-bold">{{$.VoidError}}</div>{{end}}
+            <label for="void-reason-{{.ID}}" class="field-label">{{printf (t "cash.void_reason_of") .SaleNumber}}</label>
+            <input type="text" id="void-reason-{{.ID}}" name="reason" required maxlength="300" autocomplete="off"
+                   value="{{if $failed}}{{$.VoidReason}}{{end}}" aria-describedby="void-reason-{{.ID}}-hint"
+                   class="field"{{if $failed}} aria-invalid="true" autofocus{{end}}>
+            <p id="void-reason-{{.ID}}-hint" class="field-hint">{{t "cash.void_reason_hint"}}</p>
+            <button type="submit" class="btn-primary">{{t "cash.void_submit"}}</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
       {{end}}
     </tbody>
   </table>
@@ -101,6 +133,21 @@
   </form>
 </details>
 <script>
+  // Anular: abre o cierra el motivo debajo de la fila.
+  function cashToggleVoid(btn) {
+    const row = document.getElementById(btn.getAttribute('aria-controls'));
+    const open = row.hidden;
+    row.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) row.querySelector('input[name="reason"]').focus();
+  }
+  // Antes de anular, repite la venta y el motivo: no se puede deshacer.
+  function cashConfirmVoid(form) {
+    const reason = form.elements.reason.value.trim();
+    if (!confirm(form.dataset.ask + '\n\n' + form.dataset.reason + ': ' + reason + '\n\n' + form.dataset.final)) return false;
+    form.querySelector('button[type="submit"]').disabled = true;
+    return true;
+  }
   function cashCloseFields(form) {
     return Array.prototype.slice.call(form.querySelectorAll('input[name^="declared_"]'));
   }

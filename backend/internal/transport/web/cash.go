@@ -24,9 +24,14 @@ import (
 // posnet, el home banking, la app del QR) y cuántos cobros hubo con él, sin
 // el monto. Después de cerrar, /cash/sessions/{id} muestra si sobra o falta.
 
-// CashPage handles GET /cash.
+// CashPage handles GET /cash. Con ?voided={id} (después de anular) muestra
+// qué devolverle al cliente.
 func (h *WebHandler) CashPage(w http.ResponseWriter, r *http.Request) {
-	h.renderCash(w, r, nil)
+	data := map[string]any{}
+	if id, err := strconv.ParseInt(r.FormValue("voided"), 10, 64); err == nil && id > 0 {
+		data["VoidedID"] = id
+	}
+	h.renderCash(w, r, data)
 }
 
 // CashCreateRegister handles POST /cash/register: crea "Caja 1" (o devuelve
@@ -99,6 +104,45 @@ func declaredFromForm(r *http.Request) (declared []*model.CashAudit, typed map[s
 	return declared, typed, badMethod
 }
 
+// CashVoidSale handles POST /cash/sales/{id}/void: anula la venta con el
+// motivo (F-08). Bien: vuelve a /cash?voided={id}, que dice qué devolver (y
+// recargar no la anula de nuevo). Con error, la página vuelve con la fila
+// abierta, lo escrito y el mensaje.
+func (h *WebHandler) CashVoidSale(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	reason := r.FormValue("reason")
+	if _, err := h.sales.Void(r.Context(), id, reason); err != nil {
+		h.renderCash(w, r, map[string]any{"VoidError": h.errMsg(r, err), "VoidSaleID": id, "VoidReason": reason})
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/cash?voided=%d", id), http.StatusSeeOther)
+}
+
+// refundNotice dice qué devolverle al cliente por una venta anulada, por
+// medio y en el orden de PaymentMethods: "Venta N.º 12 anulada. Devolvé
+// $ 2.000,00 en efectivo y $ 3.000,00 por débito." El efectivo ya viene sin
+// el vuelto (SettlePayments).
+func refundNotice(lang string, sale *model.Sale) string {
+	paid := make(map[string]decimal.Decimal, len(sale.Payments))
+	for _, p := range sale.Payments {
+		paid[p.Method] = paid[p.Method].Add(p.Amount)
+	}
+	var parts []string
+	for _, m := range model.PaymentMethods {
+		if amount, ok := paid[m]; ok {
+			parts = append(parts, fmt.Sprintf(i18n.T(lang, "cash.refund_"+m), formatMoney(lang, amount)))
+		}
+	}
+	list := ""
+	if n := len(parts); n > 0 {
+		list = parts[n-1]
+		if n > 1 {
+			list = strings.Join(parts[:n-1], ", ") + i18n.T(lang, "cash.refund_and") + list
+		}
+	}
+	return fmt.Sprintf(i18n.T(lang, "cash.voided_notice"), sale.SaleNumber, list)
+}
+
 // CashSession handles GET /cash/sessions/{id}: el resumen de un cierre. Una
 // sesión abierta no tiene resumen (cierre ciego): vuelve a /cash.
 func (h *WebHandler) CashSession(w http.ResponseWriter, r *http.Request) {
@@ -162,8 +206,9 @@ type closeField struct {
 
 // renderCash dibuja la página con el estado de la caja. data trae lo que
 // vuelve de un formulario que falló (Error, Amount; CloseError, Typed,
-// Invalid). Con la caja abierta suma los campos del cierre (CloseFields) y
-// las ventas de la sesión (Sales). Un error al leer el estado (sin local activo, dos cajas) se
+// Invalid; VoidError, VoidSaleID, VoidReason) y, después de anular,
+// VoidedID. Con la caja abierta suma los campos del cierre (CloseFields),
+// las ventas de la sesión (Sales) y qué devolver por la anulada (Refund). Un error al leer el estado (sin local activo, dos cajas) se
 // muestra en lugar de los formularios.
 func (h *WebHandler) renderCash(w http.ResponseWriter, r *http.Request, data map[string]any) {
 	if data == nil {
@@ -194,6 +239,34 @@ func (h *WebHandler) renderCash(w http.ResponseWriter, r *http.Request, data map
 			data["Error"] = h.errMsg(r, err)
 		}
 		data["Sales"] = list
+		h.voidResult(r, data, list)
 	}
 	h.render(w, r, "cash.gohtml", data)
+}
+
+// voidResult completa lo de la anulación con las ventas de la sesión:
+//   - VoidedID: si es una anulada de esta sesión, Refund dice qué devolver.
+//     Si no (una URL vieja o de otra caja), no se avisa nada.
+//   - VoidError: va en la fila de la venta; si la venta no está en la lista
+//     (no existe o es de otro día), arriba de todo.
+func (h *WebHandler) voidResult(r *http.Request, data map[string]any, list []*model.Sale) {
+	find := func(id int64) *model.Sale {
+		for _, s := range list {
+			if s.ID == id {
+				return s
+			}
+		}
+		return nil
+	}
+	if id, ok := data["VoidedID"].(int64); ok {
+		if s := find(id); s != nil && s.Status == model.SaleVoided {
+			data["Refund"] = refundNotice(transport.GetLocale(r.Context()), s)
+		}
+	}
+	if msg, ok := data["VoidError"].(string); ok {
+		id, _ := data["VoidSaleID"].(int64)
+		if s := find(id); s == nil || s.Status != model.SaleCompleted {
+			data["Error"], data["VoidError"] = msg, ""
+		}
+	}
 }

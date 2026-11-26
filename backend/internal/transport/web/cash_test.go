@@ -12,6 +12,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 )
 
@@ -62,6 +63,10 @@ func TestCashMessages(t *testing.T) {
 		store.ErrSeveralActiveRegisters: "más de una caja activa",
 		store.ErrSessionNotOpen:         "La caja ya estaba cerrada.",
 		model.ErrInvalidDeclaredAmount:  "escribí un monto de 0 o más",
+		sales.ErrSaleOtherSession:       "Solo se pueden anular ventas de la caja abierta.",
+		sales.ErrSaleAlreadyVoided:      "Esta venta ya estaba anulada.",
+		model.ErrVoidReasonRequired:     "Escribí el motivo de la anulación.",
+		model.ErrVoidReasonTooLong:      "hasta 300 caracteres",
 	} {
 		if got := h.errText(r, "es", err); !strings.Contains(got, want) {
 			t.Errorf("%v: got %q, want %q", err, got, want)
@@ -217,6 +222,48 @@ func TestRenderCash(t *testing.T) {
 		if n := strings.Count(html, " line-through"); n != 4 {
 			t.Errorf("struck cells: got %d, want 4", n)
 		}
+		// Anular: solo la cobrada, con el motivo plegado debajo de su fila.
+		for _, s := range []string{
+			`id="void-open-30" class="btn-secondary px-3 py-1" aria-controls="void-30"`, `aria-expanded="false" onclick="cashToggleVoid(this)"`,
+			`aria-label="Anular la venta N.º 11"`,
+			`<tr id="void-30" class="border-b border-line bg-danger-soft" hidden>`,
+			`action="/cash/sales/30/void"`, `onsubmit="return cashConfirmVoid(this)"`,
+			`data-ask="¿Anular la venta N.º 11 de $ 5.000,00?"`, `data-reason="Motivo"`,
+			`name="reason" required maxlength="300"`, "¿Por qué se anula la venta N.º 11?", "Confirmar anulación",
+			"function cashToggleVoid(btn)", "function cashConfirmVoid(form)",
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		for _, s := range []string{"void-open-31", `id="void-31"`, "/cash/sales/31/void", `id="cash-refund"`} {
+			if strings.Contains(html, s) {
+				t.Errorf("unexpected %q", s)
+			}
+		}
+		if strings.Contains(html, `role="alert" class="p-4 bg-surface border-l-8 border-danger`) {
+			t.Error("no void error yet")
+		}
+
+		// Después de anular: el aviso de qué devolver.
+		html = render(t, map[string]any{"State": openState, "CloseFields": fields, "Sales": list,
+			"Refund": "Venta N.º 12 anulada. Devolvé $ 1.800,00 en efectivo."})
+		if !strings.Contains(html, `id="cash-refund" role="status"`) ||
+			!strings.Contains(html, "Venta N.º 12 anulada. Devolvé $ 1.800,00 en efectivo.") {
+			t.Error("missing the refund notice")
+		}
+
+		// Anular falló: la fila vuelve abierta, con lo escrito y el mensaje.
+		html = render(t, map[string]any{"State": openState, "CloseFields": fields, "Sales": list,
+			"VoidError": "Escribí el motivo de la anulación.", "VoidSaleID": int64(30), "VoidReason": "  "})
+		for _, s := range []string{
+			`<tr id="void-30" class="border-b border-line bg-danger-soft">`, `aria-expanded="true"`,
+			`role="alert" class="p-4 bg-surface border-l-8 border-danger`, "Escribí el motivo de la anulación.", `value="  "`, `aria-invalid="true" autofocus`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("void error: missing %q", s)
+			}
+		}
 	})
 
 	t.Run("close error", func(t *testing.T) {
@@ -353,5 +400,80 @@ func TestCashSessionBadID(t *testing.T) {
 	h.CashSession(w, r)
 	if w.Code != http.StatusNotFound {
 		t.Errorf("bad id: got %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestRefundNotice(t *testing.T) {
+	pay := func(method, amount string) *model.Payment {
+		return &model.Payment{Method: method, Amount: decimal.RequireFromString(amount)}
+	}
+	tests := []struct {
+		name, lang string
+		payments   []*model.Payment
+		want       string
+	}{
+		{"cash only", "es", []*model.Payment{pay(model.PaymentCash, "1800")},
+			"Venta N.º 12 anulada. Devolvé $ 1.800,00 en efectivo."},
+		{"two methods", "es", []*model.Payment{pay(model.PaymentCash, "2000"), pay(model.PaymentDebit, "3000")},
+			"Venta N.º 12 anulada. Devolvé $ 2.000,00 en efectivo y $ 3.000,00 por débito."},
+		{"in the order of the methods, the same method summed", "es",
+			[]*model.Payment{pay(model.PaymentQR, "700"), pay(model.PaymentCredit, "1000"),
+				pay(model.PaymentCash, "500"), pay(model.PaymentCredit, "250")},
+			"Venta N.º 12 anulada. Devolvé $ 500,00 en efectivo, $ 1.250,00 por crédito y $ 700,00 por QR."},
+		{"english", "en", []*model.Payment{pay(model.PaymentTransfer, "1500.5"), pay(model.PaymentCash, "100")},
+			"Sale No. 12 voided. Give back $100.00 in cash and $1,500.50 by transfer."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := refundNotice(tt.lang, &model.Sale{SaleNumber: 12, Payments: tt.payments})
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVoidResult(t *testing.T) {
+	h := &WebHandler{}
+	r := httptest.NewRequest("GET", "/cash", nil)
+	list := []*model.Sale{
+		{ID: 31, SaleNumber: 12, Status: model.SaleVoided,
+			Payments: []*model.Payment{{Method: model.PaymentCash, Amount: decimal.RequireFromString("1800")}}},
+		{ID: 30, SaleNumber: 11, Status: model.SaleCompleted},
+	}
+
+	t.Run("voided sale of this session", func(t *testing.T) {
+		data := map[string]any{"VoidedID": int64(31)}
+		h.voidResult(r, data, list)
+		if got, _ := data["Refund"].(string); !strings.Contains(got, "12") || !strings.Contains(got, "1,800.00") {
+			t.Errorf("refund: got %q", got)
+		}
+	})
+	for name, id := range map[string]int64{"not voided": 30, "not in this session": 99} {
+		t.Run(name, func(t *testing.T) {
+			data := map[string]any{"VoidedID": id}
+			h.voidResult(r, data, list)
+			if _, ok := data["Refund"]; ok {
+				t.Errorf("unexpected refund: %v", data["Refund"])
+			}
+		})
+	}
+
+	t.Run("error in the row", func(t *testing.T) {
+		data := map[string]any{"VoidError": "x", "VoidSaleID": int64(30)}
+		h.voidResult(r, data, list)
+		if data["VoidError"] != "x" || data["Error"] != nil {
+			t.Errorf("got %v", data)
+		}
+	})
+	// Una venta que no está (o ya anulada, sin formulario): el error arriba.
+	for name, id := range map[string]int64{"sale not in the list": 99, "already voided": 31} {
+		t.Run(name, func(t *testing.T) {
+			data := map[string]any{"VoidError": "x", "VoidSaleID": id}
+			h.voidResult(r, data, list)
+			if data["Error"] != "x" || data["VoidError"] != "" {
+				t.Errorf("got %v", data)
+			}
+		})
 	}
 }

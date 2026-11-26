@@ -95,6 +95,18 @@ func TestRenderCash(t *testing.T) {
 		}
 	})
 
+	t.Run("closed after a close", func(t *testing.T) {
+		closedAt := "2026-11-25T23:30:00Z"
+		html := render(t, map[string]any{"State": &sessions.State{Register: reg,
+			LastClosed: &model.CashierSession{ID: 7, ClosedAt: &closedAt}}})
+		for _, s := range []string{`href="/cash/sessions/7" id="cash-last-close"`, "Ver el último cierre",
+			"Cerrada el 2026-11-25 20:30:00."} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+	})
+
 	t.Run("closed", func(t *testing.T) {
 		html := render(t, map[string]any{"State": &sessions.State{Register: reg}, "Amount": "15.000",
 			"Error": "El efectivo inicial tiene que ser un monto de 0 o más, con hasta 2 decimales."})
@@ -103,6 +115,9 @@ func TestRenderCash(t *testing.T) {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
+		}
+		if strings.Contains(html, "cash-last-close") {
+			t.Error("never closed: no link to a last close")
 		}
 	})
 

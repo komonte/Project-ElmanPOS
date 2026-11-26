@@ -491,6 +491,8 @@
   "cash.summary_voided_one": "1 voided",
   "cash.summary_total": "Sold",
   "cash.summary_back": "Back to Register",
+  "cash.last_close": "See the last close",
+  "cash.last_close_when": "Closed on %s.",
   "error.cash_session_not_open": "The register was already closed.",
   "error.cash_declared_invalid": "type an amount of 0 or more, with up to 2 decimals (for example 15,000 or 1,500.50).",
   "pos.title": "Sell",

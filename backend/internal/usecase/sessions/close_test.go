@@ -154,8 +154,9 @@ func TestClose(t *testing.T) {
 		!errors.Is(err, service.ErrConflict) {
 		t.Errorf("close twice: got %v", err)
 	}
-	if st, err := f.svc.Current(f.ctx); err != nil || st.Session != nil {
-		t.Errorf("after close: got %+v, %v", st, err)
+	if st, err := f.svc.Current(f.ctx); err != nil || st.Session != nil || st.LastClosed == nil ||
+		st.LastClosed.ID != sess.ID {
+		t.Errorf("after close: got %+v, %v (want no session and the last close)", st, err)
 	}
 	if _, err := f.svc.Open(f.ctx, dec("0")); err != nil {
 		t.Errorf("open after close: %v", err)

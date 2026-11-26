@@ -94,6 +94,10 @@
     <p id="cash-opening-hint" class="field-hint">{{t "cash.opening_hint"}}</p>
     <button type="submit" class="btn-primary">{{t "cash.open"}}</button>
   </form>
+  {{with .LastClosed}}
+  <p class="pt-2 border-t border-line"><a href="/cash/sessions/{{.ID}}" id="cash-last-close" class="btn-secondary">{{t "cash.last_close"}}</a>
+    <span class="block mt-1 text-sm text-muted">{{printf (t "cash.last_close_when") (formatTimePtr .ClosedAt)}}</span></p>
+  {{end}}
 </section>
 {{end}}
 {{end}}

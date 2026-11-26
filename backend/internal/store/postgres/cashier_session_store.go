@@ -156,6 +156,13 @@ func (s *CashierSessionStore) Close(ctx context.Context, id int64, closingAmount
 	return s.get(ctx, `cs.id = $1`, id)
 }
 
+// LastClosed devuelve la última sesión cerrada de una caja (la de cierre más
+// reciente): /cash ofrece ver su arqueo. ErrNotFound si nunca se cerró.
+func (s *CashierSessionStore) LastClosed(ctx context.Context, registerID int64) (*model.CashierSession, error) {
+	return s.get(ctx, `cs.cash_register_id = $1 AND cs.status = 'CLOSED'
+		ORDER BY cs.closed_at DESC NULLS LAST, cs.id DESC LIMIT 1`, registerID)
+}
+
 // Get devuelve una sesión, abierta o cerrada (el resumen del cierre).
 // ErrNotFound si no existe.
 func (s *CashierSessionStore) Get(ctx context.Context, id int64) (*model.CashierSession, error) {

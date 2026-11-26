@@ -123,6 +123,14 @@ func NewTemplateEngine() *TemplateEngine {
 				return formatQuantity(lang, d)
 			},
 			"formatTime": formatTime,
+			// formatTimePtr es formatTime para una fecha que puede faltar
+			// (closed_at): "-" si es nil.
+			"formatTimePtr": func(t *string) string {
+				if t == nil {
+					return formatTime("")
+				}
+				return formatTime(*t)
+			},
 		}
 
 		base, err := template.New("").Funcs(funcMap).ParseFS(templateFS, partialFiles...)

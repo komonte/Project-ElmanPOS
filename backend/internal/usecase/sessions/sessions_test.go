@@ -78,7 +78,7 @@ func TestOpenFlow(t *testing.T) {
 	}
 
 	st, err = f.svc.Current(f.ctx)
-	if err != nil || st.Register == nil || st.Register.ID != reg.ID || st.Session != nil {
+	if err != nil || st.Register == nil || st.Register.ID != reg.ID || st.Session != nil || st.LastClosed != nil {
 		t.Fatalf("closed register: got %+v, %v", st, err)
 	}
 

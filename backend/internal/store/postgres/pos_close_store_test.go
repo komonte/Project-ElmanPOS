@@ -37,6 +37,9 @@ func TestCashierSessionStore_Close(t *testing.T) {
 	sessions := postgres.NewCashierSessionStore(f.tx)
 	s := f.openSession(t)
 
+	if _, err := sessions.LastClosed(f.ctx, s.CashRegisterID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("never closed: got %v, want %v", err, store.ErrNotFound)
+	}
 	closed, err := sessions.Close(f.ctx, s.ID, d("17400.50"))
 	if err != nil {
 		t.Fatalf("close: %v", err)
@@ -59,6 +62,28 @@ func TestCashierSessionStore_Close(t *testing.T) {
 	}
 	if _, err := sessions.Get(f.ctx, -1); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("get unknown: got %v, want %v", err, store.ErrNotFound)
+	}
+
+	// La última cerrada: la abierta no cuenta, y gana el cierre más nuevo.
+	if last, err := sessions.LastClosed(f.ctx, s.CashRegisterID); err != nil || last.ID != s.ID {
+		t.Errorf("last closed: got %+v, %v", last, err)
+	}
+	next, err := sessions.Open(f.ctx, &model.CashierSession{CashRegisterID: s.CashRegisterID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last, err := sessions.LastClosed(f.ctx, s.CashRegisterID); err != nil || last.ID != s.ID {
+		t.Errorf("open one does not count: got %+v, %v", last, err)
+	}
+	// now() es la hora de la transacción: el segundo cierre se adelanta a mano.
+	if _, err := sessions.Close(f.ctx, next.ID, d("0")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.tx.ExecContext(f.ctx, `UPDATE cashier_sessions SET closed_at = closed_at + interval '1 hour' WHERE id = $1;`, next.ID); err != nil {
+		t.Fatal(err)
+	}
+	if last, err := sessions.LastClosed(f.ctx, s.CashRegisterID); err != nil || last.ID != next.ID {
+		t.Errorf("newest close: got %+v, %v, want %d", last, err, next.ID)
 	}
 }
 

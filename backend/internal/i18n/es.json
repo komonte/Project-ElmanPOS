@@ -491,6 +491,8 @@
   "cash.summary_voided_one": "1 anulada",
   "cash.summary_total": "Vendido",
   "cash.summary_back": "Volver a Caja",
+  "cash.last_close": "Ver el último cierre",
+  "cash.last_close_when": "Cerrada el %s.",
   "error.cash_session_not_open": "La caja ya estaba cerrada.",
   "error.cash_declared_invalid": "escribí un monto de 0 o más, con hasta 2 decimales (por ejemplo 15.000 o 1.500,50).",
   "pos.title": "Vender",

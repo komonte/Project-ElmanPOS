@@ -131,6 +131,14 @@ func NewTemplateEngine() *TemplateEngine {
 				m, _ := perms.(map[string]bool)
 				return m[p]
 			},
+			// who es el nombre de quién hizo algo (F-13), o "—" si no se
+			// sabe (lo de antes del login).
+			"who": func(name *string) string {
+				if name == nil {
+					return "—"
+				}
+				return *name
+			},
 			"formatTime":  formatTime,
 			"formatClock": formatClock,
 			// formatTimePtr es formatTime para una fecha que puede faltar

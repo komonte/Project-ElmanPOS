@@ -8,6 +8,9 @@
   <h1 class="shelf-title">{{t "cash.summary_title"}}</h1>
   <p class="mt-3 text-lg">{{.Session.RegisterName}} ·
     {{printf (t "cash.summary_period") (formatTime .Session.OpenedAt) (formatTime $.ClosedAt)}}</p>
+  {{/* Quién abrió y quién cerró (F-13); "—" si fue antes del login. */}}
+  <p id="cash-who" class="mt-1 text-muted">{{t "cash.opened_by"}} <span class="font-bold text-ink">{{who .Session.OpenedByName}}</span> ·
+    {{t "cash.closed_by"}} <span class="font-bold text-ink">{{who .Session.ClosedByName}}</span></p>
 </header>
 
 {{if $.HasDifference}}

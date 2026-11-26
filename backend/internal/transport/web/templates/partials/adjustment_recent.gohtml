@@ -12,6 +12,7 @@
           <th scope="col" class="px-3 py-3 font-bold">{{t "adjustment.reason"}}</th>
           <th scope="col" class="px-3 py-3 font-bold text-right">{{t "count.quantity"}}</th>
           <th scope="col" class="px-3 py-3 font-bold">{{t "adjustment.notes"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "adjustment.by"}}</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-line">
@@ -22,6 +23,7 @@
           <td class="px-3 py-3">{{t (printf "adjustment.reason_%s" .Reason)}}</td>
           <td class="px-3 py-3 text-right tabular">{{qty .Quantity}}</td>
           <td class="px-3 py-3 text-muted">{{.Notes}}</td>
+          <td class="px-3 py-3 whitespace-nowrap">{{who .CreatedByName}}</td>
         </tr>
         {{end}}
       </tbody>

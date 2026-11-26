@@ -1,0 +1,11 @@
+{{define "content"}}
+{{/* Productos con stock y sin precio (no se pueden vender): los que no
+     vienen de una factura, como los de un conteo. Solo el admin. Datos:
+     .Table (pricedTable). */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "price.missing_title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "price.missing_hint"}}</p>
+</header>
+
+{{template "priced_table.gohtml" .}}
+{{end}}

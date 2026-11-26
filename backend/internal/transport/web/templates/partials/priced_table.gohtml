@@ -1,0 +1,82 @@
+{{/* Tabla para poner precios: los productos de una factura, o los que
+     tienen stock y no tienen precio. Datos: .Table (pricedTable). Es un solo
+     formulario: cada fila manda product_id y price; "Guardar" de una fila
+     manda only=<producto>, y "Guardar los sin cotizar" todos los que faltan.
+     Enter en un precio guarda su fila (no la primera: sin esto, el
+     navegador usaría el primer botón del formulario). La respuesta es esta
+     misma tabla (outerHTML). Sin permiso de precios,
+     solo se mira: sin campos ni botones. */}}
+{{with .Table}}
+<div id="priced-table" class="space-y-4">
+  {{if .Error}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+  {{else if .Saved}}
+  <div id="prices-saved" role="status" class="p-4 bg-paper border-l-8 border-stock rounded-sm font-bold">
+    {{if eq .Saved 1}}{{t "price.saved_one"}}{{else}}{{printf (t "price.saved") .Saved}}{{end}}</div>
+  {{end}}
+  <form hx-post="{{.Action}}" hx-target="#priced-table" hx-swap="outerHTML">
+    <div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+      <table class="min-w-full text-left">
+        <thead class="border-b-2 border-line text-muted">
+          <tr>
+            <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_product"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold text-right">{{if .Invoice}}{{t "price.col_received"}}{{else}}{{t "report.col_stock"}}{{end}}</th>
+            <th scope="col" class="px-3 py-3 font-bold text-right">{{if .Invoice}}{{t "price.col_invoice_cost"}}{{else}}{{t "price.col_last_cost"}}{{end}}</th>
+            <th scope="col" class="px-3 py-3 font-bold text-right">{{t "purchase.price_suggested"}}</th>
+            <th scope="col" class="px-3 py-3 font-bold text-right">{{t "purchase.price_current"}}</th>
+            {{if .CanSet}}<th scope="col" class="px-3 py-3 font-bold">{{t "price.col_new"}}</th>{{end}}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {{range .Rows}}
+          <tr data-product="{{.ProductID}}" data-state="{{.State}}" class="{{if .Error}}bg-danger-soft{{else if not .Active}}text-muted{{end}}">
+            <th scope="row" class="px-3 py-2 font-normal">
+              <span class="block font-bold">{{.Name}}</span>
+              <span class="block text-sm text-muted">{{.SKU}}{{if not .Active}} · {{t "report.product_inactive"}}{{end}}</span>
+              {{/* El estado, debajo del nombre (en su propia columna la
+                   tabla no entraba). */}}
+              {{if and $.Table.Invoice .Active}}
+              <span class="block mt-1" data-state-badge>
+              {{if eq (printf "%s" .State) "MISSING"}}<span class="inline-block px-2 py-0.5 rounded-sm bg-danger-soft text-danger text-sm font-bold">{{t "price.state_MISSING"}}</span>
+              {{else if eq (printf "%s" .State) "OLD"}}<span class="inline-block px-2 py-0.5 rounded-sm bg-paper border-2 border-tag text-sm font-bold">{{t "price.state_OLD"}}</span>
+              {{else}}<span class="inline-block text-stock text-sm font-bold">✓ {{t "price.state_OK"}}</span>{{end}}
+              </span>
+              {{end}}
+            </th>
+            <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{qty .Quantity}}{{if eq (printf "%s" .SaleType) "WEIGHT"}} kg{{end}}</td>
+            <td class="px-3 py-2 text-right tabular whitespace-nowrap">
+              <span class="block">{{if .UnitCost.IsZero}}—{{else}}{{money .UnitCost}}{{end}}</span>
+              {{if not .AvgCost.IsZero}}<span class="block text-sm text-muted">{{printf (t "price.avg_short") (money .AvgCost)}}</span>{{end}}
+            </td>
+            <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{with .Suggested}}{{money .}}{{else}}<span class="text-sm text-muted">{{t "purchase.no_margin"}}</span>{{end}}</td>
+            <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{with .Price}}{{money .}}{{else}}—{{end}}</td>
+            {{if $.Table.CanSet}}
+            <td class="px-3 py-2">
+              {{if .Active}}
+              <div class="flex items-center gap-2">
+                <input type="hidden" name="product_id" value="{{.ProductID}}">
+                <input type="text" name="price" value="{{.Value}}" inputmode="decimal" autocomplete="off"
+                       aria-label="{{printf (t "price.new_for") .Name}}" class="field tabular w-28 py-1"
+                       onkeydown="if (event.key === 'Enter') { event.preventDefault(); this.nextElementSibling.click(); }">
+                <button type="submit" name="only" value="{{.ProductID}}" class="btn-secondary py-1 whitespace-nowrap">{{t "common.save"}}</button>
+              </div>
+              {{end}}
+            </td>
+            {{end}}
+          </tr>
+          {{else}}
+          <tr><td colspan="6" class="px-4 py-10 text-center text-muted">{{t "price.none"}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{/* "Guardar los sin cotizar": solo si queda alguno. */}}
+    {{if and .CanSet .Pending}}
+    <div class="mt-4 flex flex-wrap items-center gap-4">
+      <button id="prices-save-all" type="submit" class="btn-primary">{{if .Invoice}}{{t "price.save_unpriced"}}{{else}}{{t "price.save_all"}}{{end}}</button>
+      <p class="text-muted max-w-xl">{{if .Invoice}}{{t "price.save_unpriced_hint"}}{{else}}{{t "price.save_all_hint"}}{{end}}</p>
+    </div>
+    {{end}}
+  </form>
+</div>
+{{end}}

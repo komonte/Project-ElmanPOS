@@ -4,6 +4,17 @@
   <p class="mt-4 text-lg text-muted">{{t "app.tagline"}}</p>
 </header>
 
+{{/* Precios pendientes (F-06): solo para quien pone precios y si hay algo. */}}
+{{with .Pending}}{{if or .MissingPrices .UnpricedPurchases}}
+<section id="pending-prices" aria-labelledby="pending-heading" class="max-w-2xl mb-8 p-4 bg-danger-soft border-l-8 border-danger rounded-sm">
+  <h2 id="pending-heading" class="font-display font-bold text-3xl leading-none">{{t "price.pending_title"}}</h2>
+  <ul class="mt-3 space-y-2 text-lg">
+    {{if .MissingPrices}}<li><a href="/prices/missing" data-pending="missing" class="font-bold underline underline-offset-4">{{if eq .MissingPrices 1}}{{t "price.pending_missing_one"}}{{else}}{{printf (t "price.pending_missing") .MissingPrices}}{{end}}</a></li>{{end}}
+    {{if .UnpricedPurchases}}<li><a href="/purchases/history?unpriced=1" data-pending="purchases" class="font-bold underline underline-offset-4">{{if eq .UnpricedPurchases 1}}{{t "price.pending_purchases_one"}}{{else}}{{printf (t "price.pending_purchases") .UnpricedPurchases}}{{end}}</a></li>{{end}}
+  </ul>
+</section>
+{{end}}{{end}}
+
 {{/* Solo lo que el rol puede abrir: el catálogo (sin impuestos para el
      repositor). El cajero entra directo a vender. */}}
 {{if can .Can "catalog"}}

@@ -1,0 +1,20 @@
+{{define "content"}}
+{{/* Una factura recibida (F-06) y los precios de sus productos. Datos:
+     .Invoice (purchases.Invoice) y .Table (pricedTable). El repositor la
+     ve; el admin, además, pone los precios. */}}
+{{with .Invoice.Summary}}
+<header class="mb-6">
+  <p class="mb-2"><a href="/purchases/history" class="font-bold underline-offset-4 hover:underline">← {{t "purchase.history_title"}}</a></p>
+  <h1 class="shelf-title">{{printf (t "purchase.invoice_heading") .ID}}</h1>
+  <p class="mt-4 text-lg"><span class="font-bold">{{.SupplierName}}</span>{{if .VoucherNumber}} · {{.VoucherNumber}}{{end}} · {{money .Total}}</p>
+  <p class="mt-1 text-muted">{{formatTime .ReceivedAt}} · {{t "purchase.received_by"}} {{who .ReceivedByName}}</p>
+</header>
+
+<div id="invoice-state" role="status" class="mb-6 p-4 max-w-3xl rounded-sm border-l-8 {{if .Unpriced}}bg-danger-soft border-danger{{else}}bg-paper border-stock{{end}}">
+  <p class="font-bold">{{if .Unpriced}}{{if eq .Unpriced 1}}{{t "purchase.unpriced_one"}}{{else}}{{printf (t "purchase.unpriced") .Unpriced}}{{end}}{{else}}✓ {{t "purchase.priced_all"}}{{end}}</p>
+  <p class="text-muted">{{t "price.states_hint"}}</p>
+</div>
+{{end}}
+
+{{template "priced_table.gohtml" .}}
+{{end}}

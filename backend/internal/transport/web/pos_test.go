@@ -73,7 +73,7 @@ func TestPosErrMsg(t *testing.T) {
 	}{
 		{&sales.LineError{ProductName: "SODA", Available: decimal.RequireFromString("2.5"), Err: sales.ErrNotEnoughStock},
 			"SODA: no hay stock suficiente (hay 2,5)."},
-		{&sales.LineError{ProductName: "YERBA", Err: sales.ErrNoPrice}, "YERBA: no tiene precio. Cargalo en Productos."},
+		{&sales.LineError{ProductName: "YERBA", Err: sales.ErrNoPrice}, "YERBA: no tiene precio, así que no se puede cobrar. Pedile a un administrador que se lo ponga (Panel → Precios pendientes)."},
 		{&sales.LineError{ProductName: "SODA", Err: fmt.Errorf("%w: %w", service.ErrValidation, model.ErrSaleQuantityNotWhole)},
 			"SODA: se vende por unidad: la cantidad tiene que ser entera."},
 		{&sales.LineError{ProductID: 99, Err: sales.ErrUnknownProduct}, "El producto no existe."},

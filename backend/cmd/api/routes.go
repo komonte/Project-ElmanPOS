@@ -92,7 +92,9 @@ func webRoutes(h *web.WebHandler) []route {
 		// Precios, costos e impuestos: solo el admin.
 		{"POST /products/{id}/prices", prices, h.ProductPricesSet},
 		{"POST /products/{id}/costs", prices, h.ProductCostsSet},
-		{"POST /purchases/prices/{id}", prices, h.PurchasesUsePrice},
+		{"POST /purchases/{id}/prices", prices, h.PurchasesSetPrices},
+		{"GET /prices/missing", prices, h.PricesMissing},
+		{"POST /prices/missing", prices, h.PricesMissingSet},
 		{"GET /taxes", prices, h.TaxesList},
 		{"GET /taxes/new", prices, h.TaxesNewForm},
 		{"POST /taxes/new", prices, h.TaxesCreate},
@@ -106,6 +108,8 @@ func webRoutes(h *web.WebHandler) []route {
 		// (opciones, alta rápida y agregar código).
 		{"GET /purchases", stock, h.PurchasesPage},
 		{"POST /purchases", stock, h.PurchasesReceive},
+		{"GET /purchases/history", stock, h.PurchasesHistory},
+		{"GET /purchases/{id}", stock, h.PurchasesInvoice},
 		{"GET /counts", stock, h.CountsPage},
 		{"POST /counts", stock, h.CountsOpen},
 		{"POST /counts/{id}/entries", stock, h.CountsAddEntry},

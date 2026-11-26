@@ -226,6 +226,17 @@
 
         <fieldset class="space-y-5">
           <legend class="font-display font-bold text-2xl mb-3">{{t "product.group_price"}}</legend>
+          {{/* Alta: el precio de venta, para que se pueda vender ya (solo
+               quien puede poner precios). Al editar, el precio tiene su
+               propia sección abajo. */}}
+          {{if and (not .Product.ID) (can .Can "prices")}}
+          <div>
+            <label for="product-price" class="field-label">{{t "product.sale_price"}}</label>
+            <input type="text" id="product-price" name="price" inputmode="decimal" autocomplete="off" aria-describedby="product-price-hint"
+                   value="{{.Price}}" class="field max-w-40 tabular">
+            <span id="product-price-hint" class="field-hint">{{t "product.sale_price_hint"}}</span>
+          </div>
+          {{end}}
           <div>
             <label for="product-margin" class="field-label">{{t "product.margin_percent"}}</label>
             <input type="text" id="product-margin" name="margin_percent" inputmode="decimal" aria-describedby="product-margin-hint"

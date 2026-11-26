@@ -425,14 +425,22 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 		categoryCount = len(categories)
 	}
 
-	h.render(w, r, "index.gohtml", map[string]any{
+	data := map[string]any{
 		"Section":       "dashboard",
 		"TitleKey":      "nav.dashboard",
 		"BrandCount":    brandCount,
 		"TaxCount":      taxCount,
 		"SupplierCount": supplierCount,
 		"CategoryCount": categoryCount,
-	})
+	}
+	// Precios pendientes (F-06): lo que no se puede vender por falta de
+	// precio y las facturas sin cotizar, para quien pone precios.
+	if can(r, model.PermPrices) {
+		if p, err := h.purchases.Pending(ctx); err == nil {
+			data["Pending"] = p
+		}
+	}
+	h.render(w, r, "index.gohtml", data)
 }
 
 // BrandsList handles GET /brands

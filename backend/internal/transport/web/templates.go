@@ -42,6 +42,9 @@ var pageFiles = []string{
 	"templates/pages/report_cash.gohtml",
 	"templates/pages/report_restock.gohtml",
 	"templates/pages/report_expiring.gohtml",
+	"templates/pages/purchase_history.gohtml",
+	"templates/pages/purchase_invoice.gohtml",
+	"templates/pages/prices_missing.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -67,7 +70,6 @@ var partialFiles = []string{
 	"templates/partials/purchase_form.gohtml",
 	"templates/partials/purchase_line.gohtml",
 	"templates/partials/purchase_received.gohtml",
-	"templates/partials/purchase_price_cell.gohtml",
 	"templates/partials/picker_product_options.gohtml",
 	"templates/partials/picker_assign_code.gohtml",
 	"templates/partials/picker_assign_code_options.gohtml",
@@ -85,6 +87,7 @@ var partialFiles = []string{
 	"templates/partials/user_form.gohtml",
 	"templates/partials/user_password.gohtml",
 	"templates/partials/report_period.gohtml",
+	"templates/partials/priced_table.gohtml",
 }
 
 type TemplateEngine struct {

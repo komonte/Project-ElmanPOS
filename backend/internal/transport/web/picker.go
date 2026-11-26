@@ -10,7 +10,6 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
-	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 )
 
 // El buscador de producto de un renglón, compartido por compras (F-06) y
@@ -114,12 +113,12 @@ func (h *WebHandler) PickerQuickProductCreate(w http.ResponseWriter, r *http.Req
 		fail(h.tr(r, errKey))
 		return
 	}
-	created, err := h.createProduct.Create(r.Context(), createproduct.Request{
-		Product:     product,
-		Barcode:     r.FormValue("barcode"),
-		NewBrand:    r.FormValue("brand_new"),
-		NewCategory: newCategoryFromForm(r),
-	})
+	req, errKey := h.newProductRequest(r, product)
+	if errKey != "" {
+		fail(h.tr(r, errKey))
+		return
+	}
+	created, err := h.createProduct.Create(r.Context(), req)
 	if err != nil {
 		fail(h.errMsg(r, err))
 		return

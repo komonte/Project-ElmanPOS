@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/lib/pq"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
@@ -73,6 +76,97 @@ func TestUserStore(t *testing.T) {
 	dup := &model.User{Username: "Test.Cajera", Name: "Otra", PasswordHash: "x", Role: model.RoleAdmin}
 	if err := users.Create(ctx, dup); !errors.Is(err, store.ErrDuplicateUsername) || !errors.Is(err, store.ErrDuplicate) {
 		t.Errorf("duplicate ignoring case: got %v", err)
+	}
+}
+
+// La página de usuarios: listar, editar y desactivar.
+func TestUserStoreAdmin(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	users := postgres.NewUserStore(tx)
+
+	zoe := testUser(t, tx, "test.zoe", model.RoleCashier)
+	ana := testUser(t, tx, "test.ana", model.RoleStockClerk)
+	exec(t, tx, `UPDATE users SET name = 'Ana' WHERE id = $1;`, ana.ID)
+	exec(t, tx, `UPDATE users SET name = 'zoe' WHERE id = $1;`, zoe.ID)
+
+	if err := users.Update(ctx, zoe.ID, "Zoe Pérez", model.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := users.Get(ctx, zoe.ID)
+	if got.Name != "Zoe Pérez" || got.Role != model.RoleAdmin || got.Username != "test.zoe" {
+		t.Errorf("update: got %+v", got)
+	}
+	if err := users.Update(ctx, -1, "Nadie", model.RoleAdmin); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("update unknown: got %v", err)
+	}
+
+	if err := users.SetActive(ctx, ana.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := users.Get(ctx, ana.ID); got.IsActive {
+		t.Error("set active false: still active")
+	}
+	if err := users.SetActive(ctx, -1, false); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("set active unknown: got %v", err)
+	}
+
+	// Activos primero; cada grupo por nombre sin importar mayúsculas. Ana,
+	// inactiva, va después de Zoe aunque su nombre va antes.
+	list, err := users.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := map[int64]int{}
+	for i, u := range list {
+		pos[u.ID] = i
+		if i > 0 && !list[i-1].IsActive && u.IsActive {
+			t.Errorf("list: inactive %q before active %q", list[i-1].Username, u.Username)
+		}
+	}
+	zi, okZ := pos[zoe.ID]
+	ai, okA := pos[ana.ID]
+	if !okZ || !okA || zi > ai || list[ai].IsActive {
+		t.Errorf("list: zoe at %d (%v), ana at %d (%v)", zi, okZ, ai, okA)
+	}
+
+	// Solo los admins activos: Zoe sí; Ana (inactiva) y los cajeros no.
+	exec(t, tx, `UPDATE users SET role = 'ADMIN' WHERE id = $1;`, ana.ID)
+	ids, err := users.LockActiveAdmins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []int64
+	for _, u := range list {
+		if u.ID != ana.ID && u.IsActive && u.Role == model.RoleAdmin {
+			want = append(want, u.ID)
+		}
+	}
+	slices.Sort(want)
+	if !slices.Equal(ids, want) || !slices.Contains(ids, zoe.ID) {
+		t.Errorf("lock active admins: got %v, want %v", ids, want)
+	}
+}
+
+// LockActiveAdmins bloquea de verdad: otra conexión no puede tomar la fila
+// de un admin hasta que la transacción termina. Usa los admins que ya están
+// en la base (los de la transacción no se ven desde otra conexión).
+func TestUserStoreLockActiveAdmins(t *testing.T) {
+	ctx := context.Background()
+	tx := testTx(t)
+	ids, err := postgres.NewUserStore(tx).LockActiveAdmins(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) == 0 {
+		t.Skip("no active admin in the DB")
+	}
+
+	other := testDB(t)
+	_, err = other.ExecContext(ctx, `SELECT id FROM users WHERE id = $1 FOR UPDATE NOWAIT;`, ids[0])
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) || pqErr.Code != "55P03" { // lock_not_available
+		t.Errorf("another connection took the admin row: got %v", err)
 	}
 }
 

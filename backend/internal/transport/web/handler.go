@@ -24,6 +24,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/users"
 	"github.com/shopspring/decimal"
 )
 
@@ -49,6 +50,9 @@ type WebHandler struct {
 	// Login (F-13): lo pone WithAuth. secureCookie: el server es HTTPS.
 	auth         *auth.Service
 	secureCookie bool
+
+	// Página de usuarios (F-13): lo pone WithUsers.
+	users *users.Service
 }
 
 // WithAuth le da al handler el login (F-13). secureCookie va en true cuando
@@ -295,6 +299,19 @@ var errorKeys = []struct {
 	{model.ErrSaleTwoCashPayments, "error.sale_two_cash"},
 	{model.ErrPaymentsShort, "error.sale_payments_short"},
 	{model.ErrPaymentsOverTotal, "error.sale_payments_over"},
+	// Usuarios (F-13). El usuario repetido va antes que ErrAlreadyExists.
+	{store.ErrDuplicateUsername, "error.user_duplicate"},
+	{model.ErrInvalidUsername, "error.user_username_invalid"},
+	{model.ErrEmptyUserName, "error.name_required"},
+	{model.ErrUserNameTooShort, "error.name_too_short"},
+	{model.ErrUserNameTooLong, "error.name_too_long"},
+	{model.ErrInvalidUserRole, "error.user_role_invalid"},
+	{model.ErrPasswordTooShort, "error.password_too_short"},
+	{model.ErrPasswordTooLong, "error.password_too_long"},
+	{errPasswordMismatch, "error.password_mismatch"},
+	{users.ErrSelfDeactivate, "error.user_self_deactivate"},
+	{users.ErrSelfRole, "error.user_self_role"},
+	{users.ErrLastAdmin, "error.user_last_admin"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

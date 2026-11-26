@@ -23,10 +23,11 @@ const (
 	PermCatalog   Permission = "catalog"    // productos, categorías, marcas, proveedores y códigos
 	PermPrices    Permission = "prices"     // precios, costos e impuestos (F-03, F-04)
 	PermAPI       Permission = "api"        // la API JSON (/api/)
+	PermUsers     Permission = "users"      // crear, editar y desactivar usuarios, y resetear contraseñas
 )
 
 // Permissions son todos los permisos.
-var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI}
+var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers}
 
 // rolePermissions es la matriz de F-13.
 var rolePermissions = map[string][]Permission{

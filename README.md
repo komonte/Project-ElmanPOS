@@ -65,7 +65,7 @@ Every page asks for a username and password. The seed users (`admin`, `cajero`, 
 make passwd U=admin    # asks twice, hidden; at least 8 characters
 ```
 
-The same command resets a forgotten password, and it closes that user's open sessions. Five failed logins in a row lock a username for 5 minutes. Details in `docs/03-flows-and-transactions.md`, F-13.
+After that, the admin manages everyone on the **Users** page: create users, change a name or role, deactivate (they are out at once) or reactivate, and reset a password. The command is still there for when no admin can log in; both close that user's open sessions. Five failed logins in a row lock a username for 5 minutes. Details in `docs/03-flows-and-transactions.md`, F-13.
 
 ## 6. Project Documentation
 ...

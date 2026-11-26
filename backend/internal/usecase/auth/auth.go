@@ -185,12 +185,17 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 	return postgres.NewUserSessionStore(s.db).Delete(ctx, HashToken(token))
 }
 
-// SetPassword pone una contraseña nueva (el comando elmanpos passwd) y
-// cierra todas las sesiones del usuario: si alguien sabía la anterior, deja
-// de entrar en el momento. También le saca la traba por fallos.
+// ByCommand es el "by" de SetPassword cuando lo hace el comando elmanpos
+// passwd: nadie entró, y audit_log queda con user_id NULL.
+const ByCommand int64 = 0
+
+// SetPassword pone una contraseña nueva y cierra todas las sesiones del
+// usuario: si alguien sabía la anterior, deja de entrar en el momento.
+// También le saca la traba por fallos. by es quien la cambia: un admin desde
+// la página de usuarios, o ByCommand.
 //   - service.ErrValidation: la contraseña es corta o larga.
 //   - service.ErrNotFound: el usuario no existe.
-func (s *Service) SetPassword(ctx context.Context, username, password string) (*model.User, error) {
+func (s *Service) SetPassword(ctx context.Context, by int64, username, password string) (*model.User, error) {
 	username = model.NormalizeUsername(username)
 	hash, err := model.HashPassword(password)
 	if err != nil {
@@ -210,9 +215,12 @@ func (s *Service) SetPassword(ctx context.Context, username, password string) (*
 		if err != nil {
 			return err
 		}
-		// Sin user_id: lo hace el comando, no alguien que entró.
+		var author *int64 // el comando: nadie entró
+		if by != ByCommand {
+			author = &by
+		}
 		_, err = postgres.NewAuditLogStore(tx).Create(ctx, postgres.AuditEntry{
-			Table: "users", Action: "PASSWORD", RecordID: u.ID,
+			UserID: author, Table: "users", Action: "PASSWORD", RecordID: u.ID,
 			NewData: map[string]any{"username": u.Username, "sessions_closed": closed},
 		})
 		return err

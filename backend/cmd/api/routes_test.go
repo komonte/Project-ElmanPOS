@@ -102,6 +102,12 @@ func TestRoutesMatrix(t *testing.T) {
 		{"POST", "/products/1/costs", []string{A}},
 		{"POST", "/purchases/prices/1", []string{A}},
 		{"GET", "/taxes", []string{A}},
+		{"GET", "/users", []string{A}},
+		{"POST", "/users/new", []string{A}},
+		{"POST", "/users/1/edit", []string{A}},
+		{"POST", "/users/1/password", []string{A}},
+		{"PATCH", "/users/1/deactivate", []string{A}},
+		{"PATCH", "/users/1/reactivate", []string{A}},
 		{"GET", "/api/brands", []string{A}},
 		{"POST", "/api/products/1/prices", []string{A}},
 	}

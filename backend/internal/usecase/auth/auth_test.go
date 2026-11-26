@@ -14,6 +14,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 type fixture struct {
@@ -226,15 +227,15 @@ func TestSetPassword(t *testing.T) {
 		f.svc.Login(f.ctx, "test.clave", "mal")
 	}
 
-	if _, err := f.svc.SetPassword(f.ctx, "test.clave", "corta"); !errors.Is(err, service.ErrValidation) ||
+	if _, err := f.svc.SetPassword(f.ctx, ByCommand, "test.clave", "corta"); !errors.Is(err, service.ErrValidation) ||
 		!errors.Is(err, model.ErrPasswordTooShort) {
 		t.Errorf("short: got %v", err)
 	}
-	if _, err := f.svc.SetPassword(f.ctx, "test.nadie", "clave nueva"); !errors.Is(err, service.ErrNotFound) {
+	if _, err := f.svc.SetPassword(f.ctx, ByCommand, "test.nadie", "clave nueva"); !errors.Is(err, service.ErrNotFound) {
 		t.Errorf("unknown user: got %v", err)
 	}
 
-	got, err := f.svc.SetPassword(f.ctx, " Test.Clave", "clave nueva")
+	got, err := f.svc.SetPassword(f.ctx, ByCommand, " Test.Clave", "clave nueva")
 	if err != nil || got.ID != u.ID {
 		t.Fatalf("set password: got %+v, %v", got, err)
 	}
@@ -252,6 +253,19 @@ func TestSetPassword(t *testing.T) {
 		AND record_id = $1 AND user_id IS NULL AND (new_data->>'sessions_closed')::int = 1;`, u.ID); n != 1 {
 		t.Errorf("password audit: got %d", n)
 	}
+}
+
+// Desde la página de usuarios: audit_log dice qué admin la cambió.
+func TestSetPasswordByAdmin(t *testing.T) {
+	f := newFixture(t)
+	admin := f.user(t, "test.jefa", "clave de la jefa", true)
+	u := f.user(t, "test.olvido", "clave vieja", true)
+
+	if _, err := f.svc.SetPassword(f.ctx, admin.ID, "test.olvido", "clave nueva"); err != nil {
+		t.Fatal(err)
+	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "password audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'users' AND action = 'PASSWORD' AND record_id = $2"), admin.ID, u.ID)
 }
 
 func TestHashToken(t *testing.T) {

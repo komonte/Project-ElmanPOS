@@ -41,6 +41,7 @@ func webRoutes(h *web.WebHandler) []route {
 		stock     = model.PermStock
 		catalog   = model.PermCatalog
 		prices    = model.PermPrices
+		users     = model.PermUsers
 	)
 	return []route{
 		{"GET /{$}", loggedIn, h.Index},
@@ -137,6 +138,17 @@ func webRoutes(h *web.WebHandler) []route {
 		{"POST /cash/close", cash, h.CashClose},
 		{"POST /cash/sales/{id}/void", void, h.CashVoidSale},
 		{"GET /cash/sessions/{id}", cash, h.CashSession},
+
+		// Usuarios y contraseñas: solo el admin.
+		{"GET /users", users, h.UsersList},
+		{"GET /users/new", users, h.UsersNewForm},
+		{"POST /users/new", users, h.UsersCreate},
+		{"GET /users/{id}/edit", users, h.UsersEditForm},
+		{"POST /users/{id}/edit", users, h.UsersUpdate},
+		{"GET /users/{id}/password", users, h.UsersPasswordForm},
+		{"POST /users/{id}/password", users, h.UsersSetPassword},
+		{"PATCH /users/{id}/deactivate", users, h.UsersDeactivate},
+		{"PATCH /users/{id}/reactivate", users, h.UsersReactivate},
 	}
 }
 

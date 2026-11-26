@@ -141,3 +141,16 @@ func HashPassword(password string) (string, error) {
 func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
+
+// UserSession es un login abierto (02 4.27, F-13): quién y hasta cuándo.
+// El token no está: solo su huella vive en la base, y el token solo en la
+// cookie del navegador.
+type UserSession struct {
+	ID        int64  `json:"id" db:"id"`
+	UserID    int64  `json:"user_id" db:"user_id"`
+	CreatedAt string `json:"created_at" db:"created_at"`
+	ExpiresAt string `json:"expires_at" db:"expires_at"`
+
+	// User es el usuario de la sesión (lo llena UserSessionStore.Valid).
+	User *User `json:"user,omitempty" db:"-"`
+}

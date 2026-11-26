@@ -180,3 +180,38 @@ func (m Margin) Percent() decimal.Decimal {
 func (m Margin) Add(o Margin) Margin {
 	return Margin{Net: m.Net.Add(o.Net), Cost: m.Cost.Add(o.Cost), NoCost: m.NoCost.Add(o.NoCost)}
 }
+
+// SalesTally es lo vendido en un tramo (R-06): solo ventas COMPLETED.
+type SalesTally struct {
+	// Bucket es el número de tramo: el índice en Period.Buckets().
+	Bucket int             `json:"bucket"`
+	Count  int             `json:"count"`
+	Total  decimal.Decimal `json:"total"`
+	// Units son las unidades de los productos por unidad; Kg, los kilos de
+	// los que se venden por peso. Van separados: sumarlos no dice nada.
+	Units decimal.Decimal `json:"units"`
+	Kg    decimal.Decimal `json:"kg"`
+}
+
+// PaymentTally son los pagos de un medio en un tramo (R-06).
+type PaymentTally struct {
+	Bucket int             `json:"bucket"`
+	Method string          `json:"method"`
+	Count  int             `json:"count"`
+	Amount decimal.Decimal `json:"amount"`
+}
+
+// SessionTally es una sesión de caja cerrada con lo que hace falta para el
+// reporte de caja y margen (R-07).
+type SessionTally struct {
+	Session     *CashierSession `json:"session"`
+	Sales       int             `json:"sales"`
+	Total       decimal.Decimal `json:"total"`
+	Voided      int             `json:"voided"`
+	VoidedTotal decimal.Decimal `json:"voided_total"`
+	// Paid son los pagos de las ventas COMPLETED por medio, y Declared lo
+	// que se contó al cerrar: con eso, NewCloseSummary da el arqueo.
+	Paid     map[string]decimal.Decimal `json:"paid"`
+	Declared []*CashAudit               `json:"declared"`
+	Margin   Margin                     `json:"margin"`
+}

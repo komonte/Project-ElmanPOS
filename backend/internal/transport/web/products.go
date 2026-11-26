@@ -204,7 +204,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 
 // productFormData arma los datos del formulario. Si falla una lectura, el
 // error va en "Error" y el formulario se dibuja igual (con lo que haya).
-// Compras la usa para el alta desde un renglón (ver PurchasesQuickProductForm).
+// Compras y conteos la usan para el alta desde un renglón (ver PickerQuickProductForm).
 func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg string) map[string]any {
 	ctx := r.Context()
 	data := map[string]any{"Product": p, "Error": errMsg}
@@ -327,12 +327,12 @@ func newBrandOption(query string, found []*model.Brand) string {
 
 // ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
 // que se escaneó en el alta, antes de llenar el resto. Si ya es de un
-// producto, lo dice y ofrece editarlo (o, desde una compra, ?for=purchase,
-// usarlo en el renglón); si está libre, no muestra nada.
+// producto, lo dice y ofrece editarlo (o, desde un renglón de compra o
+// conteo, ?for=line, usarlo en el renglón); si está libre, no muestra nada.
 // Es solo un aviso: al guardar se vuelve a revisar.
 func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request) {
-	forPurchase := r.FormValue("for") == "purchase"
-	data := map[string]any{"ForPurchase": forPurchase}
+	forLine := r.FormValue("for") == "line"
+	data := map[string]any{"ForLine": forLine}
 	if raw := strings.TrimSpace(r.FormValue("barcode")); raw != "" {
 		err := h.productCodes.Check(r.Context(), raw)
 		var taken *productcodes.CodeTakenError
@@ -340,8 +340,8 @@ func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request
 		case errors.As(err, &taken):
 			data["OwnerID"] = taken.ProductID
 			data["Message"] = fmt.Sprintf(h.tr(r, "product.barcode_exists"), taken.ProductSKU, taken.ProductName)
-			// Desde una compra, solo si el renglón lo aceptaría.
-			if forPurchase {
+			// Desde un renglón, solo si lo aceptaría (activo y no combo).
+			if forLine {
 				if owner, err := h.productSvc.GetByID(r.Context(), taken.ProductID); err == nil &&
 					owner.IsActive && owner.SaleType != model.SaleTypeComposite {
 					data["Owner"] = owner

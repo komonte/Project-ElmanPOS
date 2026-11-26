@@ -52,11 +52,12 @@ var partialFiles = []string{
 	"templates/partials/product_barcode_check.gohtml",
 	"templates/partials/purchase_form.gohtml",
 	"templates/partials/purchase_line.gohtml",
-	"templates/partials/purchase_product_options.gohtml",
 	"templates/partials/purchase_received.gohtml",
 	"templates/partials/purchase_price_cell.gohtml",
-	"templates/partials/purchase_assign_code.gohtml",
-	"templates/partials/purchase_assign_code_options.gohtml",
+	"templates/partials/picker_product_options.gohtml",
+	"templates/partials/picker_assign_code.gohtml",
+	"templates/partials/picker_assign_code_options.gohtml",
+	"templates/partials/picker_script.gohtml",
 }
 
 type TemplateEngine struct {

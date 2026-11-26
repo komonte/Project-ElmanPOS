@@ -1,8 +1,8 @@
 {{/* Agregar un código escaneado a un producto que ya existe, desde un
-     renglón de compra (panel lateral). Se busca el producto por nombre o SKU
-     y se elige: el código se le agrega (F-02) y el producto queda elegido en
-     el renglón (evento purchaseProductChosen, como el alta rápida). Con
-     error vuelve este panel con el mensaje.
+     renglón de compra o conteo (panel lateral). Se busca el producto por
+     nombre o SKU y se elige: el código se le agrega (F-02) y el producto
+     queda elegido en el renglón (evento productChosen, como el alta rápida).
+     Con error vuelve este panel con el mensaje.
 
      El buscador no está dentro de un <form>: Enter no envía nada.
 
@@ -11,7 +11,7 @@
   <div class="h-full w-full sm:max-w-lg bg-surface border-l-8 border-tag overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="form-title">
     <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b-2 border-line">
       <div>
-        <h2 id="form-title" class="font-display font-bold text-3xl leading-tight">{{t "purchase.assign_title"}}</h2>
+        <h2 id="form-title" class="font-display font-bold text-3xl leading-tight">{{t "picker.assign_title"}}</h2>
         <p class="mt-1 text-muted">{{t "product.barcode"}}: <span class="font-bold tabular">{{.Code}}</span></p>
       </div>
       <button type="button" onclick="closeModal()" aria-label="{{t "common.close"}}"
@@ -21,12 +21,12 @@
       {{if .Error}}
       <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
       {{end}}
-      <p class="text-sm text-muted">{{t "purchase.assign_hint"}}</p>
+      <p class="text-sm text-muted">{{t "picker.assign_hint"}}</p>
       <div>
-        <label for="assign-code-q" class="field-label">{{t "purchase.product"}}</label>
+        <label for="assign-code-q" class="field-label">{{t "picker.product"}}</label>
         <input type="search" id="assign-code-q" name="q" autocomplete="off" autofocus
-               placeholder="{{t "purchase.assign_search"}}"
-               hx-get="/purchases/assign-code/options" hx-include="#assign-code-value"
+               placeholder="{{t "picker.assign_search"}}"
+               hx-get="/picker/assign-code/options" hx-include="#assign-code-value"
                hx-trigger="input changed delay:250ms" hx-target="#assign-code-options" hx-swap="innerHTML"
                class="field">
         <input type="hidden" id="assign-code-value" name="code" value="{{.Code}}">

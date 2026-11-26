@@ -11,6 +11,11 @@
      haber un form dentro de otro. */}}
 <div id="form-modal"></div>
 
+{{/* El buscador de producto de los renglones (pickerSearchEnter, alta
+     rápida, agregar código...). Abajo, lo que la compra hace con el
+     producto elegido (pickerSetProduct). */}}
+{{template "picker_script.gohtml"}}
+
 {{/* Un renglón vacío para clonar con "Agregar renglón" (purchaseAddLine). */}}
 <template id="purchase-line-template">
   {{template "purchase_line.gohtml" (dict)}}
@@ -46,19 +51,6 @@
     });
   }
 
-  // Elegir un producto del buscador.
-  function purchasePickProduct(button) {
-    purchaseSetProduct(button.closest('[data-purchase-line]'), purchaseProductFrom(button));
-  }
-
-  // Los datos de un producto en un botón (buscador, "usar ese producto").
-  function purchaseProductFrom(button) {
-    return {
-      id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
-      shelf_life: button.dataset.shelfLife ? Number(button.dataset.shelfLife) : null,
-    };
-  }
-
   // Hoy + días, como "AAAA-MM-DD" con la fecha de esta PC (la del almacén).
   function purchaseExpiryFrom(days) {
     const d = new Date();
@@ -69,12 +61,13 @@
 
   // Deja un producto elegido en un renglón: copia el id y el nombre, muestra
   // lote y vencimiento solo si controla lotes, cierra la lista y pasa a la
-  // cantidad. Lo usan el buscador, el alta y "agregar código".
+  // cantidad. Lo llama el buscador compartido (picker_script.gohtml) al
+  // elegir, dar de alta, agregar el código o "usar ese producto".
   //
   // Con días de vida (shelf_life) precarga el vencimiento: hoy + días. Solo
   // si está vacío o si lo había precargado otro producto (se cambió de
   // producto): un vencimiento escrito a mano no se toca.
-  function purchaseSetProduct(row, product) {
+  function pickerSetProduct(row, product) {
     row.querySelector('[name=product_id]').value = product.id;
     row.querySelector('[name=product_q]').value = product.name;
     row.querySelector('[name=batches]').value = product.batches ? '1' : '';
@@ -91,66 +84,10 @@
     row.querySelector('[name=quantity]').focus();
   }
 
-  // Los paneles que salen de un renglón (alta, agregar código) recuerdan qué
-  // renglón los abrió, para elegir ahí el producto. Su buscador queda marcado
-  // (data-modal-return): si el panel se cierra sin elegir nada, closeModal
-  // vuelve ahí.
-  let purchasePanelRow = null;
-  function purchaseOpenPanel(button, url, values) {
-    purchasePanelRow = button.closest('[data-purchase-line]');
-    purchaseClearModalReturn();
-    purchasePanelRow.querySelector('[name=product_q]').setAttribute('data-modal-return', '');
-    htmx.ajax('GET', url, { target: '#form-modal', swap: 'innerHTML', values: values });
+  // El alta rápida propone el proveedor de la compra como preferido.
+  function pickerQuickValues() {
+    return { supplier_id: document.querySelector('#purchase-form [name=supplier_id]').value };
   }
-
-  // Con el producto elegido el cursor va a la cantidad: la marca ya no sirve.
-  function purchaseClearModalReturn() {
-    document.querySelectorAll('[data-modal-return]').forEach(function (el) {
-      el.removeAttribute('data-modal-return');
-    });
-  }
-
-  // Alta de producto (el formulario de Productos), con lo escrito en el
-  // renglón y el proveedor de la compra como proveedor preferido.
-  function purchaseQuickProduct(button) {
-    purchaseOpenPanel(button, '/purchases/quick-product', {
-      q: button.dataset.q,
-      supplier_id: document.querySelector('#purchase-form [name=supplier_id]').value,
-    });
-  }
-
-  // Agregar el código escaneado a un producto que ya existe.
-  function purchaseAssignCode(button) {
-    purchaseOpenPanel(button, '/purchases/assign-code', { code: button.dataset.q });
-  }
-
-  // Desde el alta: el producto ya existe, solo le falta el código. Sigue
-  // siendo el mismo renglón (purchasePanelRow no cambia).
-  function purchaseSwitchToAssign() {
-    htmx.ajax('GET', '/purchases/assign-code', {
-      target: '#form-modal', swap: 'innerHTML',
-      values: { code: document.getElementById('product-barcode').value },
-    });
-  }
-
-  // Desde el alta: el código escrito ya es de un producto que se puede
-  // recibir (product_barcode_check.gohtml). Se usa ese en el renglón.
-  function purchaseUseExisting(button) {
-    const row = purchasePanelRow;
-    purchasePanelRow = null;
-    closeModal();
-    if (row && row.isConnected) purchaseSetProduct(row, purchaseProductFrom(button));
-  }
-
-  // El servidor avisa qué producto elegir (HX-Trigger) y el panel se cierra
-  // solo (la respuesta es vacía). Si el renglón se quitó mientras tanto, el
-  // producto (o su código nuevo) queda guardado pero no se elige en ningún lado.
-  document.body.addEventListener('purchaseProductChosen', function (e) {
-    const row = purchasePanelRow;
-    purchasePanelRow = null;
-    purchaseClearModalReturn();
-    if (row && row.isConnected) purchaseSetProduct(row, e.detail);
-  });
 
   // Lee un número como se escribe acá ("1250,50"). Vacío o mal escrito: NaN.
   function purchaseNumber(s) {
@@ -183,44 +120,6 @@
     diff.textContent = d === 0 ? diff.dataset.ok : diff.dataset.label + ' ' + money.format(d);
     diff.classList.toggle('text-danger', d !== 0);
   }
-
-  // Enter en el buscador de un renglón. El lector de códigos lo manda después
-  // del código, y sin esto enviaría la compra a medio cargar. Busca al
-  // momento (sin esperar el delay del buscador) y, si hay un solo resultado,
-  // lo elige: escanear y pasar a la cantidad. Sin resultados abre el alta
-  // rápida con lo escrito. Con varios, se elige de la lista. La búsqueda con delay que quede pendiente llega después y la
-  // descarta purchaseDropLateSearch (el renglón ya tiene producto).
-  function purchaseSearchEnter(e, input) {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const q = input.value.trim();
-    if (q === '') return;
-    const list = input.closest('[data-purchase-line]').querySelector('ul[role=listbox]');
-    htmx.ajax('GET', '/purchases/product-options', {
-      target: list, swap: 'innerHTML', values: { product_q: q },
-    }).then(function () {
-      const options = list.querySelectorAll('button[data-id]');
-      if (options.length === 1) {
-        purchasePickProduct(options[0]);
-        return;
-      }
-      // Nada: escanear un código que no está abre el alta con ese código.
-      const quick = list.querySelector('[data-quick-product]');
-      if (quick) purchaseQuickProduct(quick);
-    });
-  }
-
-  // Descarta los resultados de una búsqueda que llegan cuando el renglón ya
-  // tiene producto: se eligió uno antes de que respondiera la última tecla, y
-  // la respuesta tardía volvería a abrir la lista. Escribir en el buscador
-  // borra el producto elegido (oninput), así que una búsqueda nueva sí se ve.
-  function purchaseDropLateSearch(e) {
-    const list = e.detail.target;
-    if (!list.matches('[data-purchase-line] ul[role=listbox]')) return;
-    const row = list.closest('[data-purchase-line]');
-    if (row.querySelector('[name=product_id]').value !== '') e.detail.shouldSwap = false;
-  }
-  document.addEventListener('htmx:beforeSwap', purchaseDropLateSearch);
 
   document.addEventListener('input', function (e) {
     if (e.target.closest('#purchase-form')) purchaseRecalc();

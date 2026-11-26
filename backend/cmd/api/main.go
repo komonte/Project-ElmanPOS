@@ -181,13 +181,15 @@ func main() {
 	mux.HandleFunc("POST /products/{id}/costs", webH.ProductCostsSet)
 	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
-	mux.HandleFunc("GET /purchases/product-options", webH.PurchasesProductOptions)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)
-	mux.HandleFunc("GET /purchases/quick-product", webH.PurchasesQuickProductForm)
-	mux.HandleFunc("POST /purchases/quick-product", webH.PurchasesQuickProductCreate)
-	mux.HandleFunc("GET /purchases/assign-code", webH.PurchasesAssignCodeForm)
-	mux.HandleFunc("GET /purchases/assign-code/options", webH.PurchasesAssignCodeOptions)
-	mux.HandleFunc("POST /purchases/assign-code", webH.PurchasesAssignCode)
+	// El buscador de producto de un renglón (compras y conteos): opciones,
+	// alta rápida y agregar código.
+	mux.HandleFunc("GET /picker/product-options", webH.PickerProductOptions)
+	mux.HandleFunc("GET /picker/quick-product", webH.PickerQuickProductForm)
+	mux.HandleFunc("POST /picker/quick-product", webH.PickerQuickProductCreate)
+	mux.HandleFunc("GET /picker/assign-code", webH.PickerAssignCodeForm)
+	mux.HandleFunc("GET /picker/assign-code/options", webH.PickerAssignCodeOptions)
+	mux.HandleFunc("POST /picker/assign-code", webH.PickerAssignCode)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

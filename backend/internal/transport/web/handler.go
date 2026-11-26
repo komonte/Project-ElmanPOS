@@ -190,6 +190,8 @@ var errorKeys = []struct {
 	{purchases.ErrProductInactive, "error.purchase_product_inactive"},
 	{purchases.ErrCompositeProduct, "error.purchase_composite"},
 	{purchases.ErrBatchNotAllowed, "error.batch_not_allowed"},
+	{errLineProductInactive, "error.line_product_inactive"},
+	{errLineComposite, "error.line_composite"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

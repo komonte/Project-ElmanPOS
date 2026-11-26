@@ -10,13 +10,14 @@
      outerHTML y htmx lo hereda; sin esto cada respuesta reemplazaría el <ul>
      entero y la búsqueda siguiente ("next ul") caería en el renglón de abajo.
 
-     Enter en el buscador (el lector de códigos lo manda después del código)
-     no envía la compra: ver purchaseSearchEnter en la página.
+     El buscador es el de picker_script.gohtml (data-picker-line, product_q,
+     product_id y la lista): Enter (el lector de códigos lo manda después del
+     código) no envía la compra, ver pickerSearchEnter.
 
      Datos: .ProductID, .ProductQ, .Quantity, .UnitCost, .BatchNumber,
      .ExpiryDate, .Batches, y .Error si este renglón falló. Vacío para el
      renglón que se clona. */}}
-<fieldset data-purchase-line
+<fieldset data-purchase-line data-picker-line
           class="p-4 border-2 rounded-md bg-surface {{if .Error}}border-danger{{else}}border-line{{end}}">
   <legend class="px-2 font-bold">{{t "purchase.line"}} <span data-line-number></span></legend>
 
@@ -24,10 +25,10 @@
     <div>
       <label class="field-label">{{t "purchase.product"}}
         <input type="search" name="product_q" autocomplete="off" value="{{.ProductQ}}"
-               placeholder="{{t "purchase.product_search"}}"
-               hx-get="/purchases/product-options" hx-trigger="input changed delay:250ms"
+               placeholder="{{t "picker.product_search"}}"
+               hx-get="/picker/product-options" hx-trigger="input changed delay:250ms"
                hx-target="next ul" hx-swap="innerHTML"
-               onkeydown="purchaseSearchEnter(event, this)"
+               onkeydown="pickerSearchEnter(event, this)"
                oninput="const r = this.closest('[data-purchase-line]'); r.querySelector('[name=product_id]').value = '';"
                class="field">
       </label>

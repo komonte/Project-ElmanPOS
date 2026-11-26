@@ -540,7 +540,7 @@ COMMIT;
 
 > **Spec note (known exits vs. counted products):** 03 F-09 computes the confirm adjustment as `counted_quantity − system_quantity` using the item's **snapshot**. If a known-exit `ADJUSTMENT` is posted against a product that is also counted and the snapshot is not refreshed, the exit is counted twice and `ledger == balance` breaks (§6.1). This manual adopts the convention that the item snapshot is refreshed to the live balance when a known exit is logged. **Flag this for a v1.1 spec decision**: either refresh the snapshot (as here) or compute the diff against the live balance at confirm time.
 >
-> **App decision (2026-11-26, F-09):** the app does not set the balance to `counted_quantity`: it applies `counted − system` as a **difference** on the live balance, with the snapshot taken at the item's first load, so goods received after counting are kept. Known exits are not in the app yet (F-09b); the SQL above keeps the manual's convention.
+> **App decision (2026-11-26, F-09):** the app does not set the balance to `counted_quantity`: it applies `counted − system` as a **difference** on the live balance, with the snapshot taken at the item's first load, so goods received after counting are kept. Known exits are their own flow in the app (F-09b): a `stock_adjustments` row is the movements' source instead of the count, and the screen warns when the product is already counted in the open count. The SQL above keeps the manual's convention.
 
 **What you should see:**
 - P1 balance = **5** (8 − 1 sale − 1 consumption − 1 count merma); P2 untouched at **18**; P3 untouched at **6.000**.

@@ -311,12 +311,12 @@ Also the **initial inventory**: the stock already on the shelves when the system
   - **Products not counted are not touched** (never set to 0): a count can cover one sector, a category or the whole store, in parts.
   - **One draft at a time** per store; discarding it leaves no trace in the stock (its items and entries go with it, `ON DELETE CASCADE`). A confirmed count can never be deleted: its movements reference it.
   - **Inactive and `COMPOSITE` products cannot be counted** (reactivate the product; count a combo's components).
-  - **Known exits** (own consumption, damage, expiry: `OWN_CONSUMPTION`, `DAMAGE`, `EXPIRATION`) are **not in v1 yet** (F-09b). When they come, the snapshot question below has to be settled.
+  - **Known exits** (own consumption, damage, expired goods) are logged on their own, any day, without a count (F-09b). They change the live balance, so the difference moved at confirm stays right when the exit happened **after** the product was counted; one that happened before counting but is logged after would be taken out twice, and F-09b warns about it.
   - Import of a count from a spreadsheet: later.
 - **Invariants:**
   - After confirm, for every adjusted product: ledger, balance and batch `remaining_quantity` changed by the same amount; `balance = counted` when nothing else moved since the snapshot.
   - `DRAFT → CONFIRMED` is one-way; a count is confirmed at most once.
-  - Reports separate unexplained `COUNT` losses (true merma) from known exits once those exist.
+  - Reports (later) separate unexplained `COUNT` losses (true merma) from known exits (F-09b).
 - **Errors / rollback:** any failure → full rollback (no movement, no batch, no cost, the count stays `DRAFT`). Bad load (no product, no sector, sector > 60 chars, negative quantity or > 3 decimals) → the sheet comes back with what was typed and the message.
 - **Web routes:** `GET /counts` (the open draft, or "Start a count"), `POST /counts` (open or continue), `POST /counts/{id}/entries` (one load; returns the sheet), `POST /counts/{id}/entries/{entryID}/delete`, `POST /counts/{id}/discard`, `GET /counts/{id}/review`, `POST /counts/{id}/items/{productID}/details` (cost and expiry; returns the row and the summary out of band), `POST /counts/{id}/confirm`. The product search, quick create and add-code are the shared `/picker/...` routes (F-06). No JSON API yet.
 - **Edge cases:**
@@ -324,6 +324,38 @@ Also the **initial inventory**: the stock already on the shelves when the system
   - **Positive difference** (more than the system says) is often a missing purchase; it gets a positive adjustment.
   - Product counted but not in the system → create it from the line (step 2).
   - A product that changed to `controls_batches` after it had stock: a negative difference larger than its batches takes the rest without batch.
+
+### F-09b: Known Exits (own consumption, damage, expired goods)
+
+- **Actor / Role:** Stock Clerk or Admin. Until F-13 there is no login: `created_by` and `performed_by` stay `NULL`.
+- **Trigger:** goods leave the store without being sold: the family takes something, something breaks, something expires. Usually written on paper first and logged later.
+- **Preconditions:** exactly one active store (as F-06); the product is active and not `COMPOSITE`; there is enough stock in the store.
+- **Business flow** (Inventory → Stock exits, `/adjustments`), one exit per submit:
+  1. Scan or search the product with the shared line picker (F-06; creating a product from here also works, though a new product has no stock to take).
+  2. If the product has batches with stock, a **Batch** select lists them FIFO ("L-2475 · expires 2026-08-20 · 2 left"); the default is automatic (the one that expires first). For expired goods, pick the exact batch.
+  3. If the product is already counted in the open count (F-09), a warning says so before logging (and again after): an exit that happened before it was counted must not be logged, it would be taken out twice.
+  4. Type the quantity (kg for `WEIGHT` products, up to 3 decimals), pick the **reason** — Own consumption, Damage, Expired or Other — and an optional note (**required for Other**, max 500 chars). Enter logs it.
+  5. The form comes back ready for the next one, with the same reason; the **latest 50 exits** are listed below (when, product, reason, quantity, note).
+- **DB transaction** (`usecase/adjustments.Record`, one `TxRunner.InTx`). Before it: `StockAdjustment.Validate`.
+  1. Find the store (`ActiveID`); read the product: missing → 400; inactive → 409; `COMPOSITE` → 400. A batch chosen for a product without `controls_batches` → 400.
+  2. **Lock, then read** (as F-06): `LockOnHand`, then the store balance and `CostStore.Current`. Quantity greater than the store balance → 409 (`NotEnoughStockError`, the message says how much there is).
+  3. `INSERT INTO stock_adjustments (store_id, product_id, reason, quantity, notes)`.
+  4. Movements, all `ADJUSTMENT` with the exit's `reason` and `adjustment_id`, negative:
+     - `controls_batches`: first the chosen batch (`BatchStore.TakeFrom`; a batch of another product → 400), then FIFO by expiry (`TakeFIFO`); one movement per batch at that batch's cost.
+     - What the batches do not cover, or a product without batches: one movement without batch at the current average cost (0 if it never had one).
+  5. `stock_balances`: subtract the quantity.
+  6. `INSERT INTO audit_log (user_id NULL, 'stock_adjustments', 'INSERT', adjustment_id, new_data)`.
+  7. `COMMIT`.
+- **Decisions (2026-11-26):**
+  - **Own table, any day.** Every movement needs exactly one source; a known exit is not a sale, a purchase or a count, so it has its own header row (`stock_adjustments`, migration `0016`) instead of hanging from an open count.
+  - **Reasons:** `OWN_CONSUMPTION`, `DAMAGE`, `EXPIRATION`, `OTHER` (with a note). No `THEFT`: an unexplained loss shows up in a count (`COUNT`).
+  - **The average cost does not change:** goods leave at their cost (batch or average).
+  - **No edit, no undo:** `stock_adjustments` is append-only (trigger) and its movements cannot be deleted; a mistake is fixed with a count.
+  - Products already counted in the open count: allowed, with a warning (above).
+  - Merma report (explained vs. unexplained per period): later.
+- **Invariants:** ledger, balance and batch `remaining_quantity` go down by the same amount; a known-exit movement is always `ADJUSTMENT` and negative (`CHECK`); the store balance never goes below 0.
+- **Errors / rollback:** any failure → full rollback (no exit row, no movement, no batch change, no audit row). Bad input → the form comes back with what was typed and the message.
+- **Web routes:** `GET /adjustments` (page), `POST /adjustments` (log; returns the form and the latest exits out of band), `GET /adjustments/product?product_id=` (the product's batches and the open-count warning). The search, quick create and add-code are the shared `/picker/...` routes. No JSON API yet.
 
 ### F-10: WEIGHT Sale Mode (a granel)
 
@@ -409,7 +441,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 ### R-02: Expiring Soon
 - **Semantics:** `product_batches` where `expiry_date <= now() + app_settings['expiry_warning_days']` and `remaining_quantity > 0`.
 - **Output:** product, batch number, expiry date, `remaining_quantity`, current value at batch `unit_cost`.
-- **Action link:** batch may be written off directly (F-09 known-exit with `reason = 'EXPIRATION'`).
+- **Action link:** batch may be written off directly (F-09b known exit with `reason = 'EXPIRATION'` and that batch).
 
 ### R-03: Top Products / ABC
 - **Semantics:** aggregate `sale_items` by `product_id` for a period: units, revenue, margin (via `unit_cost` snapshots).

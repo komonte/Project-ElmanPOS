@@ -42,3 +42,10 @@ func formatPercent(lang string, d decimal.Decimal) string {
 	}
 	return s
 }
+
+// formatQuantity muestra una cantidad (unidades o kg) sin ceros de más, con
+// el separador decimal del idioma: "2,5" (es) o "2.5" (en). Sin separador de
+// miles: se lee como se escribe en el formulario.
+func formatQuantity(lang string, d decimal.Decimal) string {
+	return formatPercent(lang, d)
+}

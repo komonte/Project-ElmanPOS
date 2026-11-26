@@ -28,6 +28,7 @@ var pageFiles = []string{
 	"templates/pages/categories.gohtml",
 	"templates/pages/products.gohtml",
 	"templates/pages/purchases.gohtml",
+	"templates/pages/counts.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -58,6 +59,7 @@ var partialFiles = []string{
 	"templates/partials/picker_assign_code.gohtml",
 	"templates/partials/picker_assign_code_options.gohtml",
 	"templates/partials/picker_script.gohtml",
+	"templates/partials/count_sheet.gohtml",
 }
 
 type TemplateEngine struct {
@@ -101,6 +103,10 @@ func NewTemplateEngine() *TemplateEngine {
 			// español, "37.5" en inglés.
 			"percent": func(d decimal.Decimal) string {
 				return formatPercent(lang, d)
+			},
+			// qty muestra una cantidad contada: "2,5" en español, "2.5" en inglés.
+			"qty": func(d decimal.Decimal) string {
+				return formatQuantity(lang, d)
 			},
 			"formatTime": formatTime,
 		}

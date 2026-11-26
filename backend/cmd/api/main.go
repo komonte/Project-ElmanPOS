@@ -27,6 +27,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -111,10 +112,11 @@ func main() {
 	// Recepción de compras (F-06): compra, lotes, stock y costos en una transacción.
 	purchaseSvc := purchases.New(db, postgres.NewTxRunner(db))
 	purchasesH := transport.NewPurchasesHandler(purchaseSvc)
+	stockCountSvc := stockcounts.New(db, postgres.NewTxRunner(db))
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
@@ -179,6 +181,11 @@ func main() {
 	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
 	mux.HandleFunc("POST /products/{id}/prices", webH.ProductPricesSet)
 	mux.HandleFunc("POST /products/{id}/costs", webH.ProductCostsSet)
+	mux.HandleFunc("GET /counts", webH.CountsPage)
+	mux.HandleFunc("POST /counts", webH.CountsOpen)
+	mux.HandleFunc("POST /counts/{id}/entries", webH.CountsAddEntry)
+	mux.HandleFunc("POST /counts/{id}/entries/{entryID}/delete", webH.CountsRemoveEntry)
+	mux.HandleFunc("POST /counts/{id}/discard", webH.CountsDiscard)
 	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)

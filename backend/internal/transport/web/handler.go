@@ -17,6 +17,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 	"github.com/shopspring/decimal"
 )
 
@@ -34,9 +35,10 @@ type WebHandler struct {
 	prices        *prices.Service
 	costs         *costs.Service
 	purchases     *purchases.Service
+	stockCounts   *stockcounts.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -49,6 +51,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		prices:        prices,
 		costs:         costs,
 		purchases:     purchases,
+		stockCounts:   stockCounts,
 	}
 }
 
@@ -192,6 +195,19 @@ var errorKeys = []struct {
 	{purchases.ErrBatchNotAllowed, "error.batch_not_allowed"},
 	{errLineProductInactive, "error.line_product_inactive"},
 	{errLineComposite, "error.line_composite"},
+	// Conteo de stock (F-09).
+	{model.ErrStockCountEntryProduct, "error.count_product_missing"},
+	{model.ErrStockCountSectorEmpty, "error.count_sector_required"},
+	{model.ErrStockCountSectorLong, "error.count_sector_too_long"},
+	{model.ErrInvalidCountedQuantity, "error.count_quantity_invalid"},
+	{stockcounts.ErrUnknownProduct, "error.product_unknown"},
+	{stockcounts.ErrProductInactive, "error.line_product_inactive"},
+	{stockcounts.ErrCompositeProduct, "error.line_composite"},
+	{stockcounts.ErrExpiryNotAllowed, "error.batch_not_allowed"},
+	{stockcounts.ErrNegativeStock, "error.count_negative_stock"},
+	{store.ErrCountDraftExists, "error.count_draft_exists"},
+	{store.ErrCountNotDraft, "error.count_not_draft"},
+	{store.ErrNegativeStock, "error.count_negative_stock"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

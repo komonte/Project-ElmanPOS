@@ -812,5 +812,6 @@
   "product.sale_price": "Sale price with VAT",
   "product.sale_price_hint": "Optional. Without a price the register cannot charge it. Change it later in the product's Price section.",
   "price.avg_short": "avg. %s",
-  "purchase.col_voucher": "Voucher"
+  "purchase.col_voucher": "Voucher",
+  "error.quantity_not_whole": "This product goes by unit: type a whole number, without decimals."
 }

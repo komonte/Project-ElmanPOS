@@ -292,6 +292,8 @@ var errorKeys = []struct {
 	{model.ErrSaleDuplicateProduct, "error.sale_duplicate_product"},
 	{model.ErrInvalidSaleQuantity, "error.sale_quantity_invalid"},
 	{model.ErrSaleQuantityNotWhole, "error.sale_quantity_not_whole"},
+	// Conteos, salidas y compras: los productos por unidad, enteros.
+	{model.ErrQuantityNotWhole, "error.quantity_not_whole"},
 	{model.ErrSaleWeightTooLarge, "error.sale_weight_too_large"},
 	{model.ErrSaleLineTotalZero, "error.sale_line_zero"},
 	{model.ErrSaleTotalTooLarge, "error.sale_total_too_large"},

@@ -812,5 +812,6 @@
   "product.sale_price": "Precio de venta con IVA",
   "product.sale_price_hint": "Opcional. Sin precio, la caja no lo puede cobrar. Después se cambia en la sección Precio del producto.",
   "price.avg_short": "prom. %s",
-  "purchase.col_voucher": "Comprobante"
+  "purchase.col_voucher": "Comprobante",
+  "error.quantity_not_whole": "Este producto va por unidad: escribí un número entero, sin coma."
 }

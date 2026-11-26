@@ -30,6 +30,7 @@ var pageFiles = []string{
 	"templates/pages/purchases.gohtml",
 	"templates/pages/counts.gohtml",
 	"templates/pages/count_review.gohtml",
+	"templates/pages/count_import.gohtml",
 	"templates/pages/adjustments.gohtml",
 }
 

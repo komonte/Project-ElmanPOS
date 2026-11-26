@@ -96,6 +96,7 @@
 
   <div class="flex flex-wrap items-center gap-4">
     {{if .Count.Items}}<a href="/counts/{{.Count.ID}}/review" class="btn-primary">{{t "count.review"}}</a>{{end}}
+    <a href="/counts/{{.Count.ID}}/import" class="btn-secondary">{{t "count.import"}}</a>
     <form method="post" action="/counts/{{.Count.ID}}/discard" onsubmit="return confirm('{{t "count.discard_confirm"}}')">
       <button type="submit" class="btn-secondary">{{t "count.discard"}}</button>
     </form>

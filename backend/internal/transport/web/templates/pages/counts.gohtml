@@ -8,6 +8,10 @@
 <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
 {{end}}
 
+{{if .HasImported}}
+<div role="status" class="mb-6 p-4 bg-surface border-l-8 border-tag rounded-sm font-bold">{{printf (t "count.imported") .Imported}}</div>
+{{end}}
+
 {{with .Sheet}}
 {{template "count_sheet.gohtml" .}}
 

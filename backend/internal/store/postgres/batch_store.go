@@ -143,3 +143,59 @@ func (s *BatchStore) TakeFIFO(ctx context.Context, productID int64, qty decimal.
 	}
 	return takes, left, nil
 }
+
+// OpenBatches devuelve los lotes de un producto que todavía tienen
+// mercadería, en orden FIFO (el que vence antes primero; sin vencimiento al
+// final). Vacía, no nil, si no tiene. Para elegir de qué lote sale una salida
+// conocida (F-09b).
+func (s *BatchStore) OpenBatches(ctx context.Context, productID int64) ([]*model.ProductBatch, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+batchColumns+` FROM product_batches
+		WHERE product_id = $1 AND remaining_quantity > 0
+		ORDER BY expiry_date NULLS LAST, created_at, id;`, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	batches := make([]*model.ProductBatch, 0)
+	for rows.Next() {
+		b, err := scanBatch(rows)
+		if err != nil {
+			return nil, err
+		}
+		batches = append(batches, b)
+	}
+	return batches, rows.Err()
+}
+
+// TakeFrom descuenta qty de un lote elegido de un producto (la salida de
+// "este lote venció"), bloqueándolo hasta que termine la transacción. Si el
+// lote tiene menos, saca lo que tiene y devuelve el resto en left (quien
+// llama decide de dónde sale: TakeFIFO). take es nil si el lote ya no tenía
+// nada. Un lote que queda en 0 se marca consumido.
+//   - ErrNotFound: el lote no existe o es de otro producto.
+func (s *BatchStore) TakeFrom(ctx context.Context, productID, batchID int64, qty decimal.Decimal) (take *model.BatchTake, left decimal.Decimal, err error) {
+	var remaining, unitCost decimal.Decimal
+	err = s.db.QueryRowContext(ctx, `
+		SELECT remaining_quantity, unit_cost FROM product_batches
+		WHERE id = $1 AND product_id = $2
+		FOR UPDATE;`, batchID, productID).Scan(&remaining, &unitCost)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, decimal.Zero, store.ErrNotFound
+		}
+		return nil, decimal.Zero, err
+	}
+	n := decimal.Min(qty, remaining)
+	if !n.IsPositive() {
+		return nil, qty, nil
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		UPDATE product_batches
+		SET remaining_quantity = remaining_quantity - $2,
+		    is_consumed = (remaining_quantity - $2 = 0)
+		WHERE id = $1;`, batchID, n); err != nil {
+		return nil, decimal.Zero, err
+	}
+	return &model.BatchTake{BatchID: batchID, Quantity: n, UnitCost: unitCost}, qty.Sub(n), nil
+}

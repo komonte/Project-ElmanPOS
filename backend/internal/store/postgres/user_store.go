@@ -78,6 +78,74 @@ func (s *UserStore) SetPassword(ctx context.Context, id int64, hash string) erro
 	return nil
 }
 
+// List devuelve todos los usuarios, activos o no: primero los activos, y
+// cada grupo por nombre (la página de usuarios). Son pocos: sin búsqueda ni
+// páginas.
+func (s *UserStore) List(ctx context.Context) ([]*model.User, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT `+userColumns+` FROM users u
+		ORDER BY u.is_active DESC, lower(u.name), u.id;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*model.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	return list, rows.Err()
+}
+
+// Update cambia el nombre y el rol (ya validados). El usuario con que se
+// entra no cambia. ErrNotFound si no existe.
+func (s *UserStore) Update(ctx context.Context, id int64, name, role string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET name = $2, role = $3 WHERE id = $1;`, id, name, role)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(res)
+}
+
+// SetActive activa o desactiva un usuario. ErrNotFound si no existe. Las
+// sesiones abiertas no se tocan: quien llama las cierra al desactivar
+// (UserSessionStore.DeleteForUser).
+func (s *UserStore) SetActive(ctx context.Context, id int64, active bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET is_active = $2 WHERE id = $1;`, id, active)
+	if err != nil {
+		return err
+	}
+	return requireOneRow(res)
+}
+
+// LockActiveAdmins bloquea las filas de los administradores activos hasta
+// el fin de la transacción y devuelve sus id. Se llama antes de desactivar
+// a un admin o sacarle el rol, para no dejar el sistema sin ninguno: si dos
+// admins se sacan el rol uno al otro a la vez, la segunda transacción espera
+// a la primera y vuelve a leer, así que ya no cuenta al que dejó de ser
+// admin. Solo sirve dentro de una transacción.
+func (s *UserStore) LockActiveAdmins(ctx context.Context) ([]int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id FROM users WHERE role = 'ADMIN' AND is_active
+		ORDER BY id FOR UPDATE;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // UserSessionStore guarda los logins abiertos (02 4.27, 0019). Recibe y
 // busca la huella del token (SHA-256), nunca el token.
 type UserSessionStore struct {

@@ -145,6 +145,7 @@ Index: `(parent_id)`.
 | max_stock | NUMERIC(12,3) | NULL, CHECK (max_stock IS NULL OR max_stock > reorder_point) | Ceiling to avoid overstocking; upper bound for suggested order quantities. |
 | margin_percent | NUMERIC(5,2) | NOT NULL DEFAULT 0, CHECK (margin_percent >= 0) | Target gross margin (%). Over the price without IVA. PVP suggestion when unit cost changes: `pvp_suggested = unit_cost × (1 + tax_rate/100) / (1 - margin_percent/100)`, with the category's IVA rate (costs are net, prices include IVA; F-04). `0` = no automatic suggestion. The app also requires `margin_percent < 100` (at 100 the formula divides by zero). |
 | preferred_supplier_id | BIGINT | FK → suppliers.id, NULL | Preferred supplier; the replenishment report shows who to contact. |
+| shelf_life_days | INTEGER | NULL, CHECK (BETWEEN 1 AND 3650) | How many days it usually lasts from reception (migration `0014`). Purchase reception prefills a batch's expiry with today + these days (F-06). `NULL` = unknown, no prefill. Per product, not per category: one category mixes things that last 7 and 30 days. |
 | is_consignment | BOOLEAN | NOT NULL DEFAULT FALSE | Consigned product (owned by supplier until sold). |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
@@ -264,7 +265,7 @@ Rows are only appended (F-04): a new cost gets `valid_from = clock_timestamp()` 
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
-| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Within one reception, lines with the same product, number, expiry and cost merge into one row; a different cost is a separate row (F-06). |
+| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Within one reception, lines with the same product, number, expiry and cost merge into one row; a different cost is a separate row (F-06). Received without a number → `C-<purchase id>` (automatic batch). |
 | expiry_date | DATE | NULL | NULL allowed for non-perishable batches. |
 | original_quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | Received quantity. Immutable. |
 | remaining_quantity | NUMERIC(12,3) | NOT NULL | Decremented on each FIFO allocation. |

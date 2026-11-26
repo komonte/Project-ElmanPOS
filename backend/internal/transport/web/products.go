@@ -184,12 +184,28 @@ func productFromForm(r *http.Request, p *model.Product) string {
 	} else if errKey == "" {
 		errKey = "error.product_margin"
 	}
+
+	p.ShelfLifeDays = nil // vacío: sin dato
+	if v := strings.TrimSpace(r.FormValue("shelf_life_days")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			p.ShelfLifeDays = &n // el rango lo revisa Validate
+		} else if errKey == "" {
+			errKey = "error.product_shelf_life"
+		}
+	}
 	return errKey
 }
 
 // renderProductForm dibuja el panel con el formulario. Arma las opciones de
 // los <select> cada vez, también al volver con un error.
 func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p *model.Product, errMsg string) {
+	h.renderPartial(w, r, "product_form.gohtml", h.productFormData(r, p, errMsg))
+}
+
+// productFormData arma los datos del formulario. Si falla una lectura, el
+// error va en "Error" y el formulario se dibuja igual (con lo que haya).
+// Compras la usa para el alta desde un renglón (ver PurchasesQuickProductForm).
+func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg string) map[string]any {
 	ctx := r.Context()
 	data := map[string]any{"Product": p, "Error": errMsg}
 	// Alta: si vuelve con un error, conserva el código de barras escrito.
@@ -201,22 +217,19 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 		codes, err := h.productCodes.List(ctx, p.ID)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
-			h.renderPartial(w, r, "product_form.gohtml", data)
-			return
+			return data
 		}
 		data["Codes"] = codes
 		history, err := h.prices.History(ctx, p.ID)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
-			h.renderPartial(w, r, "product_form.gohtml", data)
-			return
+			return data
 		}
 		data["Prices"] = recentPrices(history)
 		costData, err := h.productCostsData(ctx, p.ID)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
-			h.renderPartial(w, r, "product_form.gohtml", data)
-			return
+			return data
 		}
 		data["CostData"] = costData
 	}
@@ -224,8 +237,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	categories, err := h.categorySvc.GetAllIncludingInactive(ctx)
 	if err != nil {
 		data["Error"] = h.errMsg(r, err)
-		h.renderPartial(w, r, "product_form.gohtml", data)
-		return
+		return data
 	}
 	// La marca no es un <select>: con miles de marcas se busca (ver
 	// ProductsBrandOptions). Solo hace falta el nombre de la actual.
@@ -238,8 +250,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	suppliers, err := h.supplierSvc.GetAllIncludingInactive(ctx)
 	if err != nil {
 		data["Error"] = h.errMsg(r, err)
-		h.renderPartial(w, r, "product_form.gohtml", data)
-		return
+		return data
 	}
 
 	data["Categories"] = productCategoryOptions(categories, p.CategoryID)
@@ -250,8 +261,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 		taxes, err := h.taxSvc.GetAllIncludingInactive(ctx)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
-			h.renderPartial(w, r, "product_form.gohtml", data)
-			return
+			return data
 		}
 		var parentID, taxID *int64
 		if nc != nil {
@@ -266,7 +276,7 @@ func (h *WebHandler) renderProductForm(w http.ResponseWriter, r *http.Request, p
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
 	data["SaleTypes"] = saleTypeOptions(p.SaleType)
 	data["MeasureUnits"] = model.MeasureUnits
-	h.renderPartial(w, r, "product_form.gohtml", data)
+	return data
 }
 
 // productsTableData arma los datos de la tabla (ver adminList).
@@ -317,10 +327,12 @@ func newBrandOption(query string, found []*model.Brand) string {
 
 // ProductsBarcodeCheck handles GET /products/barcode-check: revisa el código
 // que se escaneó en el alta, antes de llenar el resto. Si ya es de un
-// producto, lo dice y ofrece editarlo; si está libre, no muestra nada.
+// producto, lo dice y ofrece editarlo (o, desde una compra, ?for=purchase,
+// usarlo en el renglón); si está libre, no muestra nada.
 // Es solo un aviso: al guardar se vuelve a revisar.
 func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{}
+	forPurchase := r.FormValue("for") == "purchase"
+	data := map[string]any{"ForPurchase": forPurchase}
 	if raw := strings.TrimSpace(r.FormValue("barcode")); raw != "" {
 		err := h.productCodes.Check(r.Context(), raw)
 		var taken *productcodes.CodeTakenError
@@ -328,6 +340,13 @@ func (h *WebHandler) ProductsBarcodeCheck(w http.ResponseWriter, r *http.Request
 		case errors.As(err, &taken):
 			data["OwnerID"] = taken.ProductID
 			data["Message"] = fmt.Sprintf(h.tr(r, "product.barcode_exists"), taken.ProductSKU, taken.ProductName)
+			// Desde una compra, solo si el renglón lo aceptaría.
+			if forPurchase {
+				if owner, err := h.productSvc.GetByID(r.Context(), taken.ProductID); err == nil &&
+					owner.IsActive && owner.SaleType != model.SaleTypeComposite {
+					data["Owner"] = owner
+				}
+			}
 		case err != nil:
 			data["Message"] = h.errMsg(r, err)
 		}

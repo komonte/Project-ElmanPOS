@@ -32,8 +32,8 @@ func TestPurchaseStore_CreateAndGet(t *testing.T) {
 	// Dos renglones; el segundo con un lote.
 	var batchID int64
 	err = f.tx.QueryRowContext(f.ctx, `
-		INSERT INTO product_batches (product_id, batch_number, original_quantity, remaining_quantity, unit_cost)
-		VALUES ($1, 'L-TEST', 2.5, 2.5, 60) RETURNING id;`, p2.ID).Scan(&batchID)
+		INSERT INTO product_batches (product_id, batch_number, expiry_date, original_quantity, remaining_quantity, unit_cost)
+		VALUES ($1, 'L-TEST', '2027-03-31', 2.5, 2.5, 60) RETURNING id;`, p2.ID).Scan(&batchID)
 	if err != nil {
 		t.Fatalf("fixture batch: %v", err)
 	}
@@ -58,10 +58,14 @@ func TestPurchaseStore_CreateAndGet(t *testing.T) {
 	if read.ID != got.ID || len(read.Items) != 2 {
 		t.Fatalf("get: got %+v", read)
 	}
-	if read.Items[0].ProductID != p1.ID || read.Items[0].BatchID != nil {
+	if read.Items[0].ProductID != p1.ID || read.Items[0].BatchID != nil ||
+		read.Items[0].BatchNumber != "" || read.Items[0].ExpiryDate != "" {
 		t.Errorf("line 1: got %+v", read.Items[0])
 	}
-	if read.Items[1].ProductID != p2.ID || read.Items[1].BatchID == nil || *read.Items[1].BatchID != batchID {
+	// El renglón con lote se lee con el número y el vencimiento del lote
+	// (están en product_batches, no en purchase_items).
+	if read.Items[1].ProductID != p2.ID || read.Items[1].BatchID == nil || *read.Items[1].BatchID != batchID ||
+		read.Items[1].BatchNumber != "L-TEST" || read.Items[1].ExpiryDate != "2027-03-31" {
 		t.Errorf("line 2: got %+v", read.Items[1])
 	}
 }

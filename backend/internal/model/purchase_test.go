@@ -54,7 +54,8 @@ func TestPurchaseValidate(t *testing.T) {
 		}, nil},
 		{"batch without expiry (non-perishable)", func(p *model.Purchase) { p.Items[0].BatchNumber = "L-1" }, nil},
 		{"batch too long", func(p *model.Purchase) { p.Items[0].BatchNumber = strings.Repeat("L", 81) }, model.ErrBatchNumberTooLong},
-		{"expiry without batch", func(p *model.Purchase) { p.Items[0].ExpiryDate = "2027-03-31" }, model.ErrExpiryWithoutBatch},
+		// Lo decide la recepción según el producto (lote automático o rechazo).
+		{"expiry without batch", func(p *model.Purchase) { p.Items[0].ExpiryDate = "2027-03-31" }, nil},
 		{"bad expiry format", func(p *model.Purchase) {
 			p.Items[0].BatchNumber, p.Items[0].ExpiryDate = "L-1", "31/03/2027"
 		}, model.ErrInvalidExpiryDate},

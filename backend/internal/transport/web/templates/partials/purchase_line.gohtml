@@ -10,6 +10,9 @@
      outerHTML y htmx lo hereda; sin esto cada respuesta reemplazaría el <ul>
      entero y la búsqueda siguiente ("next ul") caería en el renglón de abajo.
 
+     Enter en el buscador (el lector de códigos lo manda después del código)
+     no envía la compra: ver purchaseSearchEnter en la página.
+
      Datos: .ProductID, .ProductQ, .Quantity, .UnitCost, .BatchNumber,
      .ExpiryDate, .Batches, y .Error si este renglón falló. Vacío para el
      renglón que se clona. */}}
@@ -24,6 +27,7 @@
                placeholder="{{t "purchase.product_search"}}"
                hx-get="/purchases/product-options" hx-trigger="input changed delay:250ms"
                hx-target="next ul" hx-swap="innerHTML"
+               onkeydown="purchaseSearchEnter(event, this)"
                oninput="const r = this.closest('[data-purchase-line]'); r.querySelector('[name=product_id]').value = '';"
                class="field">
       </label>
@@ -42,7 +46,8 @@
 
   <div data-batch-fields class="mt-3 grid gap-3 md:grid-cols-2" {{if not .Batches}}hidden{{end}}>
     <label class="field-label">{{t "purchase.batch"}}
-      <input type="text" name="batch_number" autocomplete="off" maxlength="80" value="{{.BatchNumber}}" class="field">
+      <input type="text" name="batch_number" autocomplete="off" maxlength="80" value="{{.BatchNumber}}"
+             placeholder="{{t "purchase.batch_auto"}}" class="field">
     </label>
     <label class="field-label">{{t "purchase.expiry"}}
       <input type="date" name="expiry_date" value="{{.ExpiryDate}}" class="field">

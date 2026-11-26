@@ -30,10 +30,17 @@
   </div>
   <script>
     // Los formularios se abren en #form-modal; vaciarlo lo cierra. El cursor
-    // vuelve al buscador de la pantalla (si tiene): se sigue buscando o
-    // escaneando sin tocar el mouse.
+    // vuelve a donde se abrió el panel, si la pantalla lo marcó con
+    // data-modal-return (compras: el buscador del renglón), o al buscador de
+    // la pantalla (si tiene): se sigue buscando o escaneando sin tocar el mouse.
     function closeModal() {
       document.getElementById('form-modal').innerHTML = '';
+      var back = document.querySelector('[data-modal-return]');
+      if (back) {
+        back.removeAttribute('data-modal-return');
+        back.focus();
+        return;
+      }
       var search = document.getElementById('search');
       if (search) search.focus();
     }

@@ -183,6 +183,11 @@ func main() {
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
 	mux.HandleFunc("GET /purchases/product-options", webH.PurchasesProductOptions)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)
+	mux.HandleFunc("GET /purchases/quick-product", webH.PurchasesQuickProductForm)
+	mux.HandleFunc("POST /purchases/quick-product", webH.PurchasesQuickProductCreate)
+	mux.HandleFunc("GET /purchases/assign-code", webH.PurchasesAssignCodeForm)
+	mux.HandleFunc("GET /purchases/assign-code/options", webH.PurchasesAssignCodeOptions)
+	mux.HandleFunc("POST /purchases/assign-code", webH.PurchasesAssignCode)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

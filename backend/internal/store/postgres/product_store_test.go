@@ -87,6 +87,7 @@ func TestProductStore_CreateFullAndGet(t *testing.T) {
 	in.MaxStock = new(decimal.RequireFromString("10.125"))
 	in.MarginPercent = decimal.RequireFromString("35.5")
 	in.IsConsignment = true
+	in.ShelfLifeDays = new(21)
 
 	created, err := f.store.Create(f.ctx, in)
 	if err != nil {
@@ -120,14 +121,18 @@ func TestProductStore_CreateFullAndGet(t *testing.T) {
 		!got.MaxStock.Equal(*in.MaxStock) || !got.MarginPercent.Equal(in.MarginPercent) {
 		t.Errorf("numbers: got %s %v %s", got.ReorderPoint, got.MaxStock, got.MarginPercent)
 	}
+	if got.ShelfLifeDays == nil || *got.ShelfLifeDays != 21 {
+		t.Errorf("shelf life: got %v, want 21", got.ShelfLifeDays)
+	}
 }
 
 func TestProductStore_CreateMinimalStoresNulls(t *testing.T) {
 	f := newProductFixture(t)
 	p := f.create(t, "TEST-MIN", "PRODUCTO MINIMO TEST")
 
-	if p.BrandID != nil || p.PreferredSupplierID != nil || p.MaxStock != nil {
-		t.Errorf("optionals: got brand=%v supplier=%v max=%v, want nil", p.BrandID, p.PreferredSupplierID, p.MaxStock)
+	if p.BrandID != nil || p.PreferredSupplierID != nil || p.MaxStock != nil || p.ShelfLifeDays != nil {
+		t.Errorf("optionals: got brand=%v supplier=%v max=%v shelf life=%v, want nil",
+			p.BrandID, p.PreferredSupplierID, p.MaxStock, p.ShelfLifeDays)
 	}
 	if p.BrandName != "" || p.SupplierName != "" || p.Description != "" {
 		t.Errorf("names: got %q %q %q, want empty", p.BrandName, p.SupplierName, p.Description)
@@ -194,6 +199,7 @@ func TestProductStore_Update(t *testing.T) {
 	p.BrandID = &f.brandID
 	p.ReorderPoint = decimal.NewFromInt(3)
 	p.MaxStock = new(decimal.NewFromInt(9))
+	p.ShelfLifeDays = new(30)
 
 	got, err := f.store.Update(f.ctx, p.ID, p)
 	if err != nil {
@@ -205,16 +211,20 @@ func TestProductStore_Update(t *testing.T) {
 	if !got.ReorderPoint.Equal(decimal.NewFromInt(3)) || got.MaxStock == nil || !got.MaxStock.Equal(decimal.NewFromInt(9)) {
 		t.Errorf("numbers: got %s %v", got.ReorderPoint, got.MaxStock)
 	}
+	if got.ShelfLifeDays == nil || *got.ShelfLifeDays != 30 {
+		t.Errorf("shelf life: got %v, want 30", got.ShelfLifeDays)
+	}
 
-	// Y se puede volver a dejar sin marca ni stock máximo.
+	// Y se puede volver a dejar sin marca, stock máximo ni días de vida.
 	got.BrandID = nil
 	got.MaxStock = nil
+	got.ShelfLifeDays = nil
 	got, err = f.store.Update(f.ctx, got.ID, got)
 	if err != nil {
 		t.Fatalf("update back: %v", err)
 	}
-	if got.BrandID != nil || got.MaxStock != nil {
-		t.Errorf("optionals: got brand=%v max=%v, want nil", got.BrandID, got.MaxStock)
+	if got.BrandID != nil || got.MaxStock != nil || got.ShelfLifeDays != nil {
+		t.Errorf("optionals: got brand=%v max=%v shelf life=%v, want nil", got.BrandID, got.MaxStock, got.ShelfLifeDays)
 	}
 }
 

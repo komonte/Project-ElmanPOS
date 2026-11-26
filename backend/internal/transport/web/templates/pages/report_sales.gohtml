@@ -1,0 +1,99 @@
+{{define "content"}}
+{{/* Ventas por período y medio de pago (R-06). Datos: .Filter, .Error,
+     .Report (reports.Sales), .Rows (salesRow) y .TotalMethods. Primero los
+     números grandes, después los medios y al final el detalle por tramo. */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "report.sales_title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "report.sales_hint"}}</p>
+</header>
+
+{{template "report-period" .}}
+
+{{with .Report}}
+<section aria-label="{{t "report.summary"}}" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.total_sold"}}</p>
+    <p id="report-total" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .Total.Total}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.sales_count"}}</p>
+    <p id="report-count" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{.Total.Count}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.avg_ticket"}}</p>
+    <p id="report-avg" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .Total.AvgTicket}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.items"}}</p>
+    <p id="report-items" class="font-display font-bold text-2xl tabular">{{printf (t "report.units") (qty .Total.Units)}}<br>{{printf (t "report.kg") (qty .Total.Kg)}}</p>
+  </div>
+</section>
+
+{{if .Voided}}
+<p id="report-voided" class="mb-6 text-lg">{{printf (t "report.voided") .Voided (money .VoidedTotal)}}</p>
+{{end}}
+
+{{if eq .Total.Count 0}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{t "report.no_sales"}}</p>
+{{else}}
+<h2 class="font-display font-bold text-3xl mb-3">{{t "report.by_method"}}</h2>
+<div class="overflow-x-auto max-w-3xl mb-10">
+<table id="report-methods" class="w-full bg-surface border-2 border-line rounded-md text-lg">
+  <thead>
+    <tr class="text-left border-b-2 border-line">
+      <th scope="col" class="p-3">{{t "cash.col_method"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "report.payments"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "report.amount"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "report.share"}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Methods}}
+    <tr class="border-b border-line" data-method="{{.Method}}">
+      <th scope="row" class="p-3 text-left">{{t (printf "pos.method_%s" .Method)}}</th>
+      <td class="p-3 text-right tabular whitespace-nowrap">{{.Count}}</td>
+      <td class="p-3 text-right tabular whitespace-nowrap font-bold">{{money .Amount}}</td>
+      <td class="p-3 text-right tabular whitespace-nowrap">{{percent .Share}}%</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+</div>
+
+<h2 class="font-display font-bold text-3xl mb-3">{{t (printf "report.by_%s" .Granularity)}}</h2>
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table id="report-rows" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t (printf "report.col_%s" .Granularity)}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.sales_count"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.total_sold"}}</th>
+        {{range .Methods}}<th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t (printf "pos.method_%s" .Method)}}</th>{{end}}
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.avg_ticket"}}</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range $.Rows}}
+      <tr class="{{if eq .Count 0}}text-muted{{end}}" data-bucket>
+        <th scope="row" class="px-3 py-2 font-bold whitespace-nowrap">{{.Label}}</th>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{.Count}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{money .Total}}</td>
+        {{range .Methods}}<td class="px-3 py-2 text-right tabular whitespace-nowrap">{{if .IsZero}}—{{else}}{{money .}}{{end}}</td>{{end}}
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{if .Count}}{{money .AvgTicket}}{{else}}—{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot class="border-t-2 border-line font-bold">
+      <tr>
+        <th scope="row" class="px-3 py-3">{{t "report.total"}}</th>
+        <td class="px-3 py-3 text-right tabular whitespace-nowrap">{{.Total.Count}}</td>
+        <td class="px-3 py-3 text-right tabular whitespace-nowrap">{{money .Total.Total}}</td>
+        {{range $.TotalMethods}}<td class="px-3 py-3 text-right tabular whitespace-nowrap">{{money .}}</td>{{end}}
+        <td class="px-3 py-3 text-right tabular whitespace-nowrap">{{money .Total.AvgTicket}}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{{end}}
+{{end}}
+{{end}}

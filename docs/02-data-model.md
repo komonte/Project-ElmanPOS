@@ -449,6 +449,8 @@ UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "nev
 | unit_cost | NUMERIC(12,2) | NOT NULL | Batch's cost snapshot → exact COGS. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
+> Reports (R-07) use `sale_items.unit_cost` for the margin: it is the exact cost of what went out, computed from this table plus the average cost for what had no batch.
+>
 > A single `sale_items` row may span batches (e.g. 4.450 kg from batch A + 0.050 kg from batch B). This table is the authoritative allocation; every allocation has a matching `stock_movements` row with the same `batch_id` (§6). Not the other way around: what the batches do not cover (stock from before the product controlled batches, or an initial count without a batch) goes out as a `SALE` movement **without** `batch_id`, at the current average cost, with no row here.
 
 ### 4.19 `payments`

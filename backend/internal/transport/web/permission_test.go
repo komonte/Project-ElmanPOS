@@ -43,7 +43,7 @@ func TestHomeFor(t *testing.T) {
 func TestNavByRole(t *testing.T) {
 	e := NewTemplateEngine()
 	links := []string{`href="/pos"`, `href="/products"`, `href="/categories"`, `href="/brands"`, `href="/taxes"`,
-		`href="/suppliers"`, `href="/purchases"`, `href="/counts"`, `href="/adjustments"`, `href="/cash"`, `href="/users"`}
+		`href="/suppliers"`, `href="/purchases"`, `href="/counts"`, `href="/adjustments"`, `href="/cash"`, `href="/reports/sales"`, `href="/reports/cash"`, `href="/users"`}
 	want := map[*model.User][]string{
 		adminUser:   links,
 		cashierUser: {`href="/pos"`, `href="/cash"`},

@@ -61,6 +61,7 @@ erDiagram
     products ||--o{ sale_items : ""
     users ||--o{ stock_movements : "performed by"
     users ||--o{ audit_log : ""
+    users ||--o{ user_sessions : "logs in as"
     app_settings
 ```
 
@@ -511,13 +512,15 @@ UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migrat
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
-| username | VARCHAR(60) | NOT NULL, UNIQUE | |
+| username | VARCHAR(60) | NOT NULL, UNIQUE; `uq_users_username_lower` UNIQUE(lower(username)) | Stored in lower case: the app normalizes it (`model.NormalizeUsername`) and validates `a-z 0-9 . - _`, 3–60 characters. "Admin" and "admin" are the same person at the login. |
 | name | VARCHAR(120) | NOT NULL | |
-| password_hash | VARCHAR(120) | NOT NULL | bcrypt. |
+| password_hash | VARCHAR(120) | NOT NULL | bcrypt, cost 12 (`model.HashPassword`). The password: 8 characters to 72 bytes (bcrypt's limit), not trimmed. Never sent in JSON. |
 | role | user_role | NOT NULL | `ADMIN` / `CASHIER` / `STOCK_CLERK`. |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+> **First login:** the seed users (`admin`, `cajero`, `stock`) have a placeholder hash that matches no password. Set a real one from the store's PC with `make passwd U=admin` (F-13).
 
 ### 4.24 `audit_log`
 
@@ -534,7 +537,12 @@ UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migrat
 
 > Required actions logged: price/cost changes, stock overrides, voided sales, cash discrepancies (**NFR-03**).
 >
-> Written today: price changes (F-03, `table_name = 'prices'`) and cost changes (F-04, `table_name = 'product_costs'`), both with `action = 'INSERT'` and `new_data` = the saved row. `user_id` stays `NULL` until there is a login (F-13).
+> Written today:
+> - price changes (F-03, `table_name = 'prices'`) and cost changes (F-04, `table_name = 'product_costs'`), both with `action = 'INSERT'` and `new_data` = the saved row;
+> - each login (F-13): `table_name = 'users'`, `action = 'LOGIN'`, `record_id` and `user_id` = the user, `new_data` = `session_id` and `expires_at`;
+> - each password set (F-13, `elmanpos passwd`): `table_name = 'users'`, `action = 'PASSWORD'`, `user_id` `NULL` (the command runs on the PC, nobody is logged in), `new_data` = `username` and `sessions_closed`. Never the password or its hash.
+>
+> Failed logins go to the server log, not here. Apart from `LOGIN`, `user_id` stays `NULL` until the actions record who did them (§7 of `03-flows-and-transactions.md`).
 
 ### 4.25 `app_settings` — global business configuration
 
@@ -573,6 +581,20 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 
 > **Append-only:** a trigger rejects `UPDATE` and `DELETE`, like the ledger it explains. A mistake is fixed with a count.
 
+### 4.27 `user_sessions` — who is logged in
+
+One row per login (F-13, migration `0019`). The browser keeps a random token (32 bytes) in the `elman_session` cookie; the table keeps only its **SHA-256**, so someone who reads the table (a dump, a backup) cannot log in with it.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| user_id | BIGINT | FK → users.id ON DELETE CASCADE, NOT NULL | |
+| token_hash | BYTEA | NOT NULL, UNIQUE (`uq_user_sessions_token_hash`), CHECK (`octet_length = 32`) | SHA-256 of the cookie's token. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| expires_at | TIMESTAMPTZ | NOT NULL, CHECK (`> created_at`) | The app sets 12 hours: one working day. |
+
+> **Deleting a row is logging out:** the next request with that cookie is rejected. That is why the sessions live here and not in a signed token (a JWT stays valid until it expires). Logout deletes one row, a password change deletes all the user's rows, and a session of an inactive user is not valid (`UserSessionStore.Valid` checks `expires_at > now()` and `users.is_active`). Each login also deletes the expired rows of every user (`DeleteExpired`).
+
 ---
 
 ## 5. Index Summary
@@ -599,6 +621,9 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 | products | (preferred_supplier_id) | Replenishment grouped by preferred supplier. |
 | app_settings | UNIQUE(key) | Config lookup (`expiry_warning_days`, `max_sale_weight_kg`, §4.25). |
 | taxes | idx_taxes_name_unique_lower | Case-insensitive unique name |
+| users | uq_users_username_lower: UNIQUE(lower(username)) | One user per name ignoring case (F-13, migration `0019`). |
+| user_sessions | uq_user_sessions_token_hash: UNIQUE(token_hash) | Find the session of a cookie on every request (F-13). |
+| user_sessions | idx_user_sessions_user_id | Close all the sessions of a user (password change, deactivation). |
 
 ---
 

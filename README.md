@@ -19,7 +19,7 @@ Backend is organized within the `backend/` module using an idiomatic, layered Go
 - **`internal/model/`**: Struct definitions (domain models and DTOs JSON).
 - **`internal/store/`**: Persistence layer (native SQL with PostgreSQL / `pgx`).
 - **`internal/service/`**: Core business rules and domain logic.
-- **`internal/transport/`**: HTTP transport layer (handlers, routing, and JWT middleware)
+- **`internal/transport/`**: HTTP transport layer (handlers, routing, and the login middleware: sessions stored in PostgreSQL, see F-13)
 
 ## Technical Decisions
 - **`Encapsulation`**: The `internal/` directory is strictly leveraged to prevent unauthorized external imports.
@@ -56,6 +56,16 @@ TLS_KEY_FILE=/path/to/elmanpos-key.pem
 and open `https://192.168.0.10:8080`. Every other device that uses the app (a second PC, a phone for stock counts) must trust the same authority: copy `rootCA.pem` from `mkcert -CAROOT` and install it there. **Never copy `rootCA-key.pem`**: with it anyone can make certificates the store's devices trust. The certificate files are git-ignored.
 
 If only the store's PC uses the app, `LISTEN_HOST=127.0.0.1` keeps it off the network entirely.
+
+### First login
+
+Every page asks for a username and password. The seed users (`admin`, `cajero`, `stock`) have no real password yet: set one from the store's PC, then log in with it.
+
+```sh
+make passwd U=admin    # asks twice, hidden; at least 8 characters
+```
+
+The same command resets a forgotten password, and it closes that user's open sessions. Five failed logins in a row lock a username for 5 minutes. Details in `docs/03-flows-and-transactions.md`, F-13.
 
 ## 6. Project Documentation
 ...

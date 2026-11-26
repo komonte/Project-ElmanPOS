@@ -21,7 +21,8 @@ INSERT INTO brands (name) VALUES ('BAGLEY'), ('COCA-COLA'), ('SANCOR');
 INSERT INTO suppliers (name, tax_id_number, phone, payment_terms, is_active)
 VALUES ('Distribuidora del Sur S.A.', '20123456786', '+54 11 5555-0100', 'Contado', TRUE);
 
--- Users (hashes are placeholders; the app seed writes real bcrypt hashes)
+-- Users (hashes are placeholders that match no password: set a real one with
+-- make passwd U=admin, F-13)
 INSERT INTO users (username, name, password_hash, role, is_active)
 VALUES ('admin', 'Admin',   '$2a$10$placeholder-placeholder-placeholder', 'ADMIN',       TRUE),
        ('cajero','Cashier', '$2a$10$placeholder-placeholder-placeholder', 'CASHIER',     TRUE),

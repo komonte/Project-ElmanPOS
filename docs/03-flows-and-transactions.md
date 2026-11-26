@@ -411,7 +411,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-11: Session Open
 
-- **Actor / Role:** Cashier opens their own register session; Admin may open any. Until F-13 there is no login: `opened_by` stays `NULL` (migration `0017`).
+- **Actor / Role:** Cashier opens their own register session; Admin may open any. There is a login (F-13), but roles are not enforced and `opened_by` stays `NULL` until the session records who opened it (§7).
 - **Trigger:** Start of shift.
 - **Preconditions:** exactly one active store with exactly one active register, and that register has **no** `OPEN` session.
 - **Business flow** (Cash → "Open register", `/cash`). The screen shows one of three states:
@@ -425,7 +425,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-12: Session Close / Cash Audit (Arqueo)
 
-- **Actor / Role:** Cashier closes their own session; Admin can close any. Until F-13 there is no login: anyone can close, and who closed is not stored.
+- **Actor / Role:** Cashier closes their own session; Admin can close any. There is a login (F-13), but roles are not enforced: any logged-in user can close, and who closed is not stored yet (§7).
 - **Trigger:** End of the day.
 - **Preconditions:** the session is `OPEN`.
 - **Business flow** (`/cash` with the register open, "Close the register", folded by default):
@@ -455,13 +455,29 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-13: Authentication & Roles
 
-- **Actor / Role:** All users; Admins manage users.
-- **Trigger:** Login, or any protected action.
-- **Preconditions:** User exists and `is_active = TRUE`.
-- **Business flow:**
-  1. Login: username + password → `bcrypt` verify → JWT issued with role claims.
-  2. Every request passes middleware enforcing permissions.
-- **Permission matrix (v1):**
+- **Actor / Role:** all users log in; an Admin manages users (page pending, see §7). Today the login is built; the permissions per role are not (§7).
+- **Trigger:** opening any page of the app.
+- **Preconditions:** the user exists, `is_active = TRUE`, and has a real password: the seed users have a placeholder hash, so the first one is set from the store's PC with `make passwd U=admin` (see "Setting a password" below).
+- **Why sessions in the database, not JWT:** the browser keeps a random token in a cookie and `user_sessions` keeps its SHA-256 (§4.27 of `02-data-model.md`). Deleting the row ends the session at once: logout, a password change and (later) deactivating a user cut access on the next request. A signed token (JWT) would stay valid until it expires, and revoking it needs a list in the database anyway. One store, one server: looking up the session on every request costs one indexed query.
+- **Business flow** (`usecase/auth`, `/login`):
+  1. **Log in** (`GET /login`, `POST /login`, `auth.Login`): username (trimmed and lower-cased) and password. Wrong → the page comes back with the username typed (never the password), the cursor in the password and **"Wrong username or password."** for every case: unknown user, inactive user or wrong password, so nobody can find out which users exist. An unknown user is still compared against a bcrypt hash of the same cost (`dummyHash`), so the answer takes the same time.
+  2. **Lockout:** **5 failures in a row** for a username lock it for **5 minutes**, even with the right password ("Too many failed attempts. Wait 5 minutes and try again."). A correct login or a password set clears the count. It lives in memory (`auth.Service`, at most 10 000 usernames): restarting the server forgets it, which is enough for one store. Failed attempts go to the server log (an unknown username without its text: it may be a password typed in the wrong field), not to the database.
+  3. **Session:** a correct login creates a token of 32 random bytes and a `user_sessions` row with its SHA-256, valid for **12 hours** (one working day), and writes `audit_log` (`users`, `LOGIN`, with `user_id`). The token goes to the cookie and nowhere else. Then the browser goes to `next` (below).
+  4. **Every request** passes `AuthMiddleware`: it reads the cookie, finds the session (`auth.Authenticate`: not expired, user active) and puts the user in the context (`transport.CurrentUser`). The menu shows the user's name and role and a "Log out" button.
+  5. **Log out** (`POST /logout`, `auth.Logout`): deletes this browser's session row and the cookie, and goes to `/login`.
+- **Public routes** (no login needed): `/login`, `/static/…` and `/settings/language` (the login page lets you change the language). Everything else, including `/api/`, needs a session.
+- **Without a valid session:**
+  - a page (`GET`) → 303 to `/login?next=<the page>`, and back there after logging in;
+  - an htmx request → 401 with `HX-Redirect: /login?next=<the page it came from>` (from `HX-Current-URL`): htmx would put a redirected page inside a piece of the screen, `HX-Redirect` loads the whole login page instead. So a session that ends while selling goes to the login and back to the POS;
+  - the JSON API → 401 `{"error": "not logged in"}`;
+  - another `POST` → 303 to `/login`.
+  An old cookie (expired or closed session) is deleted. If the database does not answer, the middleware returns 500, not the login: logging in again would not fix it.
+- **Safe `next`** (`transport.SafeNext`): only a path of this site — starts with one `/`, not `//other.site` or `/\other.site` (browsers read both as another site), no line breaks, not `/login`. Anything else goes to `/`. A link built to send someone to another site after logging in does nothing.
+- **The cookie** `elman_session`: `HttpOnly` (the page's JavaScript cannot read it), `SameSite=Lax`, `Path=/`, `Max-Age` until the session expires, and `Secure` when the server runs HTTPS.
+- **CSRF:** `http.NewCrossOriginProtection()` (Go's standard library) rejects with 403 any `POST`/`PUT`/`DELETE`… that the browser says comes from another site (`Sec-Fetch-Site`, `Origin`): a hidden form on another page cannot log out, void or sell with the store's cookie. Middleware chain, outside in: `Locale(CrossOrigin(Auth(CORS(mux))))`.
+- **HTTPS:** the store's network is shared with the household and guests, so the password must not travel in clear text. The server serves HTTPS by itself with `TLS_CERT_FILE` and `TLS_KEY_FILE` (both or neither, loaded at start, TLS 1.2+), with a certificate made by `mkcert`; `LISTEN_HOST=127.0.0.1` keeps the app off the network if only the store's PC uses it. Steps in the README, §5.
+- **Setting a password** (`elmanpos passwd <username>`, or `make passwd U=<username>`; `auth.SetPassword`): runs on the store's PC, asks twice without showing it (or reads two lines from a pipe), and checks 8 characters to 72 bytes (bcrypt's limit). If they do not match, nothing changes. In one transaction: saves the bcrypt hash (cost 12), **deletes all the user's sessions** (whoever knew the old password is out at once) and writes `audit_log` (`users`, `PASSWORD`, `user_id NULL`: nobody is logged in). It also clears the lockout. Until the users page exists (§7) it is the only way to set or reset a password.
+- **Permission matrix (v1)** — the plan; it is enforced in a later PR (§7). Today every logged-in user can do everything:
   | Action | ADMIN | CASHIER | STOCK_CLERK |
   |---|---|---|---|
   | POS sale (F-07) | ✓ | ✓ | ✗ |
@@ -472,10 +488,10 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Void (F-08) | ✓ | ✗ | ✗ |
   | Reports | ✓ | own-session | ✓ |
   | User management | ✓ | ✗ | ✗ |
-- **DB:** `SELECT ... FROM users WHERE username = $1;` + bcrypt compare. Role enforcement is **server-side**, never client-side.
-- **Invariants:** passwords stored only as bcrypt hashes; deactivated users cannot authenticate; every permission check is server-side (**NFR-02**).
-- **Errors / rollback:** wrong password → generic "invalid credentials" (no user enumeration); deactivated → blocked.
-- **Edge cases:** token expiry → re-login; password reset is admin-only (audited).
+- **DB:** login: `SELECT … FROM users WHERE username = $1` (stored lower-cased, `uq_users_username_lower`) + bcrypt compare; then, in one transaction, `DELETE FROM user_sessions WHERE expires_at <= now()`, `INSERT INTO user_sessions` and `INSERT INTO audit_log`. Each request: `SELECT … FROM user_sessions JOIN users … WHERE token_hash = $1 AND expires_at > now() AND is_active`.
+- **Invariants:** passwords stored only as bcrypt hashes, never logged or audited; tokens stored only as SHA-256; deactivated users cannot authenticate and their sessions stop working; every check is server-side (**NFR-02**).
+- **Errors:** wrong credentials → 401 and the generic message; locked → 401 and "wait"; database down → 500.
+- **Edge cases:** session expired (12 h) → back to the login, then to the page; two browsers → two independent sessions; logging out in one does not close the other (a password change closes all).
 
 ---
 
@@ -528,7 +544,10 @@ Also the **initial inventory**: the stock already on the shelves when the system
 The following are intentionally **out of scope** and must not be assumed to work:
 - **Partial returns** (refund of a single line item) — v1 is full void only (F-08).
 - **Voiding sales of a closed session / returns on another day** — F-08 only voids sales of the open session, so a closed cash audit never changes. A return of a past sale needs its own flow with a **cash movement** in the current session (money out of today's drawer), plus the stock return.
-- **Who may void and close** — F-08 and F-12 are meant to be restricted (void: Admin only) once F-13 adds login and roles. Until then anyone can void or close; the required reason and `audit_log` are the only control, and `performed_by` stays `NULL`.
+- **Permissions per role** — F-13 has the login but not the matrix: every logged-in user can do everything, including voiding (F-08, meant for Admin only) and closing any register. Pending: checks on the server for every route, a menu per role and a clear 403.
+- **Who did what** — the actions do not record the logged-in user yet: `cashier_sessions.opened_by`, `stock_movements.performed_by`, `stock_adjustments.created_by`, `purchases.received_by`, `stock_counts.created_by` and `audit_log.user_id` (except `LOGIN`) stay `NULL`. Who closed a register is not stored at all.
+- **Users page** — creating, editing and deactivating users (deactivating must close their sessions) and resetting a password from the app. Until then: `make passwd U=<username>` on the store's PC, and users are created in SQL.
+- **Persistent lockout** — the 5-failure lockout (F-13) lives in memory: restarting the server forgets it.
 - **Consignment settlement** — `is_consignment` flag exists; payment/stock accounting for consigned goods is undefined in v1.
 - **Purchase orders, returns to supplier, editing or voiding a received purchase** — a reception is final (F-06); a mistake is corrected with a stock count/adjustment (F-09) and a new cost.
 - **Inter-store transfers** — `TRANSFER` movement type exists in the enum but has no flow or tables.

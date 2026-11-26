@@ -50,6 +50,11 @@ var (
 	// activo. Sin local activo, o con más de uno, no se adivina.
 	ErrNoActiveStore       = conflictError("there is no active store")
 	ErrSeveralActiveStores = conflictError("there is more than one active store: stock cannot be assigned to one")
+
+	// Conteos (F-09): uno en borrador por local; uno confirmado ya movió el
+	// stock y no se toca más.
+	ErrCountDraftExists = conflictError("there is already a stock count in progress")
+	ErrCountNotDraft    = conflictError("stock count is already confirmed")
 )
 
 // conflictError es un error de regla que cumple errors.Is(err, ErrConflict).

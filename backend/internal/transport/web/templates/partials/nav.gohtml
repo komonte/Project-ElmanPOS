@@ -38,7 +38,18 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "cash"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.cash"}}</a>
   </div>
 
-  <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>
+  {{/* Quién entró y "Salir" (F-13), en una sola fila para no quitarle
+       lugar a los links. En celular, debajo de ellos. */}}
+  {{with .CurrentUser}}
+  <div id="nav-user" class="flex items-center justify-between gap-3 px-4 pb-3 md:px-5 md:pt-4 md:pb-0 md:border-t md:border-white/15">
+    <p class="min-w-0"><span class="block font-bold truncate">{{.Name}}</span>
+      <span class="block text-sm text-white/55">{{t (printf "role.%s" .Role)}}</span></p>
+    <form method="post" action="/logout" class="shrink-0">
+      <button type="submit" id="logout" class="px-3 py-1 rounded-md border-2 border-white/30 text-white hover:border-white">{{t "nav.logout"}}</button>
+    </form>
+  </div>
+  {{end}}
+  <div class="hidden md:block px-5 {{if .CurrentUser}}py-4{{else}}py-5 border-t border-white/15{{end}}">{{template "lang-select" .}}</div>
 </nav>
 
 {{define "lang-select"}}

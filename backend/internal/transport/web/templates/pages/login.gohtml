@@ -1,0 +1,38 @@
+{{define "content"}}
+{{/* Login (F-13). Datos: .Next (a dónde volver), .Username (lo escrito si
+     falló; la contraseña nunca vuelve) y .Error. Sin menú (HideNav). */}}
+<section class="mx-auto mt-8 sm:mt-16 max-w-sm">
+  <p class="font-display font-bold text-5xl leading-none tracking-wide text-ink">Elman<span class="ml-1 px-1 bg-tag rounded-sm">POS</span></p>
+  <h1 class="mt-6 font-display font-bold text-3xl">{{t "login.title"}}</h1>
+  <p class="mt-1 text-muted">{{t "login.hint"}}</p>
+
+  <form id="login-form" method="post" action="/login" class="mt-6 p-6 space-y-4 bg-surface border-2 border-line rounded-md">
+    {{with .Error}}<div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.}}</div>{{end}}
+    <input type="hidden" name="next" value="{{.Next}}">
+    <div>
+      <label for="login-username" class="field-label">{{t "login.username"}}</label>
+      <input type="text" id="login-username" name="username" value="{{.Username}}" required
+             autocomplete="username" autocapitalize="none" spellcheck="false"
+             class="field text-lg"{{if not .Username}} autofocus{{end}}>
+    </div>
+    <div>
+      <label for="login-password" class="field-label">{{t "login.password"}}</label>
+      <input type="password" id="login-password" name="password" required autocomplete="current-password"
+             class="field text-lg"{{if .Username}} autofocus{{end}}>
+    </div>
+    <button type="submit" id="login-submit" class="btn-primary w-full justify-center text-lg">{{t "login.submit"}}</button>
+  </form>
+
+  <div class="mt-6 flex justify-end">{{template "lang-select-light" .}}</div>
+</section>
+{{end}}
+
+{{define "lang-select-light"}}
+{{/* El selector de idioma del menú, en claro (la página no tiene menú). */}}
+<select name="lang" aria-label="{{t "language.select"}}"
+        hx-post="/settings/language" hx-trigger="change" hx-swap="none"
+        class="bg-surface text-ink border-2 border-line rounded-md px-2 py-1 hover:border-ink">
+  <option value="es" {{if eq .Lang "es"}}selected{{end}}>{{t "language.es"}}</option>
+  <option value="en" {{if eq .Lang "en"}}selected{{end}}>{{t "language.en"}}</option>
+</select>
+{{end}}

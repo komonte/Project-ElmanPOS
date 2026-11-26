@@ -10,7 +10,8 @@
   <script src="/static/js/htmx.min.js" defer></script>
 </head>
 <body class="min-h-screen md:flex">
-  {{template "nav.gohtml" .}}
+  {{/* El login no tiene menú: sin sesión no hay a dónde ir. */}}
+  {{if not .HideNav}}{{template "nav.gohtml" .}}{{end}}
 
   <main class="flex-1 min-w-0 px-4 py-6 sm:px-8 md:py-10">
     <div class="max-w-6xl">

@@ -259,6 +259,9 @@
   .col-span-2 {
     grid-column: span 2 / span 2;
   }
+  .mx-auto {
+    margin-inline: auto;
+  }
   .mt-1 {
     margin-top: var(--spacing);
   }
@@ -297,6 +300,9 @@
   }
   .mb-8 {
     margin-bottom: calc(var(--spacing) * 8);
+  }
+  .ml-1 {
+    margin-left: var(--spacing);
   }
   .ml-3 {
     margin-left: calc(var(--spacing) * 3);
@@ -511,6 +517,11 @@
   :where(.divide-line > :not(:last-child)) {
     border-color: var(--color-line);
   }
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .overflow-hidden {
     overflow: hidden;
   }
@@ -643,6 +654,9 @@
   }
   .p-6 {
     padding: calc(var(--spacing) * 6);
+  }
+  .px-1 {
+    padding-inline: var(--spacing);
   }
   .px-2 {
     padding-inline: calc(var(--spacing) * 2);
@@ -844,6 +858,9 @@
     display: none;
   }
   @media (hover: hover) {
+    .hover\:border-ink:hover {
+      border-color: var(--color-ink);
+    }
     .hover\:border-white:hover {
       border-color: var(--color-white);
     }
@@ -886,6 +903,9 @@
   @media (width >= 40rem) {
     .sm\:left-auto {
       left: auto;
+    }
+    .sm\:mt-16 {
+      margin-top: calc(var(--spacing) * 16);
     }
     .sm\:max-w-lg {
       max-width: var(--container-lg);
@@ -958,6 +978,18 @@
     .md\:self-start {
       align-self: flex-start;
     }
+    .md\:border-t {
+      border-top-style: var(--tw-border-style);
+      border-top-width: 1px;
+    }
+    .md\:border-white\/15 {
+      border-color: color-mix(in srgb, #fff 15%, transparent);
+    }
+    @supports (color: color-mix(in lab, red, red)) {
+      .md\:border-white\/15 {
+        border-color: color-mix(in oklab, var(--color-white) 15%, transparent);
+      }
+    }
     .md\:px-3 {
       padding-inline: calc(var(--spacing) * 3);
     }
@@ -969,6 +1001,9 @@
     }
     .md\:py-10 {
       padding-block: calc(var(--spacing) * 10);
+    }
+    .md\:pt-4 {
+      padding-top: calc(var(--spacing) * 4);
     }
     .md\:pt-6 {
       padding-top: calc(var(--spacing) * 6);

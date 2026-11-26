@@ -23,6 +23,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/adjustments"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
@@ -130,9 +131,20 @@ func main() {
 	// Venta (F-07, F-10): venta, lotes, stock y pagos en una transacción.
 	saleSvc := sales.New(db, postgres.NewTxRunner(db))
 
+	// Login (F-13).
+	authSvc := auth.New(db, postgres.NewTxRunner(db))
+
+	// Cómo escucha el server: con HTTPS, la cookie de la sesión es Secure.
+	cfg, err := loadServerConfig(os.Getenv)
+	if err != nil {
+		slog.Error("invalid server configuration", "error", err)
+		os.Exit(1)
+	}
+
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc, sessionSvc, saleSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc, sessionSvc, saleSvc).
+		WithAuth(authSvc, cfg.HTTPS())
 
 	// Configurar rutas
 	mux := http.NewServeMux()
@@ -233,18 +245,21 @@ func main() {
 	mux.HandleFunc("GET /picker/assign-code/options", webH.PickerAssignCodeOptions)
 	mux.HandleFunc("POST /picker/assign-code", webH.PickerAssignCode)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
+	mux.HandleFunc("GET /login", webH.LoginPage)
+	mux.HandleFunc("POST /login", webH.LoginSubmit)
+	mux.HandleFunc("POST /logout", webH.Logout)
 
-	// Middleware chain
+	// Middleware chain (de adentro hacia afuera): CORS; el login (todo pide
+	// haber entrado, salvo /login, /static/ y el idioma); CSRF: un POST (o
+	// PUT, DELETE...) que viene de otra página se rechaza con 403, con las
+	// cabeceras Sec-Fetch-Site y Origin del navegador; el idioma.
 	handler := transport.CORSMiddleware(mux)
+	handler = transport.AuthMiddleware(authSvc, handler)
+	handler = http.NewCrossOriginProtection().Handler(handler)
 	handler = transport.LocaleMiddleware(handler)
 
 	// empezar y escuchar al servidor
 
-	cfg, err := loadServerConfig(os.Getenv)
-	if err != nil {
-		slog.Error("invalid server configuration", "error", err)
-		os.Exit(1)
-	}
 	server := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,

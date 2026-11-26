@@ -15,6 +15,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/adjustments"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
@@ -44,6 +45,17 @@ type WebHandler struct {
 	adjustments   *adjustments.Service
 	sessions      *sessions.Service
 	sales         *sales.Service
+
+	// Login (F-13): lo pone WithAuth. secureCookie: el server es HTTPS.
+	auth         *auth.Service
+	secureCookie bool
+}
+
+// WithAuth le da al handler el login (F-13). secureCookie va en true cuando
+// el server sirve HTTPS: la cookie de la sesión solo viaja cifrada.
+func (h *WebHandler) WithAuth(a *auth.Service, secureCookie bool) *WebHandler {
+	h.auth, h.secureCookie = a, secureCookie
+	return h
 }
 
 func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service, adjustments *adjustments.Service, sessions *sessions.Service, sales *sales.Service) *WebHandler {
@@ -94,6 +106,8 @@ func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string,
 	if _, ok := data["TitleKey"]; !ok {
 		data["TitleKey"] = ""
 	}
+	// Quién entró, para el menú (nil en el login).
+	data["CurrentUser"] = transport.CurrentUser(r.Context())
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.engine.Render(w, lang, page, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

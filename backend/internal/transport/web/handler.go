@@ -21,6 +21,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/reports"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
@@ -53,6 +54,8 @@ type WebHandler struct {
 
 	// Página de usuarios (F-13): lo pone WithUsers.
 	users *users.Service
+	// Reportes (R-06, R-07): lo pone WithReports.
+	reports *reports.Service
 }
 
 // WithAuth le da al handler el login (F-13). secureCookie va en true cuando
@@ -312,6 +315,10 @@ var errorKeys = []struct {
 	{users.ErrSelfDeactivate, "error.user_self_deactivate"},
 	{users.ErrSelfRole, "error.user_self_role"},
 	{users.ErrLastAdmin, "error.user_last_admin"},
+	// Reportes (R-06, R-07): el período.
+	{model.ErrInvalidPeriodDate, "error.period_date"},
+	{model.ErrPeriodReversed, "error.period_reversed"},
+	{model.ErrPeriodTooLong, "error.period_too_long"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }

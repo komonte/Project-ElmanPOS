@@ -1,0 +1,28 @@
+{{/* Filtro de fechas de los reportes (R-06, R-07). Datos: .Filter
+     (periodFilter) y .Error. Es un formulario GET: el período queda en la
+     dirección y el reporte se puede guardar o mandar como link. Los atajos
+     son links con las fechas ya puestas. */}}
+{{define "report-period"}}
+<section aria-label="{{t "report.period"}}" class="mb-8">
+  <form id="report-period" method="get" action="{{.Filter.Action}}" class="flex flex-wrap items-end gap-4">
+    <div>
+      <label for="report-from" class="field-label">{{t "report.from"}}</label>
+      <input type="date" id="report-from" name="from" value="{{.Filter.From}}" required class="field">
+    </div>
+    <div>
+      <label for="report-to" class="field-label">{{t "report.to"}}</label>
+      <input type="date" id="report-to" name="to" value="{{.Filter.To}}" required class="field">
+    </div>
+    <button type="submit" class="btn-primary">{{t "report.show"}}</button>
+  </form>
+  <nav aria-label="{{t "report.shortcuts"}}" class="mt-4 flex flex-wrap gap-2">
+    {{range .Filter.Shortcuts}}
+    <a href="{{$.Filter.Action}}?from={{.From}}&amp;to={{.To}}" data-shortcut="{{.Key}}" {{if .Active}}aria-current="true"{{end}}
+       class="px-3 py-1 rounded-md border-2 font-bold {{if .Active}}border-ink bg-ink text-white{{else}}border-line bg-surface hover:border-ink{{end}}">{{t .Key}}</a>
+    {{end}}
+  </nav>
+  {{if .Error}}
+  <div id="report-error" role="alert" class="mt-4 p-4 max-w-3xl bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+  {{end}}
+</section>
+{{end}}

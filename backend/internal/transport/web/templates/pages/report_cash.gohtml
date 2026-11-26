@@ -1,0 +1,105 @@
+{{define "content"}}
+{{/* Caja y margen (R-07). Datos: .Filter, .Error, .Report (reports.Cash),
+     .Rows (cashRow), .Diff y .Short (la diferencia del período). Una fila
+     por sesión cerrada, por el día en que se abrió; cada una lleva a su
+     resumen de cierre. La abierta no sale (cierre ciego): solo se avisa. */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "report.cash_title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "report.cash_hint"}}</p>
+</header>
+
+{{template "report-period" .}}
+
+{{with .Report}}
+<section aria-label="{{t "report.summary"}}" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.total_sold"}}</p>
+    <p id="report-total" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .Total}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.margin"}}</p>
+    <p id="report-margin" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .Margin.Amount}}</p>
+    <p class="text-muted tabular">{{if .Margin.Net.IsZero}}—{{else}}{{printf (t "report.margin_percent") (percent .Margin.Percent)}}{{end}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.difference"}}</p>
+    {{if $.Diff.IsZero}}
+    <p id="report-difference" class="font-display font-bold text-3xl xl:text-4xl text-stock">{{t "cash.diff_ok"}}</p>
+    {{else}}
+    <p id="report-difference" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap {{if $.Short}}text-danger{{end}}">{{money $.Diff}}</p>
+    <p class="text-muted">{{if $.Short}}{{t "report.diff_short"}}{{else}}{{t "report.diff_over"}}{{end}}</p>
+    {{end}}
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.sessions"}}</p>
+    <p id="report-sessions" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{len .Sessions}}</p>
+  </div>
+</section>
+
+{{if .Open}}
+<p id="report-open" role="status" class="mb-4 p-4 max-w-3xl bg-paper border-l-8 border-tag rounded-sm">{{t "report.open_session"}}</p>
+{{end}}
+{{if not .Margin.NoCost.IsZero}}
+<p id="report-no-cost" role="status" class="mb-4 p-4 max-w-3xl bg-paper border-l-8 border-tag rounded-sm">{{printf (t "report.no_cost") (money .Margin.NoCost)}}</p>
+{{end}}
+<p class="mb-6 text-muted max-w-3xl">{{t "report.margin_hint"}}</p>
+
+{{if not .Sessions}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{t "report.no_sessions"}}</p>
+{{else}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table id="report-sessions-table" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_session"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_sales"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_difference"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.margin"}}</th>
+        <th scope="col" class="px-3 py-3"><span class="sr-only">{{t "common.actions"}}</span></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range $.Rows}}
+      <tr data-session="{{.Session.ID}}" class="align-top">
+        <th scope="row" class="px-3 py-3 font-normal">
+          <span class="block font-bold whitespace-nowrap">{{.Session.RegisterName}} · {{formatTime .Session.OpenedAt}}</span>
+          <span class="block text-sm text-muted">{{t "cash.opened_by"}} {{who .Session.OpenedByName}} · {{t "cash.closed_by"}} {{who .Session.ClosedByName}} · {{formatTimePtr .Session.ClosedAt}}</span>
+          <span class="block text-sm text-muted">{{printf (t "report.opening") (money .Session.OpeningAmount)}}</span>
+        </th>
+        <td class="px-3 py-3 text-right tabular" data-sales>
+          <span class="block font-bold whitespace-nowrap">{{money .Total}}</span>
+          <span class="block text-sm text-muted whitespace-nowrap">{{if eq .Sales 1}}{{t "report.n_sales_one"}}{{else}}{{printf (t "report.n_sales") .Sales}}{{end}}</span>
+          {{if .Voided}}<span class="block text-sm text-muted whitespace-nowrap">{{if eq .Voided 1}}{{printf (t "report.n_voided_one") (money .VoidedTotal)}}{{else}}{{printf (t "report.n_voided") .Voided (money .VoidedTotal)}}{{end}}</span>{{end}}
+        </td>
+        <td class="px-3 py-3 text-right tabular font-bold whitespace-nowrap" data-difference>
+          {{if .Diff.IsZero}}<span class="text-stock">{{t "cash.diff_ok"}}</span>
+          {{else if .Short}}<span class="text-danger">{{printf (t "cash.diff_short") (money .Diff)}}</span>
+          {{else}}{{printf (t "cash.diff_over") (money .Diff)}}{{end}}</td>
+        <td class="px-3 py-3 text-right tabular" data-margin>
+          <span class="block font-bold whitespace-nowrap">{{money .Margin.Amount}}</span>
+          {{if not .Margin.Net.IsZero}}<span class="block text-sm text-muted">{{percent .Margin.Percent}}%</span>{{end}}
+          {{if not .Margin.NoCost.IsZero}}<span class="block text-sm text-muted whitespace-nowrap">{{printf (t "report.no_cost_short") (money .Margin.NoCost)}}</span>{{end}}
+        </td>
+        <td class="px-3 py-3 text-right"><a href="/cash/sessions/{{.Session.ID}}" class="font-bold whitespace-nowrap underline-offset-4 hover:underline">{{t "report.see_close"}}</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot class="border-t-2 border-line font-bold">
+      <tr class="align-top">
+        <th scope="row" class="px-3 py-3">{{t "report.total"}}</th>
+        <td class="px-3 py-3 text-right tabular">
+          <span class="block whitespace-nowrap">{{money .Total}}</span>
+          <span class="block text-sm font-normal text-muted whitespace-nowrap">{{if eq .Sales 1}}{{t "report.n_sales_one"}}{{else}}{{printf (t "report.n_sales") .Sales}}{{end}}</span>
+          {{if .Voided}}<span class="block text-sm font-normal text-muted whitespace-nowrap">{{if eq .Voided 1}}{{printf (t "report.n_voided_one") (money .VoidedTotal)}}{{else}}{{printf (t "report.n_voided") .Voided (money .VoidedTotal)}}{{end}}</span>{{end}}
+        </td>
+        <td class="px-3 py-3 text-right tabular whitespace-nowrap">
+          {{if $.Diff.IsZero}}{{t "cash.diff_ok"}}{{else if $.Short}}{{printf (t "cash.diff_short") (money $.Diff)}}{{else}}{{printf (t "cash.diff_over") (money $.Diff)}}{{end}}</td>
+        <td class="px-3 py-3 text-right tabular whitespace-nowrap">{{money .Margin.Amount}}</td>
+        <td class="px-3 py-3"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{{end}}
+{{end}}
+{{end}}

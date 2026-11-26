@@ -29,6 +29,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/reports"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
@@ -146,7 +147,8 @@ func main() {
 	tmplEngine := web.NewTemplateEngine()
 	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc, sessionSvc, saleSvc).
 		WithAuth(authSvc, cfg.HTTPS()).
-		WithUsers(users.New(db, postgres.NewTxRunner(db)))
+		WithUsers(users.New(db, postgres.NewTxRunner(db))).
+		WithReports(reports.New(db))
 
 	// Configurar rutas
 	mux := http.NewServeMux()

@@ -103,6 +103,8 @@ func TestRoutesMatrix(t *testing.T) {
 		{"POST", "/purchases/prices/1", []string{A}},
 		{"GET", "/taxes", []string{A}},
 		{"GET", "/users", []string{A}},
+		{"GET", "/reports/sales", []string{A}},
+		{"GET", "/reports/cash", []string{A}},
 		{"POST", "/users/new", []string{A}},
 		{"POST", "/users/1/edit", []string{A}},
 		{"POST", "/users/1/password", []string{A}},

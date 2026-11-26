@@ -2,9 +2,12 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
 
 // PurchasePriceStore lee las compras recibidas y el estado de los precios
@@ -69,6 +72,20 @@ func (s *PurchasePriceStore) List(ctx context.Context, onlyUnpriced bool, limit 
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// Summary devuelve el resumen de una compra. store.ErrNotFound si no existe.
+func (s *PurchasePriceStore) Summary(ctx context.Context, id int64) (*model.PurchaseSummary, error) {
+	var p model.PurchaseSummary
+	err := s.db.QueryRowContext(ctx, `SELECT * FROM (`+summaries+`) x WHERE x.id = $1;`, id).Scan(
+		&p.ID, &p.ReceivedAt, &p.SupplierName, &p.VoucherNumber, &p.ReceivedByName, &p.Total, &p.Products, &p.Unpriced)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // CountUnpriced dice cuántas compras tienen productos sin cotizar.

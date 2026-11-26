@@ -1,7 +1,9 @@
 // Package createproduct es el alta de un producto (F-01) con, opcionalmente:
 //   - su código de barras (F-02);
 //   - una marca nueva, si la que se busca no existe;
-//   - una categoría nueva (nombre, padre e impuesto), si no está en la lista.
+//   - una categoría nueva (nombre, padre e impuesto), si no está en la lista;
+//   - su precio de venta (F-03), si quien lo crea puede poner precios: así un
+//     producto que entra con la factura en la mano ya se puede vender.
 //
 // Todo se guarda en una sola transacción (D-02, BR-04): si algo falla, no
 // queda ni el producto ni la marca ni la categoría creados a medias. Así el
@@ -18,6 +20,8 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
@@ -40,6 +44,12 @@ type Request struct {
 	// NewCategory es una categoría que no estaba en la lista (Name, ParentID
 	// y TaxID). Si no es nil, se ignora Product.CategoryID.
 	NewCategory *model.Category
+
+	// Price es el precio de venta inicial (nil: sin precio). Queda en la
+	// auditoría con By, que es obligatorio si hay precio. Quién puede ponerlo
+	// (permiso prices) lo decide la pantalla.
+	Price *decimal.Decimal
+	By    int64
 }
 
 // BrandInactiveError: se pidió crear una marca que ya existe, pero está
@@ -133,6 +143,16 @@ func (s *Service) Create(ctx context.Context, req Request) (*model.Product, erro
 			return nil, fmt.Errorf("%w: %w: %w", ErrNewCategory, service.ErrValidation, err)
 		}
 	}
+	var price *model.Price
+	if req.Price != nil {
+		if req.By <= 0 {
+			return nil, errors.New("createproduct: a price needs who sets it (By)")
+		}
+		price = &model.Price{UnitPrice: *req.Price}
+		if err := price.Validate(); err != nil {
+			return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
+		}
+	}
 	var code *model.ProductCode
 	if strings.TrimSpace(req.Barcode) != "" {
 		code = &model.ProductCode{Code: req.Barcode}
@@ -187,6 +207,18 @@ func (s *Service) Create(ctx context.Context, req Request) (*model.Product, erro
 				}
 				return err
 			}
+		}
+
+		if price != nil {
+			price.ProductID = created.ID
+			saved, err := postgres.NewPriceStore(tx).Create(ctx, price)
+			if err != nil {
+				return err
+			}
+			_, err = postgres.NewAuditLogStore(tx).Create(ctx, postgres.AuditEntry{
+				UserID: &req.By, Table: "prices", Action: "INSERT", RecordID: saved.ID, NewData: saved,
+			})
+			return err
 		}
 		return nil
 	})

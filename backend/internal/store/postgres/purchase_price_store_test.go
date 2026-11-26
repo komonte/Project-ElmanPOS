@@ -1,10 +1,12 @@
 package postgres_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 )
 
@@ -83,6 +85,12 @@ func TestPurchasePriceStore(t *testing.T) {
 		if p.Products != 4 || p.Unpriced != 2 || p.SupplierName != "Proveedor test product" || p.VoucherNumber != "A-0001" ||
 			!p.Total.Equal(d("5000")) || p.ReceivedByName != nil {
 			t.Errorf("summary: %+v", p)
+		}
+		if one, err := prices.Summary(f.ctx, purchase); err != nil || one.ID != purchase || one.Unpriced != 2 {
+			t.Errorf("summary by id: %+v, %v", one, err)
+		}
+		if _, err := prices.Summary(f.ctx, -1); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("unknown summary: %v", err)
 		}
 		if q, in := byID[priced]; !in || q.Unpriced != 0 {
 			t.Errorf("priced purchase: %+v", q)

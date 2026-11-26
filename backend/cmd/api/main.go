@@ -210,6 +210,8 @@ func main() {
 	mux.HandleFunc("GET /cash", webH.CashPage)
 	mux.HandleFunc("POST /cash/register", webH.CashCreateRegister)
 	mux.HandleFunc("POST /cash/open", webH.CashOpen)
+	mux.HandleFunc("POST /cash/close", webH.CashClose)
+	mux.HandleFunc("GET /cash/sessions/{id}", webH.CashSession)
 	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)

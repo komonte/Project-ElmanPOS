@@ -114,6 +114,27 @@ func (s *Service) Summary(ctx context.Context, sessionID int64) (*Summary, error
 	return sum, nil
 }
 
+// PaymentCounts cuenta los cobros de la sesión por medio (solo ventas
+// COMPLETED), sin montos: al cerrar, ayuda a buscarlos en el home banking o
+// en el cierre del posnet ("hoy hubo 3 transferencias") sin mostrar lo
+// esperado (cierre ciego). Un medio sin cobros no está en el map.
+func (s *Service) PaymentCounts(ctx context.Context, sessionID int64) (map[string]int, error) {
+	list, err := postgres.NewSaleStore(s.db).ListBySession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int)
+	for _, sale := range list {
+		if sale.Status != model.SaleCompleted {
+			continue
+		}
+		for _, p := range sale.Payments {
+			counts[p.Method]++
+		}
+	}
+	return counts, nil
+}
+
 // summary arma el arqueo de la sesión con lo declarado, y cuenta sus ventas.
 // Sin Session: quien llama la pone.
 func summary(ctx context.Context, db postgres.DBTX, sessionID int64, declared []*model.CashAudit) (*Summary, error) {

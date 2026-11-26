@@ -1,0 +1,58 @@
+{{define "content"}}
+{{/* Resumen de un cierre (F-12, CashSession). Datos: .Summary
+     (sessions.Summary), .ClosedAt, .Rows (closeRow: el efectivo y los
+     medios con algo) y .HasDifference. Lo primero que se lee es si la caja
+     cierra o no. */}}
+{{with .Summary}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "cash.summary_title"}}</h1>
+  <p class="mt-3 text-lg">{{.Session.RegisterName}} ·
+    {{printf (t "cash.summary_period") (formatTime .Session.OpenedAt) (formatTime $.ClosedAt)}}</p>
+</header>
+
+{{if $.HasDifference}}
+<div id="cash-verdict" role="status" class="mb-6 p-4 max-w-3xl bg-danger-soft border-l-8 border-danger rounded-sm">
+  <p class="font-display font-bold text-2xl">{{t "cash.verdict_diff"}}</p>
+  <p class="mt-1">{{t "cash.verdict_diff_hint"}}</p>
+</div>
+{{else}}
+<div id="cash-verdict" role="status" class="mb-6 p-4 max-w-3xl bg-surface border-2 border-line border-l-8 border-l-stock rounded-sm">
+  <p class="font-display font-bold text-2xl">{{t "cash.verdict_ok"}}</p>
+</div>
+{{end}}
+
+<table class="w-full max-w-3xl bg-surface border-2 border-line rounded-md text-lg">
+  <thead>
+    <tr class="text-left border-b-2 border-line">
+      <th scope="col" class="p-3">{{t "cash.col_method"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "cash.col_expected"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "cash.col_declared"}}</th>
+      <th scope="col" class="p-3 text-right">{{t "cash.col_difference"}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range $.Rows}}
+    <tr class="border-b border-line" data-method="{{.Method}}">
+      <th scope="row" class="p-3 text-left">{{t (printf "pos.method_%s" .Method)}}
+        {{if eq .Method "CASH"}}<span class="block text-sm font-normal text-muted">{{printf (t "cash.summary_float") (money $.Summary.Session.OpeningAmount)}}</span>{{end}}</th>
+      <td class="p-3 text-right tabular">{{money .Expected}}</td>
+      <td class="p-3 text-right tabular">{{money .Declared}}</td>
+      <td class="p-3 text-right tabular font-bold">
+        {{if .Diff.IsZero}}<span class="text-stock">{{t "cash.diff_ok"}}</span>
+        {{else if .Short}}<span class="text-danger" data-short>{{printf (t "cash.diff_short") (money .Diff)}}</span>
+        {{else}}<span data-over>{{printf (t "cash.diff_over") (money .Diff)}}</span>{{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+
+<p class="mt-6 text-lg">
+  {{if eq .Sales 1}}{{t "cash.summary_sales_one"}}{{else}}{{printf (t "cash.summary_sales") .Sales}}{{end}} ·
+  {{if eq .Voided 1}}{{t "cash.summary_voided_one"}}{{else}}{{printf (t "cash.summary_voided") .Voided}}{{end}} ·
+  {{t "cash.summary_total"}}: <span class="font-bold tabular">{{money .Total}}</span>
+</p>
+
+<p class="mt-8"><a href="/cash" class="btn-primary">{{t "cash.summary_back"}}</a></p>
+{{end}}
+{{end}}

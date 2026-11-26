@@ -69,6 +69,14 @@ func TestClose(t *testing.T) {
 	f := newFixture(t)
 	sess := f.openWithSales(t)
 
+	// Lo que se muestra al cerrar: cuántos cobros por medio (la anulada no
+	// cuenta), sin montos.
+	counts, err := f.svc.PaymentCounts(f.ctx, sess.ID)
+	if err != nil || len(counts) != 3 || counts[model.PaymentCash] != 1 || counts[model.PaymentDebit] != 1 ||
+		counts[model.PaymentQR] != 1 {
+		t.Errorf("payment counts: got %v, %v", counts, err)
+	}
+
 	// Cierre ciego: abierta, no hay resumen.
 	if _, err := f.svc.Summary(f.ctx, sess.ID); !errors.Is(err, ErrSessionStillOpen) || !errors.Is(err, service.ErrConflict) {
 		t.Errorf("summary of an open session: got %v", err)

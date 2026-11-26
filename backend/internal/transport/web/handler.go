@@ -249,6 +249,9 @@ var errorKeys = []struct {
 	{sessions.ErrNoRegister, "error.cash_no_register"},
 	{store.ErrSessionAlreadyOpen, "error.cash_already_open"},
 	{store.ErrSeveralActiveRegisters, "error.cash_several_registers"},
+	// Cierre (F-12).
+	{store.ErrSessionNotOpen, "error.cash_session_not_open"},
+	{model.ErrInvalidDeclaredAmount, "error.cash_declared_invalid"},
 	// Venta (F-07, F-10). Los de un renglón llevan el producto adelante y la
 	// falta de stock dice cuánto hay (posErrMsg).
 	{sales.ErrRegisterClosed, "error.sale_register_closed"},

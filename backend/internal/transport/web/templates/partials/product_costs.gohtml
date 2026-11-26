@@ -38,7 +38,7 @@
   <p class="text-muted">{{t "product.costs_empty"}}</p>
   {{end}}
 
-  {{if .Suggested}}
+  {{if and .Suggested (can .Can "prices")}}
   <form hx-post="/products/{{.ProductID}}/prices" hx-target="#product-prices" hx-swap="outerHTML"
         class="flex flex-wrap items-center gap-3">
     <input type="hidden" name="unit_price" value="{{.Suggested}}">
@@ -48,10 +48,18 @@
     </p>
     <button type="submit" class="btn-secondary">{{t "product.cost_use_price"}}</button>
   </form>
+  {{else if .Suggested}}
+  {{/* Sin permiso para cambiar precios: la sugerencia, sin botón. */}}
+  <p>
+    {{t "product.cost_suggested"}} {{percent .Margin}}%:
+    <span class="font-bold tabular">{{money .Suggested}}</span>
+  </p>
   {{else if .Costs}}
   <p class="text-sm text-muted">{{t "product.cost_no_margin"}}</p>
   {{end}}
 
+  {{/* Cambiar el costo o el precio: solo el admin (F-13). */}}
+  {{if can .Can "prices"}}
   <form hx-post="/products/{{.ProductID}}/costs" hx-target="#product-costs" hx-swap="outerHTML"
         class="flex flex-wrap items-end gap-3">
     <div>
@@ -62,6 +70,7 @@
     </div>
     <button type="submit" class="btn-secondary">{{t "product.cost_save"}}</button>
   </form>
+  {{end}}
 
   {{/* with primero: sin datos (.Costs nil), len fallaría. */}}
   {{with .Costs}}{{if gt (len .) 1}}

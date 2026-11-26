@@ -36,6 +36,7 @@ var pageFiles = []string{
 	"templates/pages/pos.gohtml",
 	"templates/pages/cash_session.gohtml",
 	"templates/pages/login.gohtml",
+	"templates/pages/forbidden.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -122,6 +123,13 @@ func NewTemplateEngine() *TemplateEngine {
 			// qty muestra una cantidad contada: "2,5" en español, "2.5" en inglés.
 			"qty": func(d decimal.Decimal) string {
 				return formatQuantity(lang, d)
+			},
+			// can dice si el usuario tiene un permiso: (can .Can "void").
+			// .Can es canMap; si falta (un parcial dibujado con otros
+			// datos), no hay permiso y el botón no aparece.
+			"can": func(perms any, p string) bool {
+				m, _ := perms.(map[string]bool)
+				return m[p]
 			},
 			"formatTime":  formatTime,
 			"formatClock": formatClock,

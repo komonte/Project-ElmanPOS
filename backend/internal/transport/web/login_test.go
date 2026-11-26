@@ -65,7 +65,8 @@ func TestRenderNavUser(t *testing.T) {
 	var buf bytes.Buffer
 	err := e.Render(&buf, "es", "cash.gohtml", map[string]any{"Section": "cash", "TitleKey": "cash.title",
 		"State":       &sessions.State{},
-		"CurrentUser": &model.User{ID: 3, Username: "cajera", Name: "Ana López", Role: model.RoleCashier}})
+		"CurrentUser": &model.User{ID: 3, Username: "cajera", Name: "Ana López", Role: model.RoleCashier},
+		"Can":         canMap(cashierUser)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,13 +78,15 @@ func TestRenderNavUser(t *testing.T) {
 		}
 	}
 
-	// Sin usuario (no pasa con el middleware, pero el menú no se rompe).
+	// Sin usuario (no pasa con el middleware, pero el menú no se rompe): solo
+	// el inicio, sin permisos.
 	buf.Reset()
 	if err := e.Render(&buf, "es", "cash.gohtml", map[string]any{"Section": "cash", "TitleKey": "cash.title",
 		"State": &sessions.State{}}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(buf.String(), "nav-user") || !strings.Contains(buf.String(), `href="/pos"`) {
+	if strings.Contains(buf.String(), "nav-user") || !strings.Contains(buf.String(), `href="/"`) ||
+		strings.Contains(buf.String(), `href="/pos"`) {
 		t.Error("no user: menu without the user block")
 	}
 }

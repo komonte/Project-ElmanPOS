@@ -152,7 +152,8 @@ func main() {
 	// API: entera para el admin (model.PermAPI).
 	apiMux := http.NewServeMux()
 	transport.RegisterAPIRoutes(apiMux, brandH, taxH, supplierH, categoryH, productH, productCodesH, pricesH, costsH, purchasesH)
-	guard := transport.Guard{}
+	// Sin permiso, una página ve "no tenés permiso" con el menú de su rol.
+	guard := transport.Guard{Page: webH.Forbidden}
 	mountAPI(mux, guard, apiMux)
 
 	// Web UI routes

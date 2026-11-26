@@ -68,7 +68,7 @@ func (h *WebHandler) PurchasesReceive(w http.ResponseWriter, r *http.Request) {
 					"Purchase":      res.Purchase,
 					"Difference":    res.TotalDifference,
 					"HasDifference": !res.TotalDifference.IsZero(),
-					"Suggestions":   purchaseSuggestionRows(res.Suggestions),
+					"Suggestions":   purchaseSuggestionRows(res.Suggestions, can(r, model.PermPrices)),
 				})
 				return
 			}
@@ -180,11 +180,11 @@ type purchaseSuggestionRow struct {
 	Cell map[string]any
 }
 
-func purchaseSuggestionRows(sugs []purchases.Suggestion) []purchaseSuggestionRow {
+func purchaseSuggestionRows(sugs []purchases.Suggestion, canSet bool) []purchaseSuggestionRow {
 	rows := make([]purchaseSuggestionRow, len(sugs))
 	for i, s := range sugs {
 		rows[i] = purchaseSuggestionRow{Suggestion: s,
-			Cell: priceCellData(s.ProductID, s.CurrentPrice, s.SuggestedPrice, false, "")}
+			Cell: priceCellData(s.ProductID, s.CurrentPrice, s.SuggestedPrice, false, "", canSet)}
 	}
 	return rows
 }
@@ -192,10 +192,11 @@ func purchaseSuggestionRows(sugs []purchases.Suggestion) []purchaseSuggestionRow
 // priceCellData arma los datos de purchase_price_cell.gohtml. Same dice si el
 // sugerido ya es el precio vigente: entonces no hay botón (guardaría el mismo
 // precio otra vez).
-func priceCellData(productID int64, current, suggested *decimal.Decimal, saved bool, errMsg string) map[string]any {
+// canSet: el usuario puede cambiar precios (si no, no hay botón).
+func priceCellData(productID int64, current, suggested *decimal.Decimal, saved bool, errMsg string, canSet bool) map[string]any {
 	same := current != nil && suggested != nil && current.Equal(*suggested)
 	return map[string]any{"ProductID": productID, "Current": current, "Suggested": suggested,
-		"Same": same, "Saved": saved, "Error": errMsg}
+		"Same": same, "Saved": saved, "Error": errMsg, "CanSet": canSet}
 }
 
 // PurchasesUsePrice handles POST /purchases/prices/{id}: el "Usar como precio"
@@ -216,7 +217,7 @@ func (h *WebHandler) PurchasesUsePrice(w http.ResponseWriter, r *http.Request) {
 		var saved *model.Price
 		if saved, err = h.prices.Set(r.Context(), productID, unitPrice); err == nil {
 			h.renderPartial(w, r, "purchase_price_cell.gohtml",
-				priceCellData(productID, &saved.UnitPrice, &saved.UnitPrice, true, ""))
+				priceCellData(productID, &saved.UnitPrice, &saved.UnitPrice, true, "", true))
 			return
 		}
 	}
@@ -237,5 +238,5 @@ func (h *WebHandler) PurchasesUsePrice(w http.ResponseWriter, r *http.Request) {
 		suggested = &unitPrice
 	}
 	h.renderPartial(w, r, "purchase_price_cell.gohtml",
-		priceCellData(productID, prod.CurrentPrice, suggested, false, h.errMsg(r, err)))
+		priceCellData(productID, prod.CurrentPrice, suggested, false, h.errMsg(r, err), true))
 }

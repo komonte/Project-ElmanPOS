@@ -136,7 +136,7 @@ func TestPriceCellData(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := priceCellData(1, tt.current, tt.suggested, false, "")["Same"]; got != tt.wantSame {
+			if got := priceCellData(1, tt.current, tt.suggested, false, "", true)["Same"]; got != tt.wantSame {
 				t.Errorf("Same: got %v, want %v", got, tt.wantSame)
 			}
 		})
@@ -249,7 +249,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 					AvgCost: decimal.RequireFromString("2000"), CurrentPrice: d("2500")}, // margen 0
 				{ProductID: 3, ProductName: "QUESO", UnitCost: decimal.RequireFromString("4700"),
 					AvgCost: decimal.RequireFromString("4377.77"), SuggestedPrice: d("7582.67"), CurrentPrice: d("7582.67")},
-			})})
+			}, true)})
 		for _, s := range []string{"Precios", "OREO", "$ 950,00", "$ 930,00", "$ 1.915,83", "$ 1.800,00",
 			`id="purchase-price-1"`, `hx-post="/purchases/prices/1"`, `value="1915.83"`, "Usar como precio",
 			"Sin margen", "Ya es el precio"} {
@@ -263,16 +263,30 @@ func TestRenderPurchaseForm(t *testing.T) {
 		}
 	})
 
+	t.Run("price cell without permission: the suggestion, no button", func(t *testing.T) {
+		p, cur := decimal.RequireFromString("1915.83"), decimal.RequireFromString("1800")
+		html := render(t, "purchase_received.gohtml", map[string]any{
+			"Purchase": &model.Purchase{ID: 377, Items: make([]*model.PurchaseItem, 1)},
+			"Suggestions": purchaseSuggestionRows([]purchases.Suggestion{
+				{ProductID: 1, ProductName: "OREO", UnitCost: decimal.RequireFromString("950"),
+					AvgCost: decimal.RequireFromString("930"), SuggestedPrice: &p, CurrentPrice: &cur},
+			}, false)})
+		if !strings.Contains(html, "$ 1.915,83") || !strings.Contains(html, "$ 1.800,00") ||
+			strings.Contains(html, "hx-post") {
+			t.Errorf("got %s", html)
+		}
+	})
+
 	t.Run("price cell saved and with error", func(t *testing.T) {
 		p := decimal.RequireFromString("1915.83")
-		saved := render(t, "purchase_price_cell.gohtml", priceCellData(1, &p, &p, true, ""))
+		saved := render(t, "purchase_price_cell.gohtml", priceCellData(1, &p, &p, true, "", true))
 		if !strings.Contains(saved, "$ 1.915,83") || !strings.Contains(saved, "Precio actualizado") ||
 			strings.Contains(saved, "hx-post") {
 			t.Errorf("saved: got %s", saved)
 		}
 		cur := decimal.RequireFromString("1800")
 		failed := render(t, "purchase_price_cell.gohtml",
-			priceCellData(1, &cur, &p, false, "El producto está desactivado."))
+			priceCellData(1, &cur, &p, false, "El producto está desactivado.", true))
 		for _, s := range []string{`role="alert"`, "El producto está desactivado.", "$ 1.800,00",
 			`hx-post="/purchases/prices/1"`} {
 			if !strings.Contains(failed, s) {
@@ -283,7 +297,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 
 	t.Run("page", func(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
-			"Suppliers": []productOption{}})
+			"Suppliers": []productOption{}, "Can": adminCan})
 		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
 			`<div id="form-modal"></div>`, "function purchaseExpiryFrom",
 			// El buscador compartido (picker_script.gohtml) y lo que la compra

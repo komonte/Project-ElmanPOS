@@ -5,14 +5,15 @@
 
      Datos (ver priceCellData): .ProductID, .Current (precio vigente o nil),
      .Suggested (sugerido con IVA o nil si el margen es 0), .Same (el sugerido
-     ya es el precio), .Saved (recién guardado) y .Error. */}}
+     ya es el precio), .Saved (recién guardado), .Error y .CanSet (puede
+     cambiar precios: si no, no hay botón). */}}
 <div class="flex flex-wrap items-center justify-end gap-3">
   <span class="font-bold tabular">{{with .Current}}{{money .}}{{else}}<span class="text-muted">—</span>{{end}}</span>
   {{if .Saved}}
   <span role="status" class="text-sm font-bold">✓ {{t "purchase.price_updated"}}</span>
   {{else if .Same}}
   <span class="text-sm text-muted">{{t "purchase.price_same"}}</span>
-  {{else if .Suggested}}
+  {{else if and .Suggested .CanSet}}
   <form hx-post="/purchases/prices/{{.ProductID}}" hx-target="#purchase-price-{{.ProductID}}" hx-swap="innerHTML">
     <input type="hidden" name="unit_price" value="{{.Suggested}}">
     <button type="submit" class="btn-secondary whitespace-nowrap">{{t "product.cost_use_price"}}</button>

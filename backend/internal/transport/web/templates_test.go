@@ -26,7 +26,7 @@ func TestRenderPagesUseLayout(t *testing.T) {
 	for _, lang := range []string{"en", "es"} {
 		for page, want := range pages {
 			var buf bytes.Buffer
-			data := map[string]any{"Lang": lang, "Section": "", "TitleKey": ""}
+			data := map[string]any{"Lang": lang, "Section": "", "TitleKey": "", "Can": adminCan}
 			if err := e.Render(&buf, lang, page, data); err != nil {
 				t.Fatalf("%s/%s: %v", lang, page, err)
 			}

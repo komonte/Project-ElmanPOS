@@ -92,6 +92,9 @@ func TestRenderPos(t *testing.T) {
 	render := func(t *testing.T, name string, data map[string]any) string {
 		t.Helper()
 		var buf bytes.Buffer
+		if _, ok := data["Can"]; !ok {
+			data["Can"] = adminCan
+		}
 		if err := e.Render(&buf, "es", name, data); err != nil {
 			t.Fatal(err)
 		}

@@ -4,16 +4,20 @@
   <p class="mt-4 text-lg text-muted">{{t "app.tagline"}}</p>
 </header>
 
+{{/* Solo lo que el rol puede abrir: el catálogo (sin impuestos para el
+     repositor). El cajero entra directo a vender. */}}
+{{if can .Can "catalog"}}
 <section aria-labelledby="catalog-heading" class="max-w-2xl">
   <h2 id="catalog-heading" class="font-display font-bold text-3xl leading-none">{{t "nav.group_catalog"}}</h2>
   <p class="mt-1 mb-3 text-muted">{{t "dashboard.active_counts"}}</p>
   <ul class="bg-surface border-2 border-line rounded-md divide-y-2 divide-line">
     {{template "dashboard-row" (dict "Href" "/categories" "Label" (t "nav.categories") "Count" .CategoryCount)}}
     {{template "dashboard-row" (dict "Href" "/brands" "Label" (t "nav.brands") "Count" .BrandCount)}}
-    {{template "dashboard-row" (dict "Href" "/taxes" "Label" (t "nav.taxes") "Count" .TaxCount)}}
+    {{if can .Can "prices"}}{{template "dashboard-row" (dict "Href" "/taxes" "Label" (t "nav.taxes") "Count" .TaxCount)}}{{end}}
     {{template "dashboard-row" (dict "Href" "/suppliers" "Label" (t "nav.suppliers") "Count" .SupplierCount)}}
   </ul>
 </section>
+{{end}}
 {{end}}
 
 {{define "dashboard-row"}}

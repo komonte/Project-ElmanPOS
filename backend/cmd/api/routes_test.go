@@ -157,6 +157,10 @@ func TestRoutesCoverHandlers(t *testing.T) {
 			m.Type.In(1) != handlerType.In(0) || m.Type.In(2) != handlerType.In(1) {
 			continue
 		}
+		// Forbidden es la página 403 (transport.Guard.Page), no una ruta.
+		if m.Name == "Forbidden" {
+			continue
+		}
 		handlers++
 		if !inTable[m.Name] {
 			t.Errorf("WebHandler.%s is not in webRoutes: give it a permission", m.Name)

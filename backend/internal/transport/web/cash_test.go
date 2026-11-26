@@ -79,6 +79,9 @@ func TestRenderCash(t *testing.T) {
 	render := func(t *testing.T, data map[string]any) string {
 		t.Helper()
 		data["Section"], data["TitleKey"] = "cash", "cash.title"
+		if _, ok := data["Can"]; !ok {
+			data["Can"] = adminCan
+		}
 		var buf bytes.Buffer
 		if err := e.Render(&buf, "es", "cash.gohtml", data); err != nil {
 			t.Fatal(err)
@@ -245,6 +248,18 @@ func TestRenderCash(t *testing.T) {
 			t.Error("no void error yet")
 		}
 
+		// El cajero ve las ventas y el ticket, pero no anula (F-13).
+		cashier := render(t, map[string]any{"State": openState, "CloseFields": fields, "Sales": list,
+			"Can": canMap(cashierUser)})
+		if !strings.Contains(cashier, `href="/pos/sales/30/ticket"`) || !strings.Contains(cashier, `action="/cash/close"`) {
+			t.Error("cashier: no ticket or no close")
+		}
+		for _, s := range []string{"void-open-30", `id="void-30"`, "/cash/sales/30/void"} {
+			if strings.Contains(cashier, s) {
+				t.Errorf("cashier: unexpected %q", s)
+			}
+		}
+
 		// Después de anular: el aviso de qué devolver.
 		html = render(t, map[string]any{"State": openState, "CloseFields": fields, "Sales": list,
 			"Refund": "Venta N.º 12 anulada. Devolvé $ 1.800,00 en efectivo."})
@@ -344,7 +359,7 @@ func TestRenderCashSession(t *testing.T) {
 		t.Helper()
 		var buf bytes.Buffer
 		if err := e.Render(&buf, "es", "cash_session.gohtml", map[string]any{
-			"Section": "cash", "TitleKey": "cash.summary_title", "Summary": sum,
+			"Section": "cash", "TitleKey": "cash.summary_title", "Summary": sum, "Can": adminCan,
 			"ClosedAt": "2026-11-26T23:30:00Z", "Rows": closeRows(sum.Close), "HasDifference": sum.Close.HasDifference(),
 		}); err != nil {
 			t.Fatal(err)

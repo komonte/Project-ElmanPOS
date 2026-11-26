@@ -213,3 +213,41 @@ func TestHistoryEmptyAndUnknown(t *testing.T) {
 	_, err = f.svc.History(f.ctx, 999_999_999)
 	wantErr(t, err, service.ErrNotFound)
 }
+
+// SetMany: todos o ninguno, cada uno con su auditoría y su autor.
+func TestSetMany(t *testing.T) {
+	f := newFixture(t)
+	a := f.newProduct(t, "PRODUCTO A SETMANY", true)
+	b := f.newProduct(t, "PRODUCTO B SETMANY", true)
+	off := f.newProduct(t, "PRODUCTO OFF SETMANY", false)
+
+	saved, err := f.svc.SetMany(f.ctx, f.userID, []Change{{a, decimal.RequireFromString("100")}, {b, decimal.RequireFromString("250.5")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved) != 2 || saved[0].ProductID != a || !saved[1].UnitPrice.Equal(decimal.RequireFromString("250.5")) {
+		t.Fatalf("saved: %+v", saved)
+	}
+	for _, p := range saved {
+		if f.auditsOf(t, p.ID) != 1 {
+			t.Errorf("price %d: no audit", p.ID)
+		}
+		usecasetest.WantAuthor(t, f.ctx, f.tx, "set many audit", usecasetest.Author("audit_log", "user_id",
+			"table_name = 'prices' AND record_id = $2"), f.userID, p.ID)
+	}
+
+	// El segundo falla (inactivo): no se guarda ninguno, y el error dice cuál.
+	_, err = f.svc.SetMany(f.ctx, f.userID, []Change{{a, decimal.RequireFromString("110")}, {off, decimal.RequireFromString("5")}})
+	var ce *ChangeError
+	if !errors.As(err, &ce) || ce.Index != 1 || ce.ProductID != off || !errors.Is(err, ErrProductInactive) {
+		t.Errorf("inactive: got %v", err)
+	}
+	if f.pricesOf(t, a) != 1 || f.pricesOf(t, off) != 0 {
+		t.Errorf("rollback: a has %d prices, off %d", f.pricesOf(t, a), f.pricesOf(t, off))
+	}
+	// Un precio inválido se rechaza antes de empezar.
+	_, err = f.svc.SetMany(f.ctx, f.userID, []Change{{b, decimal.RequireFromString("0")}})
+	if !errors.As(err, &ce) || ce.Index != 0 || !errors.Is(err, service.ErrValidation) {
+		t.Errorf("invalid: got %v", err)
+	}
+}

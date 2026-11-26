@@ -214,6 +214,7 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 	if p.ID == 0 {
 		data["Barcode"] = r.FormValue("barcode")
 		data["BrandNew"] = r.FormValue("brand_new")
+		data["Price"] = r.FormValue("price") // el precio de venta, solo en el alta
 	} else {
 		codes, err := h.productCodes.List(ctx, p.ID)
 		if err != nil {
@@ -393,18 +394,40 @@ func (h *WebHandler) ProductsCreate(w http.ResponseWriter, r *http.Request) {
 		h.renderProductForm(w, r, product, h.tr(r, errKey))
 		return
 	}
-	if _, err := h.createProduct.Create(r.Context(), createproduct.Request{
-		Product:     product,
-		Barcode:     r.FormValue("barcode"),
-		NewBrand:    r.FormValue("brand_new"),
-		NewCategory: newCategoryFromForm(r),
-	}); err != nil {
+	req, errKey := h.newProductRequest(r, product)
+	if errKey != "" {
+		h.renderProductForm(w, r, product, h.tr(r, errKey))
+		return
+	}
+	if _, err := h.createProduct.Create(r.Context(), req); err != nil {
 		h.renderProductForm(w, r, product, h.errMsg(r, err))
 		return
 	}
 
 	w.Header().Set("HX-Redirect", "/products")
 	w.WriteHeader(http.StatusOK)
+}
+
+// newProductRequest arma el alta (ProductsCreate y el alta rápida de un
+// renglón). El precio de venta solo se toma de quien puede poner precios;
+// vacío: sin precio. Mal escrito: la clave del error.
+func (h *WebHandler) newProductRequest(r *http.Request, product *model.Product) (createproduct.Request, string) {
+	req := createproduct.Request{
+		Product:     product,
+		Barcode:     r.FormValue("barcode"),
+		NewBrand:    r.FormValue("brand_new"),
+		NewCategory: newCategoryFromForm(r),
+	}
+	raw := strings.TrimSpace(r.FormValue("price"))
+	if raw == "" || !can(r, model.PermPrices) {
+		return req, ""
+	}
+	price, ok := parseFormMoney(raw)
+	if !ok {
+		return req, "error.price_invalid"
+	}
+	req.Price, req.By = &price, transport.UserID(r.Context())
+	return req, ""
 }
 
 // ProductsEditForm handles GET /products/{id}/edit

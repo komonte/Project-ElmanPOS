@@ -2,20 +2,15 @@ package web
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/shopspring/decimal"
-
 	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
-	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
-	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
 )
 
 // purchaseLine es un renglón del formulario tal como se escribió (texto), para
@@ -68,7 +63,9 @@ func (h *WebHandler) PurchasesReceive(w http.ResponseWriter, r *http.Request) {
 					"Purchase":      res.Purchase,
 					"Difference":    res.TotalDifference,
 					"HasDifference": !res.TotalDifference.IsZero(),
-					"Suggestions":   purchaseSuggestionRows(res.Suggestions, can(r, model.PermPrices)),
+					// Los precios se ponen en el detalle de la factura
+					// (/purchases/{id}): ahí el resultado manda.
+					"Products": len(res.Suggestions),
 				})
 				return
 			}
@@ -171,72 +168,4 @@ func (h *WebHandler) purchaseErrMsg(r *http.Request, err error, line int) string
 		msg = fmt.Sprintf(i18n.T(lang, "purchase.line_error"), line, msg)
 	}
 	return msg
-}
-
-// purchaseSuggestionRow es una fila de la tabla de precios después de recibir:
-// la sugerencia del caso de uso y los datos de su celda de precio actual.
-type purchaseSuggestionRow struct {
-	purchases.Suggestion
-	Cell map[string]any
-}
-
-func purchaseSuggestionRows(sugs []purchases.Suggestion, canSet bool) []purchaseSuggestionRow {
-	rows := make([]purchaseSuggestionRow, len(sugs))
-	for i, s := range sugs {
-		rows[i] = purchaseSuggestionRow{Suggestion: s,
-			Cell: priceCellData(s.ProductID, s.CurrentPrice, s.SuggestedPrice, false, "", canSet)}
-	}
-	return rows
-}
-
-// priceCellData arma los datos de purchase_price_cell.gohtml. Same dice si el
-// sugerido ya es el precio vigente: entonces no hay botón (guardaría el mismo
-// precio otra vez).
-// canSet: el usuario puede cambiar precios (si no, no hay botón).
-func priceCellData(productID int64, current, suggested *decimal.Decimal, saved bool, errMsg string, canSet bool) map[string]any {
-	same := current != nil && suggested != nil && current.Equal(*suggested)
-	return map[string]any{"ProductID": productID, "Current": current, "Suggested": suggested,
-		"Same": same, "Saved": saved, "Error": errMsg, "CanSet": canSet}
-}
-
-// PurchasesUsePrice handles POST /purchases/prices/{id}: el "Usar como precio"
-// de una fila del resultado. Guarda el sugerido como precio nuevo con el caso
-// de uso de F-03 (prices.Set: precio y auditoría juntos) y responde la celda.
-// Es otra ruta que POST /products/{id}/prices solo porque dibuja otra cosa.
-func (h *WebHandler) PurchasesUsePrice(w http.ResponseWriter, r *http.Request) {
-	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
-		return
-	}
-	raw := r.FormValue("unit_price")
-	unitPrice, ok := parseFormDecimal(raw)
-	if !ok || strings.TrimSpace(raw) == "" {
-		err = model.ErrInvalidPrice
-	} else {
-		var saved *model.Price
-		if saved, err = h.prices.Set(r.Context(), transport.UserID(r.Context()), productID, unitPrice); err == nil {
-			h.renderPartial(w, r, "purchase_price_cell.gohtml",
-				priceCellData(productID, &saved.UnitPrice, &saved.UnitPrice, true, "", true))
-			return
-		}
-	}
-
-	// No se guardó: la celda vuelve con el precio que tiene hoy, el botón
-	// (para reintentar) y el error.
-	if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
-		h.actionError(w, r, err)
-		return
-	}
-	prod, gerr := h.productSvc.GetByID(r.Context(), productID)
-	if gerr != nil {
-		h.actionError(w, r, gerr)
-		return
-	}
-	var suggested *decimal.Decimal
-	if ok && strings.TrimSpace(raw) != "" {
-		suggested = &unitPrice
-	}
-	h.renderPartial(w, r, "purchase_price_cell.gohtml",
-		priceCellData(productID, prod.CurrentPrice, suggested, false, h.errMsg(r, err), true))
 }

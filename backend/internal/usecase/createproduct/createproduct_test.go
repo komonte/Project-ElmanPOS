@@ -11,11 +11,13 @@ import (
 	"testing"
 
 	_ "github.com/lib/pq"
+	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar, una categoría, y el
@@ -325,5 +327,36 @@ func TestCreateRollsBackNewBrandAndCategory(t *testing.T) {
 	}
 	if product.BrandID != nil || product.CategoryID != 0 {
 		t.Errorf("request product changed: brand %v, category %d", product.BrandID, product.CategoryID)
+	}
+}
+
+// Con precio: queda vigente y en la auditoría con quién lo puso. Un precio
+// mal escrito no deja nada.
+func TestCreateWithPrice(t *testing.T) {
+	f := newFixture(t)
+	var admin int64
+	if err := f.tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.create.price', 'Admin', 'x', 'ADMIN') RETURNING id;`).Scan(&admin); err != nil {
+		t.Fatal(err)
+	}
+	price := decimal.RequireFromString("1250.50")
+	p, err := f.svc.Create(f.ctx, Request{Product: f.product("con precio test"), Price: &price, By: admin})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM prices WHERE product_id = $1 AND unit_price = 1250.50;`, p.ID); n != 1 {
+		t.Errorf("prices: %d", n)
+	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "price audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'prices' AND record_id IN (SELECT id FROM prices WHERE product_id = $2)"), admin, p.ID)
+
+	bad := decimal.RequireFromString("0")
+	_, err = f.svc.Create(f.ctx, Request{Product: f.product("precio malo test"), Price: &bad, By: admin})
+	wantErr(t, err, model.ErrInvalidPrice)
+	if n := f.productsNamed(t, "PRECIO MALO TEST"); n != 0 {
+		t.Errorf("bad price left a product")
+	}
+	if _, err := f.svc.Create(f.ctx, Request{Product: f.product("sin quien test"), Price: &price}); err == nil {
+		t.Error("a price without By must fail")
 	}
 }

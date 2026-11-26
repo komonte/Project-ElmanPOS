@@ -24,6 +24,9 @@ var (
 	ErrDuplicateTaxID = fmt.Errorf("tax id %w", ErrDuplicate)
 	ErrDuplicateSKU   = fmt.Errorf("sku %w", ErrDuplicate)
 	ErrDuplicateCode  = fmt.Errorf("barcode %w", ErrDuplicate)
+	// ErrDuplicateUsername: el usuario ya existe, sin importar mayúsculas
+	// (uq_users_username_lower de la 0019).
+	ErrDuplicateUsername = fmt.Errorf("username %w", ErrDuplicate)
 
 	// ErrConflict es la base de los errores de "choca con cómo están los
 	// datos ahora" (ej. desactivar una categoría con hijas activas). Igual

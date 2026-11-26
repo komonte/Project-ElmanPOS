@@ -3,7 +3,7 @@ export
 
 DB_URL := postgresql://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
 
-.PHONY: help db-up db-down db-stop db-reset db-migrate-up db-migrate-down db-seed psql \
+.PHONY: help db-up db-down db-stop db-reset db-migrate-up db-migrate-down db-seed psql passwd \
         build-ui build lint test dev check \
         api-brands api-taxes web-root web-brands web-taxes web-es
 
@@ -16,6 +16,7 @@ help:
 	@echo "  make db-migrate-down Roll back last migration"
 	@echo "  make db-seed        Load seed data"
 	@echo "  make psql           Open psql shell"
+	@echo "  make passwd U=admin Set a user's password (asks twice, hidden)"
 	@echo ""
 	@echo "=== Build ==="
 	@echo "  make build-ui       Build Tailwind CSS"
@@ -70,6 +71,12 @@ db-seed:
 ## Open a psql shell against the local DB
 psql:
 	psql "$(DB_URL)"
+
+## Set a user's password (F-13): make passwd U=admin
+## (U, not USER: make already has USER = the shell's user.)
+passwd:
+	@test -n "$(U)" || { echo "usage: make passwd U=<username>"; exit 2; }
+	cd backend && go run ./cmd/api passwd "$(U)"
 
 # ── Build ─────────────────────────────────────────────────────────
 

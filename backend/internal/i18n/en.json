@@ -437,5 +437,22 @@
   "error.import_quantity_invalid": "The quantity is not a number.",
   "error.import_cost_invalid": "The cost is not a number.",
   "error.import_expiry_invalid": "The expiry is not a date (2027-03-31 or 31/03/2027).",
-  "error.import_code_not_found": "No product has that barcode or SKU."
+  "error.import_code_not_found": "No product has that barcode or SKU.",
+  "nav.group_cash": "Register",
+  "nav.cash": "Open register",
+  "cash.title": "Cash register",
+  "cash.hint": "Before selling, open the register with the cash there is to give change. You cannot charge with the register closed.",
+  "cash.no_register_title": "This store has no cash register yet",
+  "cash.no_register_hint": "Create the register once. Then open it at the start of the day.",
+  "cash.create_register": "Create “Caja 1”",
+  "cash.closed_title": "%s is closed",
+  "cash.open_title": "%s is open",
+  "cash.open_since": "Open since %s.",
+  "cash.opening_amount": "Opening cash (float)",
+  "cash.opening_hint": "The money in the drawer to give change. It can be 0.",
+  "cash.open": "Open register",
+  "error.cash_opening_invalid": "The opening cash must be an amount of 0 or more, with up to 2 decimals.",
+  "error.cash_no_register": "This store has no cash register yet: create it first.",
+  "error.cash_already_open": "The register is already open.",
+  "error.cash_several_registers": "There is more than one active register in the store. For now the system works with a single register."
 }

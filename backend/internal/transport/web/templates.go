@@ -32,6 +32,7 @@ var pageFiles = []string{
 	"templates/pages/count_review.gohtml",
 	"templates/pages/count_import.gohtml",
 	"templates/pages/adjustments.gohtml",
+	"templates/pages/cash.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)

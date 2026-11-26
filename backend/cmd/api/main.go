@@ -28,6 +28,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 )
 
@@ -115,10 +116,12 @@ func main() {
 	purchasesH := transport.NewPurchasesHandler(purchaseSvc)
 	stockCountSvc := stockcounts.New(db, postgres.NewTxRunner(db))
 	adjustmentSvc := adjustments.New(db, postgres.NewTxRunner(db))
+	// Caja (F-11): abrir con el efectivo inicial.
+	sessionSvc := sessions.New(db, postgres.NewTxRunner(db))
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc, adjustmentSvc, sessionSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
@@ -197,6 +200,9 @@ func main() {
 	mux.HandleFunc("GET /adjustments", webH.AdjustmentsPage)
 	mux.HandleFunc("POST /adjustments", webH.AdjustmentsRecord)
 	mux.HandleFunc("GET /adjustments/product", webH.AdjustmentsProduct)
+	mux.HandleFunc("GET /cash", webH.CashPage)
+	mux.HandleFunc("POST /cash/register", webH.CashCreateRegister)
+	mux.HandleFunc("POST /cash/open", webH.CashOpen)
 	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)

@@ -437,5 +437,22 @@
   "error.import_quantity_invalid": "La cantidad no es un número.",
   "error.import_cost_invalid": "El costo no es un número.",
   "error.import_expiry_invalid": "El vencimiento no es una fecha (31/03/2027).",
-  "error.import_code_not_found": "Ningún producto tiene ese código de barras o SKU."
+  "error.import_code_not_found": "Ningún producto tiene ese código de barras o SKU.",
+  "nav.group_cash": "Caja",
+  "nav.cash": "Abrir caja",
+  "cash.title": "Caja",
+  "cash.hint": "Antes de vender, abrí la caja con el efectivo que hay para dar cambio. Sin la caja abierta no se puede cobrar.",
+  "cash.no_register_title": "Este local todavía no tiene caja",
+  "cash.no_register_hint": "Creá la caja una sola vez. Después se abre al empezar el día.",
+  "cash.create_register": "Crear «Caja 1»",
+  "cash.closed_title": "%s está cerrada",
+  "cash.open_title": "%s está abierta",
+  "cash.open_since": "Abierta desde %s.",
+  "cash.opening_amount": "Efectivo inicial (cambio)",
+  "cash.opening_hint": "La plata que hay en el cajón para dar vuelto. Puede ser 0. Escribilo como lo contás: 15.000 o 15000.",
+  "cash.open": "Abrir caja",
+  "error.cash_opening_invalid": "El efectivo inicial tiene que ser un monto de 0 o más, con hasta 2 decimales.",
+  "error.cash_no_register": "Este local todavía no tiene caja: creala primero.",
+  "error.cash_already_open": "La caja ya está abierta.",
+  "error.cash_several_registers": "Hay más de una caja activa en el local. Por ahora el sistema trabaja con una sola caja."
 }

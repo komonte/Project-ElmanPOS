@@ -49,3 +49,37 @@ func formatPercent(lang string, d decimal.Decimal) string {
 func formatQuantity(lang string, d decimal.Decimal) string {
 	return formatPercent(lang, d)
 }
+
+// parseFormMoney lee un importe escrito a mano, como se escribe plata en el
+// almacén: "15.000", "15000", "1.500,50", "$ 2.000" o "12,5". Vacío o mal
+// escrito: false.
+//
+// A diferencia de una cantidad (parseFormDecimal), un importe nunca tiene 3
+// decimales: un punto seguido de 3 dígitos es de miles ("15.000" son quince
+// mil, no quince). Con punto y coma, el que va último es el decimal
+// ("1.500,50" o "1,500.50").
+func parseFormMoney(s string) (decimal.Decimal, bool) {
+	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "$"))
+	dot, comma := strings.LastIndex(s, "."), strings.LastIndex(s, ",")
+	switch {
+	case dot >= 0 && comma >= 0:
+		thousands, dec := ".", ","
+		if dot > comma {
+			thousands, dec = ",", "."
+		}
+		s = strings.ReplaceAll(s, thousands, "")
+		s = strings.Replace(s, dec, ".", 1)
+	case comma >= 0:
+		s = strings.Replace(s, ",", ".", 1)
+	case dot >= 0 && (strings.Count(s, ".") > 1 || len(s)-dot-1 == 3):
+		s = strings.ReplaceAll(s, ".", "")
+	}
+	if s == "" {
+		return decimal.Zero, false
+	}
+	d, err := decimal.NewFromString(s)
+	if err != nil {
+		return decimal.Zero, false
+	}
+	return d, true
+}

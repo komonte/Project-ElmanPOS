@@ -497,9 +497,10 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Price/cost changes, taxes (F-03, F-04) | ✓ | ✗ | ✗ |
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
-  | Reports | ✓ | own-session | ✓ |
+  | Sales and cash & margin reports (R-06, R-07) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
+  | Stock reports (R-01, R-02, R-04, R-05; pending) | ✓ | ✗ | ✓ |
   | User management | ✓ | ✗ | ✗ |
-- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users` (admin only). An unknown role or an inactive user has none.
+- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports` (admin only). An unknown role or an inactive user has none.
 - **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
 - **Without the permission** (`transport.Guard.Require`, after `AuthMiddleware`): a page → 403 "No permission" with the role's menu, "Your user is Cashier and cannot open this page." and "Back" to the role's start; htmx → 403 with the message as text (the toast shows it); API → 403 `{"error": "forbidden"}`. The server log records who, which permission and which path; `audit_log` does not (noise).
 - **Menu and buttons by role:** the menu, the start page and the buttons show only what the role can use: a cashier sees Sell, Start and Cash, without "Void"; a stock clerk sees the catalog (without taxes) and inventory, and the product's price and cost without their forms. Hiding is comfort: the server rejects anyway.
@@ -536,13 +537,19 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Semantics:** `Σ stock_balances.quantity × current unit_cost` (per product), grouped by category.
 - **Output:** total cost value on hand; per-category breakdown.
 
+### R-06 / R-07: period and buckets
+- **Who and where:** permission `reports`, Admin only; menu "Reports". Code: `usecase/reports`, `postgres.ReportStore`, `web/reports.go`.
+- **Period** (`model.ParsePeriod`): whole days in the store's time zone (`STORE_TIMEZONE`), "from" and "to" included, in the address (`?from=2026-11-20&to=2026-11-26`) so a report can be saved or sent as a link. No dates → today; one date → that day. Up to 366 days; "from" after "to", a bad date or a longer period → the form with the message and what was typed. Shortcuts: Today · Yesterday · Last 7 days · This month · Last month.
+- **Buckets** (`Period.Buckets`): 1 day → by hour; up to 62 days → by day; more → by month (the first month starts at "from"). They are built in Go in the store's zone (each local midnight, hour or first of the month; a DST day has 23 or 25 hours) and the database only says which bucket each sale falls in with `width_bucket(created_at, <bucket starts>)`, so no SQL depends on a time zone. Uses `idx_sales_created_at`.
+
 ### R-06: Sales by Period & Payment Method
-- **Semantics:** `sales` (`status = 'COMPLETED'`) grouped by day/hour, with `payments` split by method.
-- **Output:** revenue per period, per method; average ticket; item count.
+- **Semantics:** `sales` with `status = 'COMPLETED'` by `created_at`, grouped by bucket, with `payments` split by method. The cash payment is the amount applied to the sale (change not stored), so a bucket's payments add up to its total.
+- **Output** (`/reports/sales`): total sold, number of sales, average ticket (total ÷ sales, in cents), units (products sold by unit) and kg (sold by weight) apart — adding them says nothing. Per method: amount, number of payments and share of the total, only the methods used, in the usual order. Per bucket: sales, total, one column per method and average ticket. By hour, the hours from the first to the last with sales (the empty ones between them show 0); by day or month, every bucket. Voided sales are not in any total: one line says how many and for how much (by when they were made).
 
 ### R-07: Cash & Margin Report
-- **Semantics:** per session: opening float, sales, voids, declared vs expected per method (from `cash_audits`), and margin = `Σ(sale_items.unit_price − unit_cost) × quantity`.
-- **Output:** daily cash reconciliation + gross margin, using exact batch costs (**P-04**).
+- **Semantics:** per **closed** session opened in the period (a session belongs to the day it was opened, even if it closes after midnight): opening float, sales and voided (count and total), the cash audit from `cash_audits` and the `COMPLETED` payments through `model.NewCloseSummary` (the same as the close summary, F-12), and the gross margin. **Open sessions are left out** and counted in a note ("A register is open in this period: it shows here once it is closed"): showing what is expected before counting would defeat the blind close.
+- **Margin, without IVA:** costs are stored without IVA and prices with it. Per line: `net = round(quantity × unit_price, 2) × 100 / (100 + tax_rate)` and `cost = quantity × unit_cost`; `unit_cost` is already the exact cost of what went out (FIFO batches, the average for what had no batch: **P-04**). Margin = Σ net − Σ cost; margin % over the net, one decimal. **Lines without a cost** (`unit_cost = 0`, a product sold before its cost was set) are left out of the margin and shown apart ("$ X of products without a cost were sold"), so they do not inflate it.
+- **Output** (`/reports/cash`): total sold, margin and %, the period's net cash difference ("Short"/"Over"/"Even"), number of closed sessions; one row per session with register and when it opened, who opened and closed, the opening float, sales and voided, the difference, the margin and a link to its close summary (`/cash/sessions/{id}`); totals.
 
 ---
 

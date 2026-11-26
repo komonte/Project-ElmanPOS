@@ -9,10 +9,12 @@ import (
 var ErrNilStockMovement = errors.New("stock movement cannot be nil")
 
 // Tipos de movimiento (ENUM movement_type, 02 3). Por ahora se usan el de
-// compra y el de ajuste (conteos); los demás llegan con ventas y devoluciones.
+// compra, el de ajuste (conteos y salidas conocidas) y el de venta; el de
+// devolución llega con la anulación (F-08).
 const (
 	MovementPurchase   = "PURCHASE"
 	MovementAdjustment = "ADJUSTMENT"
+	MovementSale       = "SALE"
 )
 
 // Motivos de un ajuste (ENUM adjustment_reason). ReasonCount es el del
@@ -27,7 +29,7 @@ const ReasonCount = "COUNT"
 //
 // No tiene Validate: lo arma el caso de uso con datos ya validados. La DB
 // revisa el signo según el tipo y que tenga exactamente un origen (compra,
-// venta o conteo).
+// venta, conteo o salida conocida).
 type StockMovement struct {
 	ID           int64  `json:"id" db:"id"`
 	ProductID    int64  `json:"product_id" db:"product_id"`
@@ -38,6 +40,7 @@ type StockMovement struct {
 	Reason     string          `json:"reason,omitempty" db:"reason"`
 	Quantity   decimal.Decimal `json:"quantity" db:"quantity"` // positiva si entra
 	UnitCost   decimal.Decimal `json:"unit_cost" db:"unit_cost"`
+	SaleID     *int64          `json:"sale_id" db:"sale_id"`
 	PurchaseID *int64          `json:"purchase_id" db:"purchase_id"`
 	CountID    *int64          `json:"count_id" db:"count_id"`
 	// AdjustmentID: la salida conocida que lo originó (F-09b).

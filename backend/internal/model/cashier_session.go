@@ -20,6 +20,15 @@ var (
 	ErrCashierSessionAlreadyOpen = errors.New("cash register already has an open session")
 )
 
+// CashRegister es una caja (terminal) de un local (02 4.9). Las sesiones y
+// el arqueo son de la caja, no del local.
+type CashRegister struct {
+	ID       int64  `json:"id" db:"id"`
+	StoreID  int64  `json:"store_id" db:"store_id"`
+	Name     string `json:"name" db:"name"`
+	IsActive bool   `json:"is_active" db:"is_active"`
+}
+
 // CashierSession es un turno de una caja (02 4.15, F-11/F-12): se abre con
 // el efectivo inicial (el cambio), acumula ventas y se cierra con el arqueo.
 // Una caja tiene a lo sumo una sesión abierta (BR-02, índice de la 0017), y

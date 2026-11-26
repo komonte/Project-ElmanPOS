@@ -73,6 +73,9 @@ type Sale struct {
 	Items    []*SaleItem `json:"items" db:"-"`
 	Payments []*Payment  `json:"payments" db:"-"`
 
+	// Solo lectura, para el ticket.
+	RegisterName string `json:"register_name" db:"-"`
+
 	// Change es el vuelto: lo que el efectivo entregado pasa del total. No
 	// se guarda (SettlePayments lo calcula).
 	Change decimal.Decimal `json:"change" db:"-"`

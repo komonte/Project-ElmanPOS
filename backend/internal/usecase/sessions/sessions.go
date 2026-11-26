@@ -1,5 +1,5 @@
 // Package sessions es el caso de uso F-11: abrir la caja con el efectivo
-// inicial y saber si está abierta. El cierre con arqueo (F-12) llega después.
+// inicial, saber si está abierta y cerrarla con el arqueo (F-12, close.go).
 //
 // Decisiones (2026-11-26):
 //   - Se usa la única caja activa del único local activo. Si el local no
@@ -33,7 +33,7 @@ var ErrNoRegister = fmt.Errorf("the store has no cash register: %w", service.Err
 
 type Service struct {
 	db postgres.DBTX     // lecturas y la apertura (un solo INSERT)
-	tx postgres.TxRunner // CreateRegister
+	tx postgres.TxRunner // CreateRegister y Close
 }
 
 func New(db postgres.DBTX, tx postgres.TxRunner) *Service {

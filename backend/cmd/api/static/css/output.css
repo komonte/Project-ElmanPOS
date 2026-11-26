@@ -317,8 +317,14 @@
   .max-w-6xl {
     max-width: var(--container-6xl);
   }
+  .max-w-36 {
+    max-width: calc(var(--spacing) * 36);
+  }
   .max-w-40 {
     max-width: calc(var(--spacing) * 40);
+  }
+  .max-w-44 {
+    max-width: calc(var(--spacing) * 44);
   }
   .max-w-60 {
     max-width: calc(var(--spacing) * 60);

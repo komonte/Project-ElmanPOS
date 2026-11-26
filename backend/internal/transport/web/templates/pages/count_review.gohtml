@@ -1,0 +1,64 @@
+{{define "content"}}
+{{/* Revisión de un conteo (F-09): lo que dice el sistema, lo contado y la
+     diferencia, solo de los productos que cambian. En borrador se escribe el
+     costo (y el vencimiento, si controla lotes) de lo que sobra, y se
+     confirma. Confirmado, es de solo lectura.
+
+     Datos: .Count, .Rows (countReviewRow), .Summary, .Draft, .Done (recién
+     confirmado), .Error y .BatchNumber (el lote de lo que sobra). */}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "count.review_title"}}</h1>
+  <p class="mt-2 text-muted max-w-2xl">
+    {{if .Draft}}{{t "count.review_hint"}}{{else}}{{printf (t "count.confirmed_on") .Count.ID (formatTime .Count.ConfirmedAt)}}{{end}}
+  </p>
+</header>
+
+<div class="space-y-6">
+  {{if .Done}}
+  <div role="status" class="p-4 bg-surface border-l-8 border-tag rounded-sm">
+    <p class="font-display font-bold text-2xl">{{t "count.confirmed"}}</p>
+    <p class="text-muted">{{printf (t "count.confirmed_detail") (len .Rows)}}</p>
+  </div>
+  {{end}}
+  {{if .Error}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+  {{end}}
+
+  {{template "count_review_summary.gohtml" (dict "Summary" .Summary)}}
+
+  {{if .Rows}}
+  <div class="overflow-x-auto border-2 border-line rounded-md bg-surface">
+    <table class="min-w-full text-left">
+      <thead class="border-b-2 border-line text-muted">
+        <tr>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "picker.product"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold text-right">{{t "count.system"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold text-right">{{t "count.total"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold text-right">{{t "count.difference"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "count.cost"}}</th>
+          <th scope="col" class="px-3 py-3 font-bold">{{t "count.expiry"}}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {{range .Rows}}{{template "count_review_row.gohtml" (dict "Row" .)}}{{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-muted">{{printf (t "count.review_batches") .BatchNumber}}</p>
+  {{else}}
+  <p class="text-muted">{{t "count.review_no_changes"}}</p>
+  {{end}}
+
+  <div class="flex flex-wrap items-center gap-4">
+    {{if .Draft}}
+    <form method="post" action="/counts/{{.Count.ID}}/confirm"
+          onsubmit="return confirm('{{printf (t "count.confirm_ask") (len .Rows)}}')">
+      <button type="submit" class="btn-primary">{{t "count.confirm"}}</button>
+    </form>
+    <a href="/counts" class="btn-secondary">{{t "count.back"}}</a>
+    {{else}}
+    <a href="/counts" class="btn-secondary">{{t "count.new"}}</a>
+    {{end}}
+  </div>
+</div>
+{{end}}

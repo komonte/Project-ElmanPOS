@@ -12,6 +12,8 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 )
 
 // Conteo de stock (F-09), que también es el inventario inicial. Se cuenta en
@@ -183,4 +185,162 @@ func (h *WebHandler) countSheetData(r *http.Request, c *model.StockCount, form c
 		"Count": c, "Entries": entries, "Sectors": sectors,
 		"Form": form, "Last": last, "Error": errMsg,
 	}, nil
+}
+
+// countReviewRow es un producto con diferencia en la revisión: el renglón del
+// conteo y, si se escribió un costo o vencimiento que no se pudo guardar, lo
+// escrito y el error.
+type countReviewRow struct {
+	*model.StockCountItem
+	Diff        decimal.Decimal
+	CostInput   string // lo que se ve en el campo del costo
+	ExpiryInput string
+	Error       string
+	CountID     int64
+	Editable    bool // borrador: se puede escribir costo y vencimiento
+}
+
+// countReviewSummary son los números de arriba de la revisión.
+type countReviewSummary struct {
+	Up, Down, Same int // productos que suben, bajan o coinciden
+	// NoCost: suben sin costo escrito (van al promedio de hoy). ZeroCost: de
+	// esos, los que nunca tuvieron costo (quedan valorizados en 0).
+	NoCost, ZeroCost int
+	OOB              bool // la respuesta de un renglón lo actualiza fuera de lugar
+}
+
+// CountsReview handles GET /counts/{id}/review: la comparación con el
+// sistema antes de confirmar (o, si ya está confirmado, lo que se ajustó).
+// Solo lista los productos con diferencia; los que coinciden se cuentan.
+func (h *WebHandler) CountsReview(w http.ResponseWriter, r *http.Request) {
+	countID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	h.renderCountReview(w, r, countID, r.FormValue("done") == "1", "")
+}
+
+func (h *WebHandler) renderCountReview(w http.ResponseWriter, r *http.Request, countID int64, done bool, errMsg string) {
+	c, err := h.stockCounts.Get(r.Context(), countID)
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			http.Redirect(w, r, "/counts", http.StatusSeeOther)
+			return
+		}
+		http.Error(w, h.errMsg(r, err), http.StatusInternalServerError)
+		return
+	}
+	lang := transport.GetLocale(r.Context())
+	var rows []countReviewRow
+	for _, it := range c.Items {
+		if row := newCountReviewRow(lang, c, it); !row.Diff.IsZero() {
+			rows = append(rows, row)
+		}
+	}
+	h.render(w, r, "count_review.gohtml", map[string]any{
+		"Section": "counts", "TitleKey": "count.review_title",
+		"Count": c, "Rows": rows, "Summary": countSummary(c, false),
+		"Draft": c.Status == model.CountDraft, "Done": done, "Error": errMsg,
+		"BatchNumber": stockcounts.AutoBatchNumber(c.ID),
+	})
+}
+
+// newCountReviewRow arma la fila de un producto con lo guardado.
+func newCountReviewRow(lang string, c *model.StockCount, it *model.StockCountItem) countReviewRow {
+	row := countReviewRow{StockCountItem: it, Diff: it.Difference(), ExpiryInput: it.ExpiryDate,
+		CountID: c.ID, Editable: c.Status == model.CountDraft}
+	if it.UnitCost != nil {
+		row.CostInput = formatQuantity(lang, *it.UnitCost)
+	}
+	return row
+}
+
+func countSummary(c *model.StockCount, oob bool) countReviewSummary {
+	s := countReviewSummary{OOB: oob}
+	for _, it := range c.Items {
+		d := it.Difference()
+		switch {
+		case d.IsPositive():
+			s.Up++
+			if it.UnitCost == nil {
+				s.NoCost++
+				if it.AvgCost == nil {
+					s.ZeroCost++
+				}
+			}
+		case d.IsNegative():
+			s.Down++
+		default:
+			s.Same++
+		}
+	}
+	return s
+}
+
+// CountsSetDetails handles POST /counts/{id}/items/{productID}/details: guarda
+// el costo y el vencimiento de un producto que sube (al salir del campo) y
+// responde su fila, más el resumen de arriba (hx-swap-oob). Con error, la
+// fila vuelve con lo escrito y el mensaje.
+func (h *WebHandler) CountsSetDetails(w http.ResponseWriter, r *http.Request) {
+	countID, err1 := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	productID, err2 := strconv.ParseInt(r.PathValue("productID"), 10, 64)
+	if err1 != nil || err2 != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	costRaw := strings.TrimSpace(r.FormValue("unit_cost"))
+	expiry := strings.TrimSpace(r.FormValue("expiry_date"))
+
+	var err error
+	var cost *decimal.Decimal
+	if costRaw != "" {
+		if d, ok := parseFormDecimal(costRaw); ok {
+			cost = &d
+		} else {
+			err = model.ErrInvalidCost
+		}
+	}
+	if err == nil {
+		err = h.stockCounts.SetDetails(r.Context(), countID, productID, cost, expiry)
+	}
+
+	c, gerr := h.stockCounts.Get(r.Context(), countID)
+	if gerr != nil {
+		h.actionError(w, r, gerr)
+		return
+	}
+	var item *model.StockCountItem
+	for _, it := range c.Items {
+		if it.ProductID == productID {
+			item = it
+		}
+	}
+	if item == nil {
+		h.actionError(w, r, service.ErrNotFound)
+		return
+	}
+	row := newCountReviewRow(transport.GetLocale(r.Context()), c, item)
+	if err != nil {
+		row.CostInput, row.ExpiryInput, row.Error = costRaw, expiry, h.errMsg(r, err)
+	}
+	h.renderPartial(w, r, "count_review_row.gohtml", map[string]any{"Row": row})
+	h.renderPartial(w, r, "count_review_summary.gohtml", map[string]any{"Summary": countSummary(c, true)})
+}
+
+// CountsConfirm handles POST /counts/{id}/confirm: confirma el conteo (mueve
+// el stock, F-09) y vuelve a la revisión, ya de solo lectura. Con error (por
+// ejemplo, un producto quedaría en negativo) la revisión vuelve con el
+// mensaje y el conteo sigue en borrador.
+func (h *WebHandler) CountsConfirm(w http.ResponseWriter, r *http.Request) {
+	countID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	if _, err := h.stockCounts.Confirm(r.Context(), countID); err != nil {
+		h.renderCountReview(w, r, countID, false, h.errMsg(r, err))
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/counts/%d/review?done=1", countID), http.StatusSeeOther)
 }

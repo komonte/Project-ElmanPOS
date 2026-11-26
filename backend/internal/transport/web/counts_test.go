@@ -140,3 +140,109 @@ func TestRenderCounts(t *testing.T) {
 		}
 	})
 }
+
+// reviewCount: un conteo con un producto de cada caso.
+func reviewCount(status string) *model.StockCount {
+	d := decimal.RequireFromString
+	cost, avg := d("50"), d("100")
+	confirmedAt := "2026-11-26T10:30:00Z"
+	c := &model.StockCount{ID: 7, Status: status, Items: []*model.StockCountItem{
+		{ProductID: 1, ProductName: "YERBA", SystemQuantity: d("0"), CountedQuantity: d("24"), UnitCost: &cost},
+		{ProductID: 2, ProductName: "FIDEOS", SystemQuantity: d("2"), CountedQuantity: d("5"), AvgCost: &avg},
+		{ProductID: 3, ProductName: "QUESO", SystemQuantity: d("0"), CountedQuantity: d("1.5"), ControlsBatches: true,
+			ExpiryDate: "2027-03-31"},
+		{ProductID: 4, ProductName: "SALAME", SystemQuantity: d("10"), CountedQuantity: d("7"), ControlsBatches: true},
+		{ProductID: 5, ProductName: "ARROZ", SystemQuantity: d("8"), CountedQuantity: d("8")},
+	}}
+	if status == model.CountConfirmed {
+		c.ConfirmedAt = &confirmedAt
+	}
+	return c
+}
+
+func TestCountSummary(t *testing.T) {
+	got := countSummary(reviewCount(model.CountDraft), false)
+	want := countReviewSummary{Up: 3, Down: 1, Same: 1, NoCost: 2, ZeroCost: 1}
+	if got != want {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestRenderCountReview(t *testing.T) {
+	e := NewTemplateEngine()
+	render := func(t *testing.T, name string, data map[string]any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := e.Render(&buf, "es", name, data); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+	page := func(c *model.StockCount, done bool, errMsg string) map[string]any {
+		var rows []countReviewRow
+		for _, it := range c.Items {
+			if row := newCountReviewRow("es", c, it); !row.Diff.IsZero() {
+				rows = append(rows, row)
+			}
+		}
+		return map[string]any{"Section": "counts", "TitleKey": "count.review_title", "Count": c, "Rows": rows,
+			"Summary": countSummary(c, false), "Draft": c.Status == model.CountDraft, "Done": done, "Error": errMsg,
+			"BatchNumber": "I-7"}
+	}
+
+	t.Run("draft", func(t *testing.T) {
+		html := render(t, "count_review.gohtml", page(reviewCount(model.CountDraft), false, ""))
+		for _, s := range []string{"3 productos suben, 1 bajan y 1 coinciden",
+			"2 productos suben sin costo escrito", "1 de ellos nunca tuvieron costo",
+			"YERBA", "+24", `value="50"`, "SALAME", "-3", "Se descuenta de los lotes",
+			"Promedio de hoy: $ 100,00", "Sin costo cargado",
+			`hx-post="/counts/7/items/1/details"`, `hx-include="#count-row-1"`,
+			`type="date" name="expiry_date" value="2027-03-31"`, "lote I-7",
+			`action="/counts/7/confirm"`, "Cambia el stock de 4 productos", `href="/counts"`} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		// Coincide: no aparece. Sin lotes no hay vencimiento; lo que baja no tiene costo.
+		if strings.Contains(html, "ARROZ") {
+			t.Error("a product that matches must not be listed")
+		}
+		if n := strings.Count(html, `name="expiry_date"`); n != 1 {
+			t.Errorf("expiry inputs: got %d, want 1 (QUESO)", n)
+		}
+		if n := strings.Count(html, `name="unit_cost"`); n != 3 {
+			t.Errorf("cost inputs: got %d, want 3 (the ones that go up)", n)
+		}
+	})
+
+	t.Run("confirmed: read only", func(t *testing.T) {
+		html := render(t, "count_review.gohtml", page(reviewCount(model.CountConfirmed), true, ""))
+		for _, s := range []string{"Conteo confirmado", "Se ajustó el stock de 4 productos", "Conteo N° 7, confirmado el",
+			"$ 50,00", "2027-03-31"} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		for _, s := range []string{`name="unit_cost"`, `name="expiry_date"`, "/confirm", "/details"} {
+			if strings.Contains(html, s) {
+				t.Errorf("confirmed count must be read only: found %q", s)
+			}
+		}
+	})
+
+	t.Run("row with an error and summary out of band", func(t *testing.T) {
+		c := reviewCount(model.CountDraft)
+		row := newCountReviewRow("es", c, c.Items[1])
+		row.CostInput, row.Error = "mil", "El costo tiene que ser mayor a 0"
+		html := render(t, "count_review_row.gohtml", map[string]any{"Row": row})
+		for _, s := range []string{`<tr id="count-row-2"`, `role="alert"`, `value="mil"`} {
+			if !strings.Contains(html, s) {
+				t.Errorf("row: missing %q", s)
+			}
+		}
+		sum := render(t, "count_review_summary.gohtml", map[string]any{"Summary": countSummary(c, true)})
+		if !strings.Contains(sum, `id="count-review-summary" hx-swap-oob="true"`) {
+			t.Errorf("summary must swap out of band: %s", sum)
+		}
+	})
+}

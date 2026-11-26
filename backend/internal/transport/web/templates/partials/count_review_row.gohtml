@@ -1,0 +1,38 @@
+{{/* Una fila de la revisión de un conteo: un producto con diferencia. Si
+     sube y el conteo está en borrador, se escribe el costo (y el
+     vencimiento, si controla lotes); al salir del campo se guarda y vuelve
+     esta fila (más el resumen, fuera de lugar). Datos: .Row (countReviewRow). */}}
+{{with .Row}}
+<tr id="count-row-{{.ProductID}}" class="{{if .Error}}bg-danger-soft{{end}}">
+  <td class="px-3 py-3 min-w-48 font-bold">{{.ProductName}}
+    {{if .Error}}<p role="alert" class="mt-1 text-danger">{{.Error}}</p>{{end}}</td>
+  <td class="px-3 py-3 text-right tabular">{{qty .SystemQuantity}}</td>
+  <td class="px-3 py-3 text-right tabular">{{qty .CountedQuantity}}</td>
+  <td class="px-3 py-3 text-right tabular font-bold {{if .Diff.IsNegative}}text-danger{{else}}text-stock{{end}}">{{if .Diff.IsPositive}}+{{end}}{{qty .Diff}}</td>
+  {{if .Diff.IsPositive}}
+  <td class="px-3 py-3">
+    {{if .Editable}}
+    <input type="text" name="unit_cost" inputmode="decimal" autocomplete="off" value="{{.CostInput}}"
+           aria-label="{{printf (t "count.cost_for") .ProductName}}"
+           hx-post="/counts/{{.CountID}}/items/{{.ProductID}}/details" hx-trigger="change"
+           hx-include="#count-row-{{.ProductID}}" hx-target="#count-row-{{.ProductID}}" hx-swap="outerHTML"
+           class="field max-w-36 tabular">
+    {{else if .UnitCost}}<span class="tabular">{{money .UnitCost}}</span>{{end}}
+    <span class="block text-sm text-muted">{{if .AvgCost}}{{printf (t "count.avg_now") (money .AvgCost)}}{{else}}{{t "count.no_avg"}}{{end}}</span>
+  </td>
+  <td class="px-3 py-3">
+    {{if .ControlsBatches}}
+    {{if .Editable}}
+    <input type="date" name="expiry_date" value="{{.ExpiryInput}}"
+           aria-label="{{printf (t "count.expiry_for") .ProductName}}"
+           hx-post="/counts/{{.CountID}}/items/{{.ProductID}}/details" hx-trigger="change"
+           hx-include="#count-row-{{.ProductID}}" hx-target="#count-row-{{.ProductID}}" hx-swap="outerHTML"
+           class="field max-w-44">
+    {{else}}{{.ExpiryDate}}{{end}}
+    {{end}}
+  </td>
+  {{else}}
+  <td class="px-3 py-3 text-sm text-muted" colspan="2">{{if .ControlsBatches}}{{t "count.fifo"}}{{end}}</td>
+  {{end}}
+</tr>
+{{end}}

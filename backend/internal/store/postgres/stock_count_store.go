@@ -109,8 +109,9 @@ func (s *StockCountStore) LockDraft(ctx context.Context, id int64) (*model.Stock
 }
 
 // GetByID devuelve un conteo con sus renglones (por nombre de producto) y
-// las cargas de cada uno (en el orden en que se hicieron). ErrNotFound si no
-// existe.
+// las cargas de cada uno (en el orden en que se hicieron). Cada renglón trae
+// además del producto su nombre, si controla lotes y su costo promedio
+// vigente (para revisar antes de confirmar). ErrNotFound si no existe.
 func (s *StockCountStore) GetByID(ctx context.Context, id int64) (*model.StockCount, error) {
 	c, err := scanStockCount(s.db.QueryRowContext(ctx, `
 		SELECT `+stockCountColumns+` FROM stock_counts WHERE id = $1;`, id))
@@ -123,9 +124,13 @@ func (s *StockCountStore) GetByID(ctx context.Context, id int64) (*model.StockCo
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT i.id, i.count_id, i.product_id, i.system_quantity, i.counted_quantity, i.unit_cost,
-		       COALESCE(to_char(i.expiry_date, 'YYYY-MM-DD'), ''), i.created_at, i.updated_at, p.name
+		       COALESCE(to_char(i.expiry_date, 'YYYY-MM-DD'), ''), i.created_at, i.updated_at,
+		       p.name, p.controls_batches, c.avg_cost
 		FROM stock_count_items i
 		JOIN products p ON p.id = i.product_id
+		LEFT JOIN LATERAL (
+			SELECT avg_cost FROM product_costs WHERE product_id = i.product_id ORDER BY valid_from DESC LIMIT 1
+		) c ON TRUE
 		WHERE i.count_id = $1
 		ORDER BY p.name, i.id;`, id)
 	if err != nil {
@@ -136,7 +141,8 @@ func (s *StockCountStore) GetByID(ctx context.Context, id int64) (*model.StockCo
 	for rows.Next() {
 		it := new(model.StockCountItem)
 		err := rows.Scan(&it.ID, &it.CountID, &it.ProductID, &it.SystemQuantity, &it.CountedQuantity,
-			&it.UnitCost, &it.ExpiryDate, &it.CreatedAt, &it.UpdatedAt, &it.ProductName)
+			&it.UnitCost, &it.ExpiryDate, &it.CreatedAt, &it.UpdatedAt,
+			&it.ProductName, &it.ControlsBatches, &it.AvgCost)
 		if err != nil {
 			rows.Close()
 			return nil, err

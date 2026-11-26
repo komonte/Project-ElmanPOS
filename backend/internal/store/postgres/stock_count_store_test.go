@@ -135,6 +135,26 @@ func TestStockCountStore_ItemsAndEntries(t *testing.T) {
 		y.Entries[0].ProductID != yerba.ID || !y.CountedQuantity.Equal(decimal.RequireFromString("7.5")) {
 		t.Errorf("get entries: got %+v", y.Entries)
 	}
+	if full.Items[0].ControlsBatches || full.Items[0].AvgCost != nil {
+		t.Errorf("azucar: got batches %v avg %v, want false and nil", full.Items[0].ControlsBatches, full.Items[0].AvgCost)
+	}
+
+	// El costo que trae es el vigente (el último) y el lote, el del producto.
+	costs := postgres.NewCostStore(f.tx)
+	for _, c := range []string{"100", "120"} {
+		if _, err := costs.Create(f.ctx, &model.Cost{ProductID: yerba.ID, UnitCost: decimal.RequireFromString(c),
+			AvgCost: decimal.RequireFromString(c)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.tx.ExecContext(f.ctx, `UPDATE products SET controls_batches = TRUE WHERE id = $1;`, yerba.ID); err != nil {
+		t.Fatal(err)
+	}
+	full, _ = counts.GetByID(f.ctx, c.ID)
+	if y := full.Items[1]; !y.ControlsBatches || y.AvgCost == nil || !y.AvgCost.Equal(decimal.RequireFromString("120")) {
+		t.Errorf("yerba: got batches %v avg %v, want true and 120", y.ControlsBatches, y.AvgCost)
+	}
+
 	if _, err := counts.GetByID(f.ctx, -1); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("get missing: got %v, want %v", err, store.ErrNotFound)
 	}

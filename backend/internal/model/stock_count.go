@@ -69,11 +69,16 @@ type StockCountItem struct {
 	UnitCost   *decimal.Decimal `json:"unit_cost" db:"unit_cost"`     // nil = sin costo
 	ExpiryDate string           `json:"expiry_date" db:"expiry_date"` // "2027-03-31"; vacío si no vence
 
-	// Solo lectura, para la pantalla.
-	ProductName string             `json:"product_name" db:"-"`
-	Entries     []*StockCountEntry `json:"entries" db:"-"`
-	CreatedAt   string             `json:"created_at" db:"created_at"`
-	UpdatedAt   string             `json:"updated_at" db:"updated_at"`
+	// Solo lectura, para la pantalla (los trae GetByID): el nombre, si el
+	// producto controla lotes (lo que sobra va a un lote, con vencimiento) y
+	// su costo promedio de hoy (al que va lo que sobra sin costo escrito y lo
+	// que falta; nil si nunca tuvo costo).
+	ProductName     string             `json:"product_name" db:"-"`
+	ControlsBatches bool               `json:"controls_batches" db:"-"`
+	AvgCost         *decimal.Decimal   `json:"avg_cost" db:"-"`
+	Entries         []*StockCountEntry `json:"entries" db:"-"`
+	CreatedAt       string             `json:"created_at" db:"created_at"`
+	UpdatedAt       string             `json:"updated_at" db:"updated_at"`
 }
 
 // StockCountEntry es una carga: un producto contado en un sector ("Góndola

@@ -32,7 +32,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-01: Product Create / Edit
 
-- **Actor / Role:** Admin (`ADMIN`).
+- **Actor / Role:** Admin or Stock Clerk (permission `catalog`, F-13).
 - **Trigger:** Admin opens the catalog and creates a new product or edits an existing one.
 - **Preconditions:**
   - Authenticated as `ADMIN`.
@@ -70,7 +70,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-02: Barcode Management
 
-- **Actor / Role:** Admin (the `ADMIN` check is pending until login exists, F-13).
+- **Actor / Role:** Admin or Stock Clerk (permission `catalog`, F-13).
 - **Trigger:** Admin adds or removes a barcode for a product (a code is never edited: remove it and add the right one).
 - **Preconditions:** Product exists.
 - **Business flow:** open the product's edit panel → "Barcodes" section → scan or type the code → it is saved right away (no need to press the product's Save). The **type is not chosen**: the server derives it (`EAN13`/`EAN8`/`INTERNAL`, see `02-data-model.md` §4.5). After adding, the cursor stays in the field to scan the next one. Removing asks for confirmation. A first code can also be given on create (F-01).
@@ -87,7 +87,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-03: Price Update
 
-- **Actor / Role:** Admin.
+- **Actor / Role:** Admin only (permission `prices`, F-13).
 - **Trigger:** Admin changes the sale price (PVP) of a product.
 - **Preconditions:** Product exists and is active.
 - **Business flow:** open the product's edit panel → "Sale price" section → enter the new `unit_price` → "Save price". It is saved right away (it does not wait for the product's "Save") and is **effective now**. The section shows the current price, its start date and the last 10 previous prices.
@@ -109,7 +109,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-04: Cost Change → Average Cost & PVP Suggestion
 
-- **Actor / Role:** Admin, or triggered automatically by F-06 (purchase reception).
+- **Actor / Role:** Admin (permission `prices`, F-13), or triggered automatically by F-06 (purchase reception, which a Stock Clerk can do).
 - **Trigger:** A new `unit_cost` is recorded. **Normally it comes from a purchase (F-06)**, as stock arrives; the manual entry is an extra option (initial costs, a supplier price list, a correction).
 - **Preconditions:** Product exists and is active.
 - **Costs are without IVA.** Sale prices include IVA (§1), so the suggestion adds the IVA rate of the product's category. `unit_cost` and `avg_cost` are net amounts.
@@ -164,7 +164,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-06: Purchase Reception
 
-- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin. Until F-13 there is no login: `received_by` and `performed_by` stay `NULL` (migration `0013`).
+- **Actor / Role:** Stock Clerk (`STOCK_CLERK`) or Admin (permission `stock`, F-13). "Use as price" on the result changes a price: Admin only (`prices`); a Stock Clerk sees the suggestion without the button. `received_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
 - **Trigger:** Goods arrive with a supplier invoice / remito.
 - **Preconditions:** the supplier exists and is active; each product exists, is active and is not `COMPOSITE`; there is **exactly one active store** (`stores.is_active`), where the stock goes.
 - **Amounts are without IVA:** `unit_cost` and the typed `total` are net amounts, like every cost (F-04).
@@ -214,7 +214,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-07: Atomic Sale (Core Flow)
 
-- **Actor / Role:** Cashier (`CASHIER`). Until F-13 there is no login: `performed_by` on the movements stays `NULL`.
+- **Actor / Role:** Cashier (`CASHIER`) or Admin (permission `sell`, F-13). `performed_by` on the movements stays `NULL` until the actions record who did them (§7).
 - **Trigger:** Barcode scanned or product searched on the sell screen (`/pos`, "Vender", first in the menu).
 - **Preconditions:**
   - There is **exactly one active store**, it has **exactly one active register**, and that register has an `OPEN` session (**BR-02**, F-11). Otherwise the screen says the register is closed and links to `/cash`; with several stores or registers nothing is guessed (409).
@@ -268,7 +268,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-08: Full Void
 
-- **Actor / Role:** meant for Admin only (voids are sensitive; **NFR-03**). Until F-13 there is no login: **anyone can void**, and `performed_by` / the audit user stay `NULL`. The required reason and the `audit_log` row are the control meanwhile.
+- **Actor / Role:** Admin only (permission `void`, F-13; voids are sensitive, **NFR-03**): a cashier does not see "Void" and the server answers 403. `performed_by` / the audit user stay `NULL` until the actions record who did them (§7). The required reason and the `audit_log` row remain the trail.
 - **Trigger:** A sale charged today must be entirely undone (charged twice, wrong product, the customer changed their mind).
 - **Preconditions:**
   - The register has an `OPEN` session, and the sale belongs to **that** session. A sale of a closed session is not voided: its money was already counted in that close (F-12), and its cash audit must never change. Undoing it is a return with its own cash movement (§7).
@@ -312,7 +312,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 Also the **initial inventory**: the stock already on the shelves when the system starts is not loaded as a purchase, it is counted.
 
-- **Actor / Role:** Stock Clerk counts; Admin confirms. Until F-13 there is no login: anyone can do both, and `stock_counts.created_by` and `performed_by` stay `NULL` (migration `0015`, like `0013`).
+- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13): both count and confirm, including the cost of a surplus product without cost (part of closing the count, not a cost change). `stock_counts.created_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
 - **Trigger:** periodic physical inventory (weekly / monthly), full or by sectors; the initial inventory.
 - **Preconditions:** **exactly one active store** (as F-06): the count is for it. At most **one `DRAFT` count per store** (partial unique index): the screen always continues the open one. No restriction on concurrent purchases (or, later, sales): see the snapshot below.
 - **Business flow** (Inventory → Stock count, `/counts`):
@@ -360,7 +360,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-09b: Known Exits (own consumption, damage, expired goods)
 
-- **Actor / Role:** Stock Clerk or Admin. Until F-13 there is no login: `created_by` and `performed_by` stay `NULL`.
+- **Actor / Role:** Stock Clerk or Admin (permission `stock`, F-13). `created_by` and `performed_by` stay `NULL` until the actions record who did them (§7).
 - **Trigger:** goods leave the store without being sold: the family takes something, something breaks, something expires. Usually written on paper first and logged later.
 - **Preconditions:** exactly one active store (as F-06); the product is active and not `COMPOSITE`; there is enough stock in the store.
 - **Business flow** (Inventory → Stock exits, `/adjustments`), one exit per submit:
@@ -411,7 +411,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-11: Session Open
 
-- **Actor / Role:** Cashier opens their own register session; Admin may open any. There is a login (F-13), but roles are not enforced and `opened_by` stays `NULL` until the session records who opened it (§7).
+- **Actor / Role:** Cashier or Admin (permission `cash`, F-13). Creating "Caja 1" when the store has none: Admin only (`cash_setup`); a cashier sees "Ask an administrator to create the register." `opened_by` stays `NULL` until the session records who opened it (§7).
 - **Trigger:** Start of shift.
 - **Preconditions:** exactly one active store with exactly one active register, and that register has **no** `OPEN` session.
 - **Business flow** (Cash → "Open register", `/cash`). The screen shows one of three states:
@@ -425,7 +425,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-12: Session Close / Cash Audit (Arqueo)
 
-- **Actor / Role:** Cashier closes their own session; Admin can close any. There is a login (F-13), but roles are not enforced: any logged-in user can close, and who closed is not stored yet (§7).
+- **Actor / Role:** Cashier or Admin (permission `cash`, F-13): any of them closes the open session (one register, shared at shift change). Who closed is not stored yet (§7).
 - **Trigger:** End of the day.
 - **Preconditions:** the session is `OPEN`.
 - **Business flow** (`/cash` with the register open, "Close the register", folded by default):
@@ -455,7 +455,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-13: Authentication & Roles
 
-- **Actor / Role:** all users log in; an Admin manages users (page pending, see §7). Today the login is built; the permissions per role are not (§7).
+- **Actor / Role:** all users log in; an Admin manages users (page pending, see §7). What each role can do is checked on the server for every route (below).
 - **Trigger:** opening any page of the app.
 - **Preconditions:** the user exists, `is_active = TRUE`, and has a real password: the seed users have a placeholder hash, so the first one is set from the store's PC with `make passwd U=admin` (see "Setting a password" below).
 - **Why sessions in the database, not JWT:** the browser keeps a random token in a cookie and `user_sessions` keeps its SHA-256 (§4.27 of `02-data-model.md`). Deleting the row ends the session at once: logout, a password change and (later) deactivating a user cut access on the next request. A signed token (JWT) would stay valid until it expires, and revoking it needs a list in the database anyway. One store, one server: looking up the session on every request costs one indexed query.
@@ -477,17 +477,25 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **CSRF:** `http.NewCrossOriginProtection()` (Go's standard library) rejects with 403 any `POST`/`PUT`/`DELETE`… that the browser says comes from another site (`Sec-Fetch-Site`, `Origin`): a hidden form on another page cannot log out, void or sell with the store's cookie. Middleware chain, outside in: `Locale(CrossOrigin(Auth(CORS(mux))))`.
 - **HTTPS:** the store's network is shared with the household and guests, so the password must not travel in clear text. The server serves HTTPS by itself with `TLS_CERT_FILE` and `TLS_KEY_FILE` (both or neither, loaded at start, TLS 1.2+), with a certificate made by `mkcert`; `LISTEN_HOST=127.0.0.1` keeps the app off the network if only the store's PC uses it. Steps in the README, §5.
 - **Setting a password** (`elmanpos passwd <username>`, or `make passwd U=<username>`; `auth.SetPassword`): runs on the store's PC, asks twice without showing it (or reads two lines from a pipe), and checks 8 characters to 72 bytes (bcrypt's limit). If they do not match, nothing changes. In one transaction: saves the bcrypt hash (cost 12), **deletes all the user's sessions** (whoever knew the old password is out at once) and writes `audit_log` (`users`, `PASSWORD`, `user_id NULL`: nobody is logged in). It also clears the lockout. Until the users page exists (§7) it is the only way to set or reset a password.
-- **Permission matrix (v1)** — the plan; it is enforced in a later PR (§7). Today every logged-in user can do everything:
+- **Permission matrix (v1):**
   | Action | ADMIN | CASHIER | STOCK_CLERK |
   |---|---|---|---|
   | POS sale (F-07) | ✓ | ✓ | ✗ |
-  | Own session open/close | ✓ | ✓ | ✗ |
+  | Session open/close, close summary (F-11, F-12) | ✓ | ✓ | ✗ |
+  | Create the register | ✓ | ✗ | ✗ |
   | Purchase reception (F-06) | ✓ | ✗ | ✓ |
-  | Stock count / adjustments | ✓ | ✗ | ✓ |
-  | Price/cost changes | ✓ | ✗ | ✗ |
+  | Stock count / known exits (F-09, F-09b) | ✓ | ✗ | ✓ |
+  | Catalog: products, codes, categories, brands, suppliers (F-01, F-02) | ✓ | ✗ | ✓ |
+  | Price/cost changes, taxes (F-03, F-04) | ✓ | ✗ | ✗ |
   | Void (F-08) | ✓ | ✗ | ✗ |
+  | JSON API (`/api/`) | ✓ | ✗ | ✗ |
   | Reports | ✓ | own-session | ✓ |
   | User management | ✓ | ✗ | ✗ |
+- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api` (admin only). An unknown role or an inactive user has none.
+- **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
+- **Without the permission** (`transport.Guard.Require`, after `AuthMiddleware`): a page → 403 "No permission" with the role's menu, "Your user is Cashier and cannot open this page." and "Back" to the role's start; htmx → 403 with the message as text (the toast shows it); API → 403 `{"error": "forbidden"}`. The server log records who, which permission and which path; `audit_log` does not (noise).
+- **Menu and buttons by role:** the menu, the start page and the buttons show only what the role can use: a cashier sees Sell, Start and Cash, without "Void"; a stock clerk sees the catalog (without taxes) and inventory, and the product's price and cost without their forms. Hiding is comfort: the server rejects anyway.
+- **Where each role lands:** after logging in without a page to return to, a cashier goes straight to `/pos`; the others go to `/`.
 - **DB:** login: `SELECT … FROM users WHERE username = $1` (stored lower-cased, `uq_users_username_lower`) + bcrypt compare; then, in one transaction, `DELETE FROM user_sessions WHERE expires_at <= now()`, `INSERT INTO user_sessions` and `INSERT INTO audit_log`. Each request: `SELECT … FROM user_sessions JOIN users … WHERE token_hash = $1 AND expires_at > now() AND is_active`.
 - **Invariants:** passwords stored only as bcrypt hashes, never logged or audited; tokens stored only as SHA-256; deactivated users cannot authenticate and their sessions stop working; every check is server-side (**NFR-02**).
 - **Errors:** wrong credentials → 401 and the generic message; locked → 401 and "wait"; database down → 500.
@@ -544,7 +552,8 @@ Also the **initial inventory**: the stock already on the shelves when the system
 The following are intentionally **out of scope** and must not be assumed to work:
 - **Partial returns** (refund of a single line item) — v1 is full void only (F-08).
 - **Voiding sales of a closed session / returns on another day** — F-08 only voids sales of the open session, so a closed cash audit never changes. A return of a past sale needs its own flow with a **cash movement** in the current session (money out of today's drawer), plus the stock return.
-- **Permissions per role** — F-13 has the login but not the matrix: every logged-in user can do everything, including voiding (F-08, meant for Admin only) and closing any register. Pending: checks on the server for every route, a menu per role and a clear 403.
+- **"Own session" for the cashier** — a cashier closes whichever session is open and sees any closed summary (one register, shared at shift change). Limiting them to their own session needs `opened_by`, which is still `NULL` (next item).
+- **The margin of a product** — `products.margin_percent` is in the product form, so a Stock Clerk can change it. It only changes the *suggested* price; the price itself stays Admin only.
 - **Who did what** — the actions do not record the logged-in user yet: `cashier_sessions.opened_by`, `stock_movements.performed_by`, `stock_adjustments.created_by`, `purchases.received_by`, `stock_counts.created_by` and `audit_log.user_id` (except `LOGIN`) stay `NULL`. Who closed a register is not stored at all.
 - **Users page** — creating, editing and deactivating users (deactivating must close their sessions) and resetting a password from the app. Until then: `make passwd U=<username>` on the store's PC, and users are created in SQL.
 - **Persistent lockout** — the 5-failure lockout (F-13) lives in memory: restarting the server forgets it.

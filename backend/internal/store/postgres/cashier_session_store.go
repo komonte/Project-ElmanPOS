@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
@@ -132,6 +134,39 @@ func (s *CashierSessionStore) LockOpen(ctx context.Context, id int64) (*model.Ca
 		return nil, store.ErrSessionNotOpen
 	}
 	return got, err
+}
+
+// Close cierra una sesión abierta (F-12): estado CLOSED, lo declarado en
+// efectivo y la hora. Quien cierra la trabó antes (LockOpen), así que ninguna
+// venta entra mientras tanto. Devuelve la sesión cerrada.
+//   - ErrSessionNotOpen: no existe o ya estaba cerrada.
+func (s *CashierSessionStore) Close(ctx context.Context, id int64, closingAmount decimal.Decimal) (*model.CashierSession, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE cashier_sessions
+		SET status = 'CLOSED', closing_amount = $2, closed_at = now()
+		WHERE id = $1 AND status = 'OPEN';`, id, closingAmount)
+	if err != nil {
+		return nil, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, store.ErrSessionNotOpen
+	}
+	return s.get(ctx, `cs.id = $1`, id)
+}
+
+// LastClosed devuelve la última sesión cerrada de una caja (la de cierre más
+// reciente): /cash ofrece ver su arqueo. ErrNotFound si nunca se cerró.
+func (s *CashierSessionStore) LastClosed(ctx context.Context, registerID int64) (*model.CashierSession, error) {
+	return s.get(ctx, `cs.cash_register_id = $1 AND cs.status = 'CLOSED'
+		ORDER BY cs.closed_at DESC NULLS LAST, cs.id DESC LIMIT 1`, registerID)
+}
+
+// Get devuelve una sesión, abierta o cerrada (el resumen del cierre).
+// ErrNotFound si no existe.
+func (s *CashierSessionStore) Get(ctx context.Context, id int64) (*model.CashierSession, error) {
+	return s.get(ctx, `cs.id = $1`, id)
 }
 
 func (s *CashierSessionStore) get(ctx context.Context, where string, arg any) (*model.CashierSession, error) {

@@ -19,3 +19,21 @@ func TestFormatTime(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatClock(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"empty", "", "-"},
+		{"UTC with microseconds", "2026-11-25T18:31:38.586087Z", "15:31"},
+		{"after midnight UTC is the evening before", "2026-11-26T01:05:00Z", "22:05"},
+		{"unexpected format is shown as is", "2026-11-25 18:31", "2026-11-25 18:31"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatClock(tt.in); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

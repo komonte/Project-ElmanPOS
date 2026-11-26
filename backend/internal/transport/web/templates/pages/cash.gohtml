@@ -1,6 +1,11 @@
 {{define "content"}}
-{{/* Caja (F-11). Datos: .State (sessions.State: .Register y .Session, nil
-     si no hay), .Amount (lo escrito si abrir falló) y .Error. */}}
+{{/* Caja (F-11, F-12). Datos: .State (sessions.State: .Register y
+     .Session, nil si no hay), .Amount (lo escrito si abrir falló), .Error,
+     y con la caja abierta .Sales (las ventas de la sesión, la última
+     primero), .CloseFields (un closeField por medio) y .CloseError (si
+     cerrar falló: el formulario de cierre vuelve abierto). Anular: .Refund
+     (qué devolver, después de anular) y, si falló, .VoidError, .VoidSaleID
+     y .VoidReason (la fila vuelve abierta). */}}
 <header class="mb-8">
   <h1 class="shelf-title">{{t "cash.title"}}</h1>
   <p class="mt-2 text-muted max-w-2xl">{{t "cash.hint"}}</p>
@@ -8,6 +13,9 @@
 
 {{if .Error}}
 <div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+{{end}}
+{{with .Refund}}
+<div id="cash-refund" role="status" class="mb-6 p-4 bg-surface border-l-8 border-tag rounded-sm font-bold text-lg max-w-3xl">{{.}}</div>
 {{end}}
 
 {{with .State}}
@@ -26,6 +34,142 @@
   <p>{{t "cash.opening_amount"}}: <span class="font-bold tabular">{{money .Session.OpeningAmount}}</span></p>
   <p class="pt-2"><a href="/pos" class="btn-primary">{{t "cash.go_sell"}}</a></p>
 </section>
+
+{{/* Ventas de esta caja (F-08): la última primero. La anulada queda
+     tachada, con su motivo. El ticket se reimprime en otra pestaña.
+     "Anular" abre debajo de la fila el motivo y "Confirmar anulación", que
+     pide confirmar antes de mandar. */}}
+<section id="cash-sales" class="mt-8 max-w-3xl">
+  <h2 class="font-display font-bold text-2xl mb-3">{{t "cash.sales_title"}}</h2>
+  {{if not $.Sales}}
+  <p id="cash-sales-empty" class="text-muted">{{t "cash.sales_none"}}</p>
+  {{else}}
+  <table class="w-full bg-surface border-2 border-line rounded-md">
+    <thead>
+      <tr class="text-left border-b-2 border-line">
+        <th scope="col" class="p-3">{{t "cash.col_number"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_time"}}</th>
+        <th scope="col" class="p-3 text-right">{{t "cash.col_total"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_payments"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_status"}}</th>
+        <th scope="col" class="p-3"><span class="sr-only">{{t "cash.col_actions"}}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $.Sales}}
+      {{$voided := eq .Status "VOIDED"}}
+      {{$failed := and $.VoidError (eq $.VoidSaleID .ID)}}
+      <tr id="sale-{{.ID}}" data-status="{{.Status}}" class="border-b border-line align-top{{if $voided}} text-muted{{end}}">
+        <th scope="row" class="p-3 text-left tabular{{if $voided}} line-through{{end}}">{{.SaleNumber}}</th>
+        <td class="p-3 tabular{{if $voided}} line-through{{end}}">{{formatClock .CreatedAt}}</td>
+        <td class="p-3 text-right tabular font-bold whitespace-nowrap{{if $voided}} line-through{{end}}">{{money .Total}}</td>
+        <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}</td>
+        <td class="p-3">{{if $voided}}<span class="font-bold text-danger">{{t "cash.sale_voided"}}</span>
+          <span class="block text-sm" data-void-reason>{{printf (t "cash.sale_void_reason") .VoidReason}}</span>{{else}}{{t "cash.sale_completed"}}{{end}}</td>
+        <td class="p-3 text-right">
+          <div class="flex justify-end gap-2">
+            <a href="/pos/sales/{{.ID}}/ticket" target="_blank" rel="noopener" class="btn-secondary px-3 py-1"
+               aria-label="{{printf (t "cash.ticket_of") .SaleNumber}}">{{t "cash.ticket"}}</a>
+            {{if not $voided}}
+            <button type="button" id="void-open-{{.ID}}" class="btn-secondary px-3 py-1" aria-controls="void-{{.ID}}"
+                    aria-expanded="{{if $failed}}true{{else}}false{{end}}" onclick="cashToggleVoid(this)"
+                    aria-label="{{printf (t "cash.void_of") .SaleNumber}}">{{t "cash.void"}}</button>
+            {{end}}
+          </div>
+        </td>
+      </tr>
+      {{if not $voided}}
+      <tr id="void-{{.ID}}" class="border-b border-line bg-danger-soft"{{if not $failed}} hidden{{end}}>
+        <td colspan="6" class="p-4">
+          <form method="post" action="/cash/sales/{{.ID}}/void" class="space-y-3" onsubmit="return cashConfirmVoid(this)"
+                data-ask="{{printf (t "cash.void_confirm") .SaleNumber (money .Total)}}"
+                data-reason="{{t "cash.void_reason"}}" data-final="{{t "cash.void_confirm_final"}}">
+            {{if $failed}}<div role="alert" class="p-4 bg-surface border-l-8 border-danger rounded-sm font-bold">{{$.VoidError}}</div>{{end}}
+            <label for="void-reason-{{.ID}}" class="field-label">{{printf (t "cash.void_reason_of") .SaleNumber}}</label>
+            <input type="text" id="void-reason-{{.ID}}" name="reason" required maxlength="300" autocomplete="off"
+                   value="{{if $failed}}{{$.VoidReason}}{{end}}" aria-describedby="void-reason-{{.ID}}-hint"
+                   class="field"{{if $failed}} aria-invalid="true" autofocus{{end}}>
+            <p id="void-reason-{{.ID}}-hint" class="field-hint">{{t "cash.void_reason_hint"}}</p>
+            <button type="submit" class="btn-primary">{{t "cash.void_submit"}}</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</section>
+
+{{/* Cierre ciego (F-12): cada medio dice dónde mirar y cuántos cobros hubo,
+     nunca cuánto se espera. Enter pasa al medio siguiente (no cierra), y
+     cerrar pide confirmar repitiendo lo escrito. */}}
+<details id="cash-close" class="mt-8 max-w-2xl border-2 border-line rounded-md bg-surface"{{if $.CloseError}} open{{end}}>
+  <summary class="cursor-pointer p-6 font-display font-bold text-2xl">{{t "cash.close_title"}}</summary>
+  <form id="cash-close-form" method="post" action="/cash/close" class="px-6 pb-6 space-y-4"
+        onsubmit="return cashConfirmClose(this)"
+        data-ask="{{t "cash.close_confirm"}}" data-empty="{{t "cash.close_confirm_empty"}}"
+        data-final="{{t "cash.close_confirm_final"}}">
+    <p class="text-muted">{{t "cash.close_hint"}}</p>
+    {{with $.CloseError}}<div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.}}</div>{{end}}
+    <input type="hidden" name="session_id" value="{{.Session.ID}}">
+    {{range $.CloseFields}}
+    <div class="p-4 border-2 rounded-md {{if .Invalid}}border-danger{{else}}border-line{{end}}">
+      <label for="declared-{{.Method}}" class="field-label text-xl">{{t (printf "pos.method_%s" .Method)}}</label>
+      <p id="declared-{{.Method}}-hint" class="text-muted">
+        {{t (printf "cash.where_%s" .Method)}}
+        {{if eq .Method "CASH"}}{{t "cash.where_cash_float"}} <span class="whitespace-nowrap font-bold text-ink">{{money $.State.Session.OpeningAmount}}</span>.{{end}}
+      </p>
+      {{if ne .Method "CASH"}}
+      <p class="mt-1 font-bold" data-count="{{.Count}}">{{if eq .Count 0}}{{t "cash.count_none"}}{{else if eq .Count 1}}{{t "cash.count_one"}}{{else}}{{printf (t "cash.count_many") .Count}}{{end}}</p>
+      {{end}}
+      <input type="text" id="declared-{{.Method}}" name="declared_{{.Method}}" value="{{.Typed}}"
+             inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="declared-{{.Method}}-hint"
+             data-label="{{t (printf "pos.method_%s" .Method)}}"{{if .Invalid}} aria-invalid="true" autofocus{{end}}
+             onkeydown="cashNextField(event, this)" class="field tabular text-xl max-w-xs mt-2">
+    </div>
+    {{end}}
+    <button type="submit" id="cash-close-submit" class="btn-primary text-lg">{{t "cash.close"}}</button>
+  </form>
+</details>
+<script>
+  // Anular: abre o cierra el motivo debajo de la fila.
+  function cashToggleVoid(btn) {
+    const row = document.getElementById(btn.getAttribute('aria-controls'));
+    const open = row.hidden;
+    row.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) row.querySelector('input[name="reason"]').focus();
+  }
+  // Antes de anular, repite la venta y el motivo: no se puede deshacer.
+  function cashConfirmVoid(form) {
+    const reason = form.elements.reason.value.trim();
+    if (!confirm(form.dataset.ask + '\n\n' + form.dataset.reason + ': ' + reason + '\n\n' + form.dataset.final)) return false;
+    form.querySelector('button[type="submit"]').disabled = true;
+    return true;
+  }
+  function cashCloseFields(form) {
+    return Array.prototype.slice.call(form.querySelectorAll('input[name^="declared_"]'));
+  }
+  // Enter en un monto pasa al siguiente: contando con el home banking
+  // abierto, un Enter de más no tiene que cerrar la caja.
+  function cashNextField(e, input) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const fields = cashCloseFields(input.form);
+    const next = fields[fields.indexOf(input) + 1];
+    (next || document.getElementById('cash-close-submit')).focus();
+  }
+  // Antes de cerrar, repite lo escrito: después no se puede cambiar.
+  function cashConfirmClose(form) {
+    const lines = cashCloseFields(form).map(function (f) {
+      return f.dataset.label + ': ' + (f.value.trim() || form.dataset.empty);
+    });
+    if (!confirm(form.dataset.ask + '\n\n' + lines.join('\n') + '\n\n' + form.dataset.final)) return false;
+    document.getElementById('cash-close-submit').disabled = true;
+    return true;
+  }
+</script>
 {{else}}
 <section class="p-6 border-2 border-line rounded-md bg-surface max-w-2xl space-y-4">
   <h2 class="font-display font-bold text-2xl">{{printf (t "cash.closed_title") .Register.Name}}</h2>
@@ -37,6 +181,10 @@
     <p id="cash-opening-hint" class="field-hint">{{t "cash.opening_hint"}}</p>
     <button type="submit" class="btn-primary">{{t "cash.open"}}</button>
   </form>
+  {{with .LastClosed}}
+  <p class="pt-2 border-t border-line"><a href="/cash/sessions/{{.ID}}" id="cash-last-close" class="btn-secondary">{{t "cash.last_close"}}</a>
+    <span class="block mt-1 text-sm text-muted">{{printf (t "cash.last_close_when") (formatTimePtr .ClosedAt)}}</span></p>
+  {{end}}
 </section>
 {{end}}
 {{end}}

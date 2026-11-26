@@ -1,5 +1,5 @@
 // Package sessions es el caso de uso F-11: abrir la caja con el efectivo
-// inicial y saber si está abierta. El cierre con arqueo (F-12) llega después.
+// inicial, saber si está abierta y cerrarla con el arqueo (F-12, close.go).
 //
 // Decisiones (2026-11-26):
 //   - Se usa la única caja activa del único local activo. Si el local no
@@ -33,7 +33,7 @@ var ErrNoRegister = fmt.Errorf("the store has no cash register: %w", service.Err
 
 type Service struct {
 	db postgres.DBTX     // lecturas y la apertura (un solo INSERT)
-	tx postgres.TxRunner // CreateRegister
+	tx postgres.TxRunner // CreateRegister y Close
 }
 
 func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
@@ -46,9 +46,13 @@ type State struct {
 	Register *model.CashRegister `json:"register"`
 	// Session es nil si la caja está cerrada (o no hay caja).
 	Session *model.CashierSession `json:"session"`
+	// LastClosed es la última sesión cerrada de la caja, para ver su
+	// arqueo; nil si nunca se cerró.
+	LastClosed *model.CashierSession `json:"last_closed"`
 }
 
-// Current devuelve la caja del local activo y su sesión abierta.
+// Current devuelve la caja del local activo, su sesión abierta y la última
+// cerrada.
 //   - service.ErrConflict: no hay un único local activo, o el local tiene
 //     más de una caja activa.
 func (s *Service) Current(ctx context.Context) (*State, error) {
@@ -60,10 +64,18 @@ func (s *Service) Current(ctx context.Context) (*State, error) {
 		return nil, err
 	}
 	st := &State{Register: reg}
-	sess, err := postgres.NewCashierSessionStore(s.db).OpenFor(ctx, reg.ID)
+	sessions := postgres.NewCashierSessionStore(s.db)
+	sess, err := sessions.OpenFor(ctx, reg.ID)
 	switch {
 	case err == nil:
 		st.Session = sess
+	case !errors.Is(err, store.ErrNotFound):
+		return nil, err
+	}
+	last, err := sessions.LastClosed(ctx, reg.ID)
+	switch {
+	case err == nil:
+		st.LastClosed = last
 	case !errors.Is(err, store.ErrNotFound):
 		return nil, err
 	}

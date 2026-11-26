@@ -268,25 +268,44 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-08: Full Void
 
-- **Actor / Role:** Admin only (voids are sensitive; **NFR-03**).
-- **Trigger:** A completed sale must be entirely undone (wrong charge, customer never picked up, etc.).
-- **Preconditions:** Sale `status = 'COMPLETED'`; a `reason` is provided.
-- **Business flow:** Admin opens the sale → "Void" → confirms → enters reason → system restores everything.
-- **DB transaction:**
-  1. `BEGIN;`
-  2. `SELECT ... FROM sales WHERE id = $1 AND status = 'COMPLETED' FOR UPDATE;`
-  3. `UPDATE sales SET status = 'VOIDED';`
-  4. For each `sale_item` allocation: `INSERT INTO stock_movements (type 'RETURN', positive, same batch_id, sale_id reference)`; `UPDATE product_batches SET remaining_quantity = remaining_quantity + q, is_consumed = FALSE WHERE is_consumed = TRUE;`
-  5. `UPDATE stock_balances SET quantity = quantity + q;` per restored product.
-  6. `INSERT INTO audit_log (user_id, 'sales', 'VOID', ...)`.
-  7. `COMMIT;`
+- **Actor / Role:** meant for Admin only (voids are sensitive; **NFR-03**). Until F-13 there is no login: **anyone can void**, and `performed_by` / the audit user stay `NULL`. The required reason and the `audit_log` row are the control meanwhile.
+- **Trigger:** A sale charged today must be entirely undone (charged twice, wrong product, the customer changed their mind).
+- **Preconditions:**
+  - The register has an `OPEN` session, and the sale belongs to **that** session. A sale of a closed session is not voided: its money was already counted in that close (F-12), and its cash audit must never change. Undoing it is a return with its own cash movement (§7).
+  - Sale `status = 'COMPLETED'`.
+  - A reason: trimmed, not blank, up to 300 characters (`model.ValidateVoidReason`).
+- **Business flow** (`/cash` with the register open, "Sales of this register"):
+  1. The list shows the session's sales, newest first: number, time, total, payments by method ("Cash $2,000.00 · Debit $3,000.00") and status. Each has "Ticket" (reprint in a new tab, `GET /pos/sales/{id}/ticket`) and, if completed, "Void".
+  2. "Void" opens, right under the row, "Why is sale No. N voided?" and "Confirm void". The browser requires a reason.
+  3. Confirm asks again, repeating the number, the total and the reason, and says it cannot be undone. Cancel → nothing happens.
+  4. `POST /cash/sales/{id}/void` (form: `reason`). On success it redirects to `/cash?voided={id}`, which shows **what to give back by method**: "Sale No. 1 voided. Give back $13,500.00 in cash and $30,000.00 by debit card." (the session's payments summed per method; the cash payment is already net of change). Reloading does not void again; `?voided=` of a sale that is not a voided sale of this session shows nothing.
+  5. The voided sale stays in the list struck through, with "Voided" and its reason, without "Void". Its reprinted ticket says `VOIDED`.
+  6. On error the page comes back with the row open, what was typed and the message (the URL stays on the POST, like opening and closing). A sale that is not in the list (missing, from another day) or already voided shows the message on top.
+- **DB transaction** (`usecase/sales.Void`, one `TxRunner.InTx`; reason validated before it):
+  1. **Session:** as in F-07 — active store → its only register → `OpenFor` → `LockOpen` (`FOR UPDATE`). No open session → `ErrRegisterClosed`. Locking it first means a close (F-12) running at the same time waits, and then no longer counts the voided sale.
+  2. **Sale:** `SaleStore.Lock` (`SELECT ... FROM sales WHERE id = $1 FOR UPDATE`): two voids of the same sale run one after the other. Missing → not found. `cashier_session_id` ≠ the open session → `ErrSaleOtherSession`. Already `VOIDED` → `ErrSaleAlreadyVoided`.
+  3. `StockMovementStore.SaleMovements`: the sale's `SALE` movements, in insert order — one per batch allocation and one without batch for the uncovered rest (F-07 step 9).
+  4. **Stock:** `StockBalanceStore.LockOnHand` for each product of those movements, once each, in **ascending `product_id` order** (§6, same as a sale).
+  5. **Give back, mirroring each `SALE`:** `INSERT INTO stock_movements` (`RETURN`, **positive** quantity = − the sale's, same `product_id`, `store_id`, `batch_id` (or none), `unit_cost` and `sale_id`). If it had a batch: `BatchStore.Restore` (`remaining_quantity + q, is_consumed = FALSE`). Then `StockBalanceStore.Add(+q)`. The average cost does not change (as when selling).
+  6. `SaleStore.Void`: `UPDATE sales SET status = 'VOIDED', voided_at = now(), void_reason = $2 WHERE id = $1 AND status = 'COMPLETED'` (`chk_sales_void` keeps the three together).
+  7. `INSERT INTO audit_log` (`sales`, `VOID`, the sale id; new data: number, session, total, payments, reason, how many movements were returned).
+  8. `COMMIT`.
 - **Invariants:**
-  - Voided sales are **excluded** from cash-audit expected amounts (F-12).
-  - Stock is restored to the exact original batches; `is_consumed` is cleared if the batch has stock again.
-  - Ledger remains consistent (RETURN movements balance the original SALE movements).
-- **Errors / rollback:** sale already `VOIDED` → rejected (no double void); any failure → full rollback.
+  - Per sale, `Σ quantity` of its `RETURN` movements = − `Σ` of its `SALE` movements, **per batch and cost**: what went out of a batch comes back to that batch, and what went out without batch comes back without batch.
+  - Ledger equals balance after the void (`Σ stock_movements.quantity = stock_balances.quantity`).
+  - Voided sales are **excluded** from cash-audit expected amounts (F-12): it only counts `COMPLETED` sales.
+  - A voided sale always has `voided_at` and a non-blank `void_reason`; a completed one has neither.
+  - The `payments` rows are not touched (append-only): the money goes back to the customer outside the system, as the notice says.
+- **Errors / rollback:** any failure → full rollback; nothing changes.
+  - Reason empty or too long → 400 (`ErrVoidReasonRequired`, `ErrVoidReasonTooLong`).
+  - Sale missing → 404.
+  - Register closed, sale of another session, already voided → 409.
+  - On the web page the messages are shown on `/cash` (status 200, like the other forms).
+- **Web routes:** `GET /cash[?voided={id}]` (the list and the notice), `POST /cash/sales/{id}/void` (form: `reason`), `GET /pos/sales/{id}/ticket` (reprint). No JSON API yet.
 - **Edge cases:**
   - Void after a stock count (F-09) confirmed → stock is restored and the next count picks it up; no special handling.
+  - A sale that sold a batch to zero → the batch has stock again and is no longer `is_consumed`.
+  - Void while the register is being closed → the void waits for the close or the close waits for the void (both lock the session first); in either order the cash audit is consistent.
   - Partial returns (refund a single line) → **deferred** (§7). v1 is all-or-nothing void.
 
 ### F-09: Stock Count & Merma
@@ -406,21 +425,33 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-12: Session Close / Cash Audit (Arqueo)
 
-- **Actor / Role:** Cashier closes their own session; Admin can close any.
-- **Trigger:** End of shift.
-- **Preconditions:** Session is `OPEN`.
-- **Business flow:**
-  1. Cashier counts money by method and declares amounts (`cash_audits` rows).
-  2. System computes **expected** per method: `CASH = opening_amount + Σ payments(CASH) from COMPLETED sales − Σ voids`; other methods = `Σ payments(method)`.
-  3. Variance `declared − expected` shown per method.
-  4. Confirm close.
-- **DB transaction:**
-  1. `INSERT INTO cash_audits` (one per declared method).
-  2. `UPDATE cashier_sessions SET status='CLOSED', closing_amount=..., closed_at=now();`
-  3. If any variance ≠ 0 → `INSERT INTO audit_log (...)` (**NFR-03**).
-- **Invariants:** no sales may be created after close (session no longer `OPEN`); a positive variance means cash surplus, negative means shortage — never silently ignored.
-- **Errors / rollback:** closing with pending un-voided discrepancies → allowed but audited; failure → rollback.
-- **Edge cases:** forgotten sale → appears as variance; cashier mismatch → variance is attributed to the session, flagged for review.
+- **Actor / Role:** Cashier closes their own session; Admin can close any. Until F-13 there is no login: anyone can close, and who closed is not stored.
+- **Trigger:** End of the day.
+- **Preconditions:** the session is `OPEN`.
+- **Business flow** (`/cash` with the register open, "Close the register", folded by default):
+  1. **Blind close:** one card per payment method saying **where to look**, never what is expected:
+     - Cash: count the drawer's notes and coins, **including the opening float** (the amount is shown).
+     - Debit / Credit: the batch close (cierre de lote) of the card terminal.
+     - Transfer: what came in today in home banking or the wallet.
+     - QR: what was charged today in the app (Mercado Pago, MODO…).
+     The non-cash methods also say **how many payments** they had ("3 payments with this method today.", `sessions.PaymentCounts`, `COMPLETED` sales only), without the amount: it tells how many transfers to look for without revealing the expected total.
+  2. Amounts are written like money ("20.000"). An empty method counts as `0`. Enter moves to the next method (a stray Enter does not close).
+  3. "Close the register" asks to confirm, repeating every amount typed ("empty (counts as $0)"): it cannot be changed afterwards.
+  4. `POST /cash/close` (form: `session_id`, `declared_<METHOD>`). On success it redirects to the **summary**, `/cash/sessions/{id}`: a verdict ("The register balances." or "There are differences." with what to check), a table per method with expected / counted / difference ("Short $50.00", "Over $…", "Even"; cash always, other methods only if they had payments or a declared amount), and the sales: how many charged, how many voided, and the total sold.
+  5. A bad amount returns the form open, with what was typed and the method marked. No summary exists for an open session (`ErrSessionStillOpen` → redirect to `/cash`): seeing the expected amounts before counting would defeat the blind close.
+  6. With the register closed, `/cash` offers "See the last close" (`CashierSessionStore.LastClosed`, newest `closed_at`) with when it closed, to review yesterday's close before opening.
+- **Expected per method** (`model.NewCloseSummary`, computed and never stored): `CASH = opening_amount + Σ payments(CASH)`; other methods = `Σ payments(method)`, all from **`COMPLETED` sales only** (`SaleStore.PaidByMethod`). A voided sale is simply not counted — there is no "− Σ voids" term, because a void (F-08) never touches `payments` and only happens while the session is open. Difference = declared − expected.
+- **DB transaction** (`sessions.Close(sessionID, declared)`, one `TxRunner.InTx`; the session comes from the form, not "the open one": if someone closed it and opened another while counting, the new one is not closed):
+  1. `CashierSessionStore.LockOpen` (`FOR UPDATE`, `status = 'OPEN'`; else `ErrSessionNotOpen`). A sale or void in progress finishes first, and none starts after.
+  2. Compute the summary: expected per method, the declared amounts (validated: `>= 0`, 2 decimals, no method twice), sales and voided counts, total sold.
+  3. `INSERT INTO cash_audits`: **5 rows**, one per method, `0` for the empty ones (`uq_cash_audits_session_method`).
+  4. `CashierSessionStore.Close`: `UPDATE cashier_sessions SET status = 'CLOSED', closing_amount = <declared cash>, closed_at = now() WHERE id = $1 AND status = 'OPEN'`.
+  5. `INSERT INTO audit_log` (`cashier_sessions`, `CLOSE`) **always**, with or without difference (**NFR-03**): the session, sales and voided counts, total, and per method expected / declared / difference, plus `has_difference`.
+  6. `COMMIT`.
+- **Invariants:** no sale or void enters a closed session; `cash_audits` has exactly one row per method for every closed session; the summary of a closed session never changes (its sales cannot be voided any more); a negative difference is a shortage, a positive one a surplus — shown, never silently ignored.
+- **Errors / rollback:** bad declared amount → 400, form back; session missing or already closed → 409 ("The register was already closed."); any failure → full rollback, the session stays open.
+- **Web routes:** `GET /cash` (form, and "See the last close" when closed), `POST /cash/close`, `GET /cash/sessions/{id}` (summary of a closed session; open → redirect to `/cash`; missing → 404). No JSON API yet.
+- **Edge cases:** a forgotten or mis-keyed sale (wrong method) → shows as a difference on two methods; a transfer that has not arrived yet → short on transfer; closing with differences is allowed and audited. The difference belongs to the session; who caused it is not known until there is a login (F-13).
 
 ### F-13: Authentication & Roles
 
@@ -496,6 +527,8 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 The following are intentionally **out of scope** and must not be assumed to work:
 - **Partial returns** (refund of a single line item) — v1 is full void only (F-08).
+- **Voiding sales of a closed session / returns on another day** — F-08 only voids sales of the open session, so a closed cash audit never changes. A return of a past sale needs its own flow with a **cash movement** in the current session (money out of today's drawer), plus the stock return.
+- **Who may void and close** — F-08 and F-12 are meant to be restricted (void: Admin only) once F-13 adds login and roles. Until then anyone can void or close; the required reason and `audit_log` are the only control, and `performed_by` stays `NULL`.
 - **Consignment settlement** — `is_consignment` flag exists; payment/stock accounting for consigned goods is undefined in v1.
 - **Purchase orders, returns to supplier, editing or voiding a received purchase** — a reception is final (F-06); a mistake is corrected with a stock count/adjustment (F-09) and a new cost.
 - **Inter-store transfers** — `TRANSFER` movement type exists in the enum but has no flow or tables.

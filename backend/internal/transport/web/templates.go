@@ -34,6 +34,7 @@ var pageFiles = []string{
 	"templates/pages/adjustments.gohtml",
 	"templates/pages/cash.gohtml",
 	"templates/pages/pos.gohtml",
+	"templates/pages/cash_session.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -121,7 +122,16 @@ func NewTemplateEngine() *TemplateEngine {
 			"qty": func(d decimal.Decimal) string {
 				return formatQuantity(lang, d)
 			},
-			"formatTime": formatTime,
+			"formatTime":  formatTime,
+			"formatClock": formatClock,
+			// formatTimePtr es formatTime para una fecha que puede faltar
+			// (closed_at): "-" si es nil.
+			"formatTimePtr": func(t *string) string {
+				if t == nil {
+					return formatTime("")
+				}
+				return formatTime(*t)
+			},
 		}
 
 		base, err := template.New("").Funcs(funcMap).ParseFS(templateFS, partialFiles...)

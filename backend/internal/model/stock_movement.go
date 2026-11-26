@@ -9,12 +9,13 @@ import (
 var ErrNilStockMovement = errors.New("stock movement cannot be nil")
 
 // Tipos de movimiento (ENUM movement_type, 02 3). Por ahora se usan el de
-// compra, el de ajuste (conteos y salidas conocidas) y el de venta; el de
-// devolución llega con la anulación (F-08).
+// compra, el de ajuste (conteos y salidas conocidas), el de venta y el de
+// devolución (anular una venta, F-08: positivo, con el sale_id de la venta).
 const (
 	MovementPurchase   = "PURCHASE"
 	MovementAdjustment = "ADJUSTMENT"
 	MovementSale       = "SALE"
+	MovementReturn     = "RETURN"
 )
 
 // Motivos de un ajuste (ENUM adjustment_reason). ReasonCount es el del

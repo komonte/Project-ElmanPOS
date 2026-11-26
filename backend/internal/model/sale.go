@@ -10,7 +10,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const PaymentReferenceMaxLen = 120 // VARCHAR(120)
+const (
+	PaymentReferenceMaxLen = 120 // VARCHAR(120)
+	VoidReasonMaxLen       = 300 // VARCHAR(300)
+)
 
 // Estados de una venta (ENUM sale_status). Una venta solo se deshace
 // entera, anulándola (F-08).
@@ -51,6 +54,9 @@ var (
 	ErrSaleTwoCashPayments     = errors.New("sale can have only one cash payment")
 	ErrPaymentsShort           = errors.New("payments do not cover the sale total")
 	ErrPaymentsOverTotal       = errors.New("only cash can go over the sale total")
+	ErrVoidReasonRequired      = errors.New("void reason is required")
+	ErrVoidReasonTooLong       = errors.New("void reason cannot exceed 300 characters")
+	ErrSaleAlreadyVoided       = errors.New("sale is already voided")
 )
 
 // Sale es una venta (02 4.16, F-07): renglones, pagos y totales. Se guarda
@@ -69,6 +75,10 @@ type Sale struct {
 	DiscountAmount   decimal.Decimal `json:"discount_amount" db:"discount_amount"`
 	Total            decimal.Decimal `json:"total" db:"total"`
 	CreatedAt        string          `json:"created_at" db:"created_at"`
+	// Anulación (F-08): cuándo y por qué. Nil y vacío si no está anulada
+	// (chk_sales_void de la 0018).
+	VoidedAt   *string `json:"voided_at" db:"voided_at"`
+	VoidReason string  `json:"void_reason" db:"void_reason"`
 
 	Items    []*SaleItem `json:"items" db:"-"`
 	Payments []*Payment  `json:"payments" db:"-"`
@@ -293,5 +303,30 @@ func (s *Sale) SettlePayments() error {
 	}
 	cash.Amount = cash.Amount.Sub(excess)
 	s.Change = excess
+	return nil
+}
+
+// ValidateVoidReason recorta el motivo de una anulación y lo valida:
+// obligatorio y hasta 300 caracteres. Devuelve el motivo recortado.
+func ValidateVoidReason(reason string) (string, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return "", ErrVoidReasonRequired
+	}
+	if utf8.RuneCountInString(reason) > VoidReasonMaxLen {
+		return "", ErrVoidReasonTooLong
+	}
+	return reason, nil
+}
+
+// CanVoid dice si la venta se puede anular: solo una COMPLETED. Que sea de
+// la sesión abierta lo revisa el caso de uso.
+func (s *Sale) CanVoid() error {
+	if s == nil {
+		return ErrNilSale
+	}
+	if s.Status == SaleVoided {
+		return ErrSaleAlreadyVoided
+	}
 	return nil
 }

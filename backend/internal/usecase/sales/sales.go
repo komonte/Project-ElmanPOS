@@ -1,6 +1,6 @@
 // Package sales es el caso de uso F-07 (venta atómica) con F-10 (venta por
 // peso): cobra el carrito de la caja y descuenta el stock, todo o nada
-// (BR-04).
+// (BR-04). La anulación (F-08) está en void.go.
 //
 // Decisiones (2026-11-26):
 //   - Se vende en la sesión abierta de la única caja del local activo. Sin

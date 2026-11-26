@@ -121,6 +121,7 @@ func TestRenderPos(t *testing.T) {
 			// Comportamiento (se prueba en el navegador): que esté conectado.
 			"function posAdd(button)", "function posTotals()", "function posParseMoney(s)",
 			"addEventListener('beforeunload'", "querySelector('[data-sale-done]')", "htmx:configRequest",
+			"function posPrintTicket(e, href)", "contentWindow.print()", `data-ticket="Ticket"`,
 		} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
@@ -170,8 +171,11 @@ func TestRenderPos(t *testing.T) {
 
 	t.Run("result", func(t *testing.T) {
 		done := render(t, "pos_result.gohtml", map[string]any{"Sale": &model.Sale{SaleNumber: 12,
-			Total: decimal.RequireFromString("8500"), Change: decimal.RequireFromString("1500")}})
-		for _, s := range []string{"data-sale-done", "Venta N.º 12 cobrada", "$ 8.500,00", "Vuelto", "$ 1.500,00"} {
+			Total: decimal.RequireFromString("8500"), Change: decimal.RequireFromString("1500")},
+			"TicketURL": "/pos/sales/5/ticket?paid=10000"})
+		for _, s := range []string{"data-sale-done", "Venta N.º 12 cobrada", "$ 8.500,00", "Vuelto", "$ 1.500,00",
+			`href="/pos/sales/5/ticket?paid=10000" target="_blank"`, `onclick="posPrintTicket(event, this.href)"`,
+			"Imprimir ticket"} {
 			if !strings.Contains(done, s) {
 				t.Errorf("missing %q", s)
 			}

@@ -1,5 +1,8 @@
 @import "tailwindcss" source(none);
 @source "../../../../internal/transport/web/templates";
+/* El ticket trae su propio CSS (no usa Tailwind): sin esto, palabras de su
+   <style> como "border" se volverían clases. */
+@source not "../../../../internal/transport/web/templates/partials/ticket.gohtml";
 
 /* ---- Fuentes (servidas desde /static/fonts, funcionan sin internet) ----
    Atkinson Hyperlegible: texto. Diseñada para que letras parecidas

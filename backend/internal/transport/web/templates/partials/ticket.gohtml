@@ -1,0 +1,96 @@
+{{/* Ticket de una venta (PosTicket): un documento entero, sin el layout ni
+     el menú, para la impresora térmica de 80 mm (72 mm imprimibles). El CSS
+     va acá y no en output.css: @page no se arma con Tailwind y el ticket no
+     comparte estilos con el resto. .Paid y .Change solo vienen en el ticket
+     de la venta recién cobrada; reimpreso no los lleva. */}}
+<!DOCTYPE html>
+<html lang="{{.Lang}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {{with .Sale}}<title>{{t "ticket.title"}} - {{printf (t "ticket.sale_number") .SaleNumber}}</title>{{end}}
+  <style>
+    @font-face {
+      font-family: "Atkinson Hyperlegible";
+      src: url("/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2");
+      font-weight: 400;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #e5e5e5; color: #000; }
+    body { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 12px; line-height: 1.3; }
+    .paper { width: 72mm; margin: 16px auto; padding: 4mm; background: #fff; }
+    .center { text-align: center; }
+    .shop { font-size: 16px; font-weight: 700; text-transform: uppercase; }
+    .muted { font-size: 11px; }
+    .rule { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; gap: 8px; }
+    .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .item { margin: 4px 0; }
+    .item .name { font-weight: 700; word-break: break-word; }
+    .total { font-size: 20px; font-weight: 700; margin: 4px 0; }
+    .voided { margin: 6px 0; padding: 4px; border: 2px solid #000; font-size: 18px; font-weight: 700; text-align: center; }
+    .actions { width: 72mm; margin: 0 auto 16px; display: flex; gap: 8px; }
+    .actions > * { flex: 1; padding: 10px; font: inherit; font-size: 14px; font-weight: 700; text-align: center;
+                   color: #000; background: #fff; border: 2px solid #000; border-radius: 4px; text-decoration: none; cursor: pointer; }
+    @media print {
+      html, body { background: #fff; }
+      .paper { width: 72mm; margin: 0 auto; padding: 0 0 6mm; }
+      .actions { display: none; }
+    }
+  </style>
+  {{/* La hoja: 80 mm de ancho y el largo del ticket. "size: 80mm auto" no
+       es CSS válido (el navegador la ignora y usa A4 o Carta), así que el
+       largo lo pone el script al cargar, midiendo el ticket: una hoja fija
+       dejaría papel en blanco en la térmica. 297 mm es por si no corre. */}}
+  <style id="ticket-page">@page { size: 80mm 297mm; margin: 0; }</style>
+  <script>
+    addEventListener('load', function () {
+      var ticket = document.getElementById('ticket');
+      if (!ticket) return;
+      var mm = Math.ceil(ticket.getBoundingClientRect().height * 25.4 / 96) + 2;
+      document.getElementById('ticket-page').textContent = '@page { size: 80mm ' + mm + 'mm; margin: 0; }';
+    });
+  </script>
+</head>
+<body>
+{{with .Sale}}
+<main class="paper" id="ticket">
+  <div class="center">
+    <div class="shop">{{.StoreName}}</div>
+    {{with .StoreAddress}}<div class="muted">{{.}}</div>{{end}}
+  </div>
+  <hr class="rule">
+  <div class="row"><span>{{.RegisterName}}</span><span>{{printf (t "ticket.sale_number") .SaleNumber}}</span></div>
+  <div class="muted num">{{formatTime .CreatedAt}}</div>
+  {{if eq .Status "VOIDED"}}<div class="voided" data-voided>{{t "ticket.voided"}}</div>{{end}}
+  <hr class="rule">
+  {{range .Items}}
+  <div class="item">
+    <div class="name">{{.ProductName}}</div>
+    <div class="row">
+      <span class="num">{{if eq .SaleType "WEIGHT"}}{{qty .Quantity}} kg × {{money .UnitPrice}}/kg{{else}}{{qty .Quantity}} × {{money .UnitPrice}}{{end}}</span>
+      <span class="num">{{money .LineTotal}}</span>
+    </div>
+  </div>
+  {{end}}
+  <hr class="rule">
+  <div class="row total"><span>{{t "ticket.total"}}</span><span class="num">{{money .Total}}</span></div>
+  <div class="row muted"><span>{{t "ticket.tax_included"}}</span><span class="num">{{money .TaxAmount}}</span></div>
+  <hr class="rule">
+  {{range .Payments}}
+  <div class="row"><span>{{t (printf "pos.method_%s" .Method)}}{{with .Reference}} ({{.}}){{end}}</span><span class="num">{{money .Amount}}</span></div>
+  {{end}}
+  {{if $.Change}}
+  <div class="row" data-cash-change><span>{{t "pos.tendered"}}</span><span class="num">{{money $.Paid}}</span></div>
+  <div class="row"><span>{{t "pos.change"}}</span><span class="num">{{money $.Change}}</span></div>
+  {{end}}
+  <hr class="rule">
+  <div class="center muted">{{t "ticket.not_fiscal"}}</div>
+</main>
+<div class="actions">
+  <button type="button" onclick="window.print()">{{t "ticket.print"}}</button>
+  <a href="/pos">{{t "ticket.back"}}</a>
+</div>
+{{end}}
+</body>
+</html>

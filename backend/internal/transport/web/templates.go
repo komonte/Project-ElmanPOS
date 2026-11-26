@@ -72,6 +72,7 @@ var partialFiles = []string{
 	"templates/partials/adjustment_recent.gohtml",
 	"templates/partials/pos_options.gohtml",
 	"templates/partials/pos_result.gohtml",
+	"templates/partials/ticket.gohtml",
 }
 
 type TemplateEngine struct {

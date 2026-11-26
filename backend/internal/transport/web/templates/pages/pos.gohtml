@@ -134,7 +134,8 @@
      data-items="{{t "pos.items"}}" data-due="{{t "pos.due"}}" data-change="{{t "pos.change"}}"
      data-tendered="{{t "pos.tendered"}}" data-amount="{{t "pos.amount"}}"
      data-not-found="{{t "pos.scan_not_found"}}" data-no-price="{{t "pos.scan_no_price"}}"
-     data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"></div>
+     data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
+     data-ticket="{{t "ticket.title"}}"></div>
 
 <script>
   const posLang = document.documentElement.lang || 'es';
@@ -402,6 +403,30 @@
   document.addEventListener('htmx:afterRequest', function (e) {
     if (e.detail.elt.id === 'pos-form' && !e.detail.successful) posRecalc();
   });
+
+  // Imprimir ticket: lo carga en un iframe fuera de la vista y lo imprime
+  // desde ahí, así no se sale de Vender. Al cerrar el diálogo de impresión
+  // se sigue escaneando. Sin JavaScript, el enlace abre el ticket en otra
+  // pestaña.
+  function posPrintTicket(e, href) {
+    e.preventDefault();
+    var frame = document.getElementById('pos-ticket-frame');
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = 'pos-ticket-frame';
+      frame.title = posText.ticket;
+      frame.setAttribute('aria-hidden', 'true');
+      frame.tabIndex = -1;
+      frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+      document.body.appendChild(frame);
+    }
+    frame.onload = function () {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      posScan.focus();
+    };
+    frame.src = href;
+  }
 
   // Con algo en el carrito, salir de la página pide confirmación.
   window.addEventListener('beforeunload', function (e) {

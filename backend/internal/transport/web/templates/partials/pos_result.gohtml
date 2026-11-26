@@ -1,11 +1,15 @@
 {{/* Resultado de cobrar (PosCheckout). Con .Sale, la venta quedó guardada:
-     data-sale-done le avisa a la página que vacíe el carrito. Con .Error, el
+     data-sale-done le avisa a la página que vacíe el carrito, y "Imprimir
+     ticket" lo imprime sin salir de Vender (posPrintTicket, con .TicketURL:
+     lleva lo entregado en efectivo para mostrar el vuelto). Con .Error, el
      carrito queda como estaba. */}}
 {{with .Sale}}
 <div role="status" data-sale-done class="p-4 bg-surface border-2 border-line border-l-8 border-l-stock rounded-md space-y-1">
   <p class="font-display font-bold text-2xl">{{printf (t "pos.done") .SaleNumber}}</p>
   <p>{{t "pos.total"}}: <span class="font-bold tabular">{{money .Total}}</span>
     {{if .Change.IsPositive}} · {{t "pos.change"}}: <span class="font-bold tabular text-xl">{{money .Change}}</span>{{end}}</p>
+  <p><a href="{{$.TicketURL}}" target="_blank" class="btn-secondary" id="pos-print"
+        onclick="posPrintTicket(event, this.href)">{{t "pos.print_ticket"}}</a></p>
 </div>
 {{else}}{{with .Error}}
 <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.}}</div>

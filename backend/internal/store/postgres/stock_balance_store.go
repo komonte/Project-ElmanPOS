@@ -42,6 +42,21 @@ func (s *StockBalanceStore) OnHand(ctx context.Context, productID int64) (decima
 	return qty, nil
 }
 
+// OnHandAt devuelve cuánto hay de un producto en un local: la foto que guarda
+// un conteo (F-09) cuando se carga el producto. 0 si no tiene saldo ahí. No
+// bloquea.
+func (s *StockBalanceStore) OnHandAt(ctx context.Context, productID, storeID int64) (decimal.Decimal, error) {
+	var qty decimal.Decimal
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(quantity), 0)
+		FROM stock_balances
+		WHERE product_id = $1 AND store_id = $2;`, productID, storeID).Scan(&qty)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return qty, nil
+}
+
 // LockOnHand es OnHand bloqueando, para calcular el costo promedio dentro de
 // una transacción. Hasta que esa transacción termine:
 //   - Otra que también llame a LockOnHand para el mismo producto espera. Así

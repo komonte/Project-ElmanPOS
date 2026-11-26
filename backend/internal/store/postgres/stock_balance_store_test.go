@@ -202,3 +202,22 @@ func TestStockBalanceStore_LockOnHandWaits(t *testing.T) {
 		t.Fatal("second lock still waiting after the first commit")
 	}
 }
+
+// OnHandAt mira un solo local: el saldo de otro local no cuenta.
+func TestStockBalanceStore_OnHandAt(t *testing.T) {
+	f := newProductFixture(t)
+	balances := postgres.NewStockBalanceStore(f.tx)
+	p := f.create(t, "TEST-SB-9", "SALDO POR LOCAL TEST")
+	f.addBalance(t, p.ID, "4") // otro local
+	storeID := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test saldo') RETURNING id;`)
+
+	if got, err := balances.OnHandAt(f.ctx, p.ID, storeID); err != nil || !got.IsZero() {
+		t.Errorf("without balance: got %s, %v; want 0", got, err)
+	}
+	if _, err := balances.Add(f.ctx, p.ID, storeID, decimal.RequireFromString("2.5")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := balances.OnHandAt(f.ctx, p.ID, storeID); err != nil || !got.Equal(decimal.RequireFromString("2.5")) {
+		t.Errorf("with balance: got %s, %v; want 2.5", got, err)
+	}
+}

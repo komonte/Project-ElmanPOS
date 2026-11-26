@@ -18,7 +18,7 @@ func (f *productFixture) countFixture(t *testing.T) (*postgres.StockCountStore, 
 	t.Helper()
 	storeID := f.insertID(t, `INSERT INTO stores (name) VALUES ('Local test conteo') RETURNING id;`)
 	counts := postgres.NewStockCountStore(f.tx)
-	c, err := counts.CreateDraft(f.ctx, storeID)
+	c, err := counts.CreateDraft(f.ctx, storeID, nil)
 	if err != nil {
 		t.Fatalf("create draft: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestStockCountStore_Draft(t *testing.T) {
 	if err != nil || got.ID != c.ID {
 		t.Errorf("draft: got %+v, %v", got, err)
 	}
-	err = f.failing(t, func() error { _, err := counts.CreateDraft(f.ctx, c.StoreID); return err })
+	err = f.failing(t, func() error { _, err := counts.CreateDraft(f.ctx, c.StoreID, nil); return err })
 	if !errors.Is(err, store.ErrCountDraftExists) {
 		t.Errorf("second draft: got %v, want %v", err, store.ErrCountDraftExists)
 	}
@@ -63,7 +63,7 @@ func TestStockCountStore_Draft(t *testing.T) {
 	if _, err := counts.Draft(f.ctx, other); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("draft of a store without one: got %v, want %v", err, store.ErrNotFound)
 	}
-	err = f.failing(t, func() error { _, err := counts.CreateDraft(f.ctx, -1); return err })
+	err = f.failing(t, func() error { _, err := counts.CreateDraft(f.ctx, -1, nil); return err })
 	if !errors.Is(err, store.ErrInvalidReference) {
 		t.Errorf("unknown store: got %v, want %v", err, store.ErrInvalidReference)
 	}
@@ -267,9 +267,13 @@ func TestStockCountStore_ConfirmAndDiscard(t *testing.T) {
 	}
 
 	// Con el anterior confirmado se puede abrir otro; descartarlo borra todo.
-	draft, err := counts.CreateDraft(f.ctx, c.StoreID)
+	ana := f.user(t, "test.ana", "Ana Test")
+	draft, err := counts.CreateDraft(f.ctx, c.StoreID, &ana)
 	if err != nil {
 		t.Fatalf("new draft after confirm: %v", err)
+	}
+	if draft.CreatedBy == nil || *draft.CreatedBy != ana {
+		t.Errorf("created by: got %v, want %d", draft.CreatedBy, ana)
 	}
 	it, err := counts.CreateItem(f.ctx, draft.ID, p.ID, decimal.Zero)
 	if err != nil {

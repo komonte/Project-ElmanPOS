@@ -52,7 +52,8 @@ type Purchase struct {
 	// Solo lectura: los pone el store.
 	Status     string `json:"status" db:"status"`
 	ReceivedAt string `json:"received_at" db:"received_at"`
-	// ReceivedBy queda en nil hasta que haya login (F-13, migración 0013).
+	// ReceivedBy es quién recibió la compra (F-13). nil en las de antes del
+	// login.
 	ReceivedBy *int64 `json:"received_by" db:"received_by"`
 	CreatedAt  string `json:"created_at" db:"created_at"`
 	UpdatedAt  string `json:"updated_at" db:"updated_at"`

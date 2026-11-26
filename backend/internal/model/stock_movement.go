@@ -46,7 +46,8 @@ type StockMovement struct {
 	CountID    *int64          `json:"count_id" db:"count_id"`
 	// AdjustmentID: la salida conocida que lo originó (F-09b).
 	AdjustmentID *int64 `json:"adjustment_id" db:"adjustment_id"`
-	// PerformedBy queda en nil hasta que haya login (F-13, migración 0013).
+	// PerformedBy es quién hizo el movimiento (F-13). nil en los de antes del
+	// login.
 	PerformedBy *int64 `json:"performed_by" db:"performed_by"`
 	CreatedAt   string `json:"created_at" db:"created_at"`
 }

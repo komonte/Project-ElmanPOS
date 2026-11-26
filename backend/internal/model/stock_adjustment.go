@@ -52,12 +52,14 @@ type StockAdjustment struct {
 	// esta tabla: queda en los movimientos.
 	BatchID *int64 `json:"batch_id,omitempty" db:"-"`
 
-	// CreatedBy queda en nil hasta que haya login (F-13).
+	// CreatedBy es quién la anotó (F-13). nil en las de antes del login.
 	CreatedBy *int64 `json:"created_by" db:"created_by"`
 	CreatedAt string `json:"created_at" db:"created_at"`
 
 	// Solo lectura, para la lista.
 	ProductName string `json:"product_name" db:"-"`
+	// CreatedByName es el nombre de quién la anotó (nil si no se sabe).
+	CreatedByName *string `json:"created_by_name" db:"-"`
 }
 
 // Validate normaliza (recorta la nota) y valida lo que se escribe. No revisa

@@ -301,7 +301,7 @@ func TestRecordInOpenCount(t *testing.T) {
 		t.Errorf("without a count: got %v, %v", in, err)
 	}
 	counts := postgres.NewStockCountStore(f.tx)
-	c, err := counts.CreateDraft(f.ctx, f.storeID)
+	c, err := counts.CreateDraft(f.ctx, f.storeID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

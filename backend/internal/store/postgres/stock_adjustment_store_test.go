@@ -37,7 +37,12 @@ func TestStockAdjustmentStore_CreateAndRecent(t *testing.T) {
 		t.Errorf("empty notes must be NULL: %v, %v", notesNull, err)
 	}
 	add(storeID, model.ReasonDamage, "2", "se cayó")
-	last := add(storeID, model.ReasonOther, "0.5", "muestra")
+	ana := f.user(t, "test.ana", "Ana Test")
+	last, err := adjustments.Create(f.ctx, &model.StockAdjustment{StoreID: storeID, ProductID: p.ID,
+		Reason: model.ReasonOther, Quantity: decimal.RequireFromString("0.5"), Notes: "muestra", CreatedBy: &ana})
+	if err != nil {
+		t.Fatal(err)
+	}
 	add(other, model.ReasonExpiration, "9", "")
 
 	got, err := adjustments.Recent(f.ctx, storeID, 2)
@@ -47,6 +52,10 @@ func TestStockAdjustmentStore_CreateAndRecent(t *testing.T) {
 	if len(got) != 2 || got[0].ID != last.ID || got[0].Notes != "muestra" || got[0].ProductName != "YERBA SALIDA TEST" ||
 		got[1].Reason != model.ReasonDamage {
 		t.Errorf("recent: got %+v", got)
+	}
+	// Quién la anotó (F-13): nombre si se sabe, nil si no.
+	if got[0].CreatedByName == nil || *got[0].CreatedByName != "Ana Test" || got[1].CreatedByName != nil {
+		t.Errorf("created by: got %v / %v", got[0].CreatedByName, got[1].CreatedByName)
 	}
 	if all, _ := adjustments.Recent(f.ctx, storeID, 50); len(all) != 3 {
 		t.Errorf("recent of this store: got %d, want 3", len(all))

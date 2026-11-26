@@ -40,18 +40,24 @@ func TestCashierSessionStore_Close(t *testing.T) {
 	if _, err := sessions.LastClosed(f.ctx, s.CashRegisterID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("never closed: got %v, want %v", err, store.ErrNotFound)
 	}
-	closed, err := sessions.Close(f.ctx, s.ID, d("17400.50"))
+	ana := f.user(t, "test.ana", "Ana Test")
+	closed, err := sessions.Close(f.ctx, s.ID, d("17400.50"), &ana)
 	if err != nil {
 		t.Fatalf("close: %v", err)
+	}
+	// Quién cerró (F-13), con su nombre; la del fixture se abrió sin usuario.
+	if closed.ClosedBy == nil || *closed.ClosedBy != ana || closed.ClosedByName == nil || *closed.ClosedByName != "Ana Test" ||
+		closed.OpenedBy != nil || closed.OpenedByName != nil {
+		t.Errorf("closed by: got %v %v, opened by %v %v", closed.ClosedBy, closed.ClosedByName, closed.OpenedBy, closed.OpenedByName)
 	}
 	if closed.Status != model.SessionClosed || closed.ClosingAmount == nil ||
 		!closed.ClosingAmount.Equal(d("17400.50")) || closed.ClosedAt == nil || closed.RegisterName != "Caja test" {
 		t.Errorf("close: got %+v", closed)
 	}
-	if _, err := sessions.Close(f.ctx, s.ID, d("1")); !errors.Is(err, store.ErrSessionNotOpen) {
+	if _, err := sessions.Close(f.ctx, s.ID, d("1"), nil); !errors.Is(err, store.ErrSessionNotOpen) {
 		t.Errorf("close twice: got %v, want %v", err, store.ErrSessionNotOpen)
 	}
-	if _, err := sessions.Close(f.ctx, -1, d("1")); !errors.Is(err, store.ErrSessionNotOpen) {
+	if _, err := sessions.Close(f.ctx, -1, d("1"), nil); !errors.Is(err, store.ErrSessionNotOpen) {
 		t.Errorf("close unknown: got %v, want %v", err, store.ErrSessionNotOpen)
 	}
 
@@ -68,15 +74,19 @@ func TestCashierSessionStore_Close(t *testing.T) {
 	if last, err := sessions.LastClosed(f.ctx, s.CashRegisterID); err != nil || last.ID != s.ID {
 		t.Errorf("last closed: got %+v, %v", last, err)
 	}
-	next, err := sessions.Open(f.ctx, &model.CashierSession{CashRegisterID: s.CashRegisterID})
+	juan := f.user(t, "test.juan", "Juan Test")
+	next, err := sessions.Open(f.ctx, &model.CashierSession{CashRegisterID: s.CashRegisterID, OpenedBy: &juan})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if next.OpenedByName == nil || *next.OpenedByName != "Juan Test" || next.ClosedBy != nil || next.ClosedByName != nil {
+		t.Errorf("opened by: got %v, closed by %v", next.OpenedByName, next.ClosedBy)
 	}
 	if last, err := sessions.LastClosed(f.ctx, s.CashRegisterID); err != nil || last.ID != s.ID {
 		t.Errorf("open one does not count: got %+v, %v", last, err)
 	}
 	// now() es la hora de la transacción: el segundo cierre se adelanta a mano.
-	if _, err := sessions.Close(f.ctx, next.ID, d("0")); err != nil {
+	if _, err := sessions.Close(f.ctx, next.ID, d("0"), nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.tx.ExecContext(f.ctx, `UPDATE cashier_sessions SET closed_at = closed_at + interval '1 hour' WHERE id = $1;`, next.ID); err != nil {
@@ -251,5 +261,41 @@ func TestBatchStore_RestoreAndSaleMovements(t *testing.T) {
 	}
 	if list[1].BatchID != nil || !list[1].Quantity.Equal(d("-0.050")) || !list[1].UnitCost.Equal(d("850")) {
 		t.Errorf("without batch: got %+v", list[1])
+	}
+}
+
+// TestSaleStore_CreatedBy: quién cobró (F-13) se guarda y vuelve con su
+// nombre en la venta y en la lista de la caja; sin usuario queda nil.
+func TestSaleStore_CreatedBy(t *testing.T) {
+	f := newProductFixture(t)
+	sales := postgres.NewSaleStore(f.tx)
+	s := f.openSession(t)
+	p := f.create(t, "TEST-WHO-1", "SODA QUIEN TEST")
+	ana := f.user(t, "test.ana", "Ana Test")
+
+	anon := f.saleIn(t, s, p.ID, "100", &model.Payment{Method: model.PaymentCash, Amount: d("100")})
+	n, err := sales.NextNumber(f.ctx, s.CashRegisterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byAna := &model.Sale{CashierSessionID: s.ID, SaleNumber: n, Subtotal: d("200"), TaxAmount: d("0"), Total: d("200"),
+		CreatedBy: &ana,
+		Items:     []*model.SaleItem{{ProductID: p.ID, Quantity: d("1"), UnitPrice: d("200"), UnitCost: d("1"), TaxRate: d("0")}},
+		Payments:  []*model.Payment{{Method: model.PaymentCash, Amount: d("200")}}}
+	if err := sales.Create(f.ctx, byAna); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := sales.Get(f.ctx, byAna.ID)
+	if err != nil || got.CreatedBy == nil || *got.CreatedBy != ana || got.CreatedByName == nil || *got.CreatedByName != "Ana Test" {
+		t.Errorf("get: got %+v, %v", got, err)
+	}
+	list, err := sales.ListBySession(f.ctx, s.ID)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("list: got %d, %v", len(list), err)
+	}
+	if list[0].ID != byAna.ID || list[0].CreatedByName == nil || *list[0].CreatedByName != "Ana Test" ||
+		list[1].ID != anon.ID || list[1].CreatedBy != nil || list[1].CreatedByName != nil {
+		t.Errorf("list: got %+v / %+v", list[0], list[1])
 	}
 }

@@ -67,7 +67,7 @@ func (s *Service) Close(ctx context.Context, sessionID int64, declared []*model.
 				return err
 			}
 		}
-		closed, err := sessions.Close(ctx, sessionID, sum.Close.Line(model.PaymentCash).Declared)
+		closed, err := sessions.Close(ctx, sessionID, sum.Close.Line(model.PaymentCash).Declared, nil)
 		if err != nil {
 			return err
 		}

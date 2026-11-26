@@ -8,7 +8,8 @@ import (
 // AuditEntry es una fila de audit_log (02, NFR-03): quién cambió qué tabla,
 // qué fila y cómo quedó. NewData se guarda como JSON.
 type AuditEntry struct {
-	// UserID queda en nil hasta que haya login (F-13): la columna acepta NULL.
+	// UserID es quién lo hizo (F-13). nil si no fue alguien que entró: el
+	// comando passwd, o lo de antes del login.
 	UserID   *int64
 	Table    string
 	Action   string // INSERT, UPDATE, DELETE

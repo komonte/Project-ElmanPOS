@@ -81,7 +81,7 @@ func (s *Service) Open(ctx context.Context) (*model.StockCount, error) {
 		counts := postgres.NewStockCountStore(tx)
 		c, err := counts.Draft(ctx, storeID)
 		if errors.Is(err, store.ErrNotFound) {
-			c, err = counts.CreateDraft(ctx, storeID)
+			c, err = counts.CreateDraft(ctx, storeID, nil)
 		}
 		if err != nil {
 			return err

@@ -44,13 +44,14 @@ func (s *StockAdjustmentStore) Create(ctx context.Context, a *model.StockAdjustm
 }
 
 // Recent devuelve las últimas salidas de un local (la más nueva primero),
-// hasta limit, con el nombre del producto. Vacía, no nil, si no hay.
+// hasta limit, con el nombre del producto y el de quién la anotó. Vacía, no nil, si no hay.
 func (s *StockAdjustmentStore) Recent(ctx context.Context, storeID int64, limit int) ([]*model.StockAdjustment, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT a.id, a.store_id, a.product_id, a.reason, a.quantity, COALESCE(a.notes, ''),
-		       a.created_by, a.created_at, p.name
+		       a.created_by, a.created_at, p.name, u.name
 		FROM stock_adjustments a
 		JOIN products p ON p.id = a.product_id
+		LEFT JOIN users u ON u.id = a.created_by
 		WHERE a.store_id = $1
 		ORDER BY a.created_at DESC, a.id DESC
 		LIMIT $2;`, storeID, limit)
@@ -62,7 +63,7 @@ func (s *StockAdjustmentStore) Recent(ctx context.Context, storeID int64, limit 
 	for rows.Next() {
 		a := new(model.StockAdjustment)
 		if err := rows.Scan(&a.ID, &a.StoreID, &a.ProductID, &a.Reason, &a.Quantity, &a.Notes,
-			&a.CreatedBy, &a.CreatedAt, &a.ProductName); err != nil {
+			&a.CreatedBy, &a.CreatedAt, &a.ProductName, &a.CreatedByName); err != nil {
 			return nil, err
 		}
 		list = append(list, a)

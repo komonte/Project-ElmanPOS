@@ -8,3 +8,5 @@ require (
 )
 
 require github.com/shopspring/decimal v1.4.0
+
+require golang.org/x/crypto v0.59.0

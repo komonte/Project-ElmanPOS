@@ -153,6 +153,21 @@ func (s *ProductStore) GetByID(ctx context.Context, id int64) (*model.Product, e
 	return p, nil
 }
 
+// GetBySKU busca un producto (activo o no) por su SKU exacto: lo usa la
+// importación de un conteo (F-09) cuando el código de la planilla no es un
+// código de barras del catálogo. ErrNotFound si no hay ninguno.
+func (s *ProductStore) GetBySKU(ctx context.Context, sku string) (*model.Product, error) {
+	p, err := scanProduct(s.db.QueryRowContext(ctx, productSelect+`
+		WHERE p.sku = $1;`, sku))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, store.ErrNotFound
+		}
+		return nil, err
+	}
+	return p, nil
+}
+
 // productMatch es el filtro de las búsquedas: lo escrito ($1) en el nombre o
 // en el sku ("oreo" o "OREO-200"), o el código de barras exacto ($2, ya
 // normalizado; vacío no encuentra nada). En el almacén se busca de las tres

@@ -755,3 +755,15 @@ func TestProductStore_SearchByBarcode(t *testing.T) {
 		}
 	})
 }
+
+func TestProductStore_GetBySKU(t *testing.T) {
+	f := newProductFixture(t)
+	p := f.create(t, "TEST-BYSKU-1", "POR SKU TEST")
+	got, err := f.store.GetBySKU(f.ctx, "TEST-BYSKU-1")
+	if err != nil || got.ID != p.ID || got.Name != "POR SKU TEST" {
+		t.Errorf("found: got %+v, %v", got, err)
+	}
+	if _, err := f.store.GetBySKU(f.ctx, "NO-EXISTE-TEST"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("missing: got %v, want %v", err, store.ErrNotFound)
+	}
+}

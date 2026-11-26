@@ -15,8 +15,9 @@ const (
 	MovementAdjustment = "ADJUSTMENT"
 )
 
-// Motivos de un ajuste (ENUM adjustment_reason). Por ahora solo el del
-// conteo: la diferencia entre lo contado y lo que decía el sistema.
+// Motivos de un ajuste (ENUM adjustment_reason). ReasonCount es el del
+// conteo: la diferencia entre lo contado y lo que decía el sistema. Los de
+// las salidas conocidas están en stock_adjustment.go.
 const ReasonCount = "COUNT"
 
 // StockMovement es una fila del libro de stock (02 4.12): cada entrada o
@@ -39,6 +40,8 @@ type StockMovement struct {
 	UnitCost   decimal.Decimal `json:"unit_cost" db:"unit_cost"`
 	PurchaseID *int64          `json:"purchase_id" db:"purchase_id"`
 	CountID    *int64          `json:"count_id" db:"count_id"`
+	// AdjustmentID: la salida conocida que lo originó (F-09b).
+	AdjustmentID *int64 `json:"adjustment_id" db:"adjustment_id"`
 	// PerformedBy queda en nil hasta que haya login (F-13, migración 0013).
 	PerformedBy *int64 `json:"performed_by" db:"performed_by"`
 	CreatedAt   string `json:"created_at" db:"created_at"`

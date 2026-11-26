@@ -12,6 +12,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/adjustments"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
@@ -36,9 +37,10 @@ type WebHandler struct {
 	costs         *costs.Service
 	purchases     *purchases.Service
 	stockCounts   *stockcounts.Service
+	adjustments   *adjustments.Service
 }
 
-func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service) *WebHandler {
+func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand], taxSvc *service.Service[model.Tax], supplierSvc *service.Service[model.Supplier], categorySvc *service.Service[model.Category], productSvc *service.Service[model.Product], createProduct *createproduct.Service, productCodes *productcodes.Service, prices *prices.Service, costs *costs.Service, purchases *purchases.Service, stockCounts *stockcounts.Service, adjustments *adjustments.Service) *WebHandler {
 	return &WebHandler{
 		engine:        engine,
 		brandSvc:      brandSvc,
@@ -52,6 +54,7 @@ func NewWebHandler(engine *TemplateEngine, brandSvc *service.Service[model.Brand
 		costs:         costs,
 		purchases:     purchases,
 		stockCounts:   stockCounts,
+		adjustments:   adjustments,
 	}
 }
 
@@ -208,6 +211,18 @@ var errorKeys = []struct {
 	{store.ErrCountDraftExists, "error.count_draft_exists"},
 	{store.ErrCountNotDraft, "error.count_not_draft"},
 	{store.ErrNegativeStock, "error.count_negative_stock"},
+	// Salidas conocidas (F-09b). La falta de stock dice cuánto hay (errText).
+	{model.ErrStockAdjustmentProduct, "error.count_product_missing"},
+	{model.ErrInvalidAdjustmentReason, "error.adjustment_reason_invalid"},
+	{model.ErrInvalidAdjustmentQuantity, "error.adjustment_quantity_invalid"},
+	{model.ErrAdjustmentNotesTooLong, "error.adjustment_notes_too_long"},
+	{model.ErrAdjustmentNotesRequired, "error.adjustment_notes_required"},
+	{model.ErrInvalidAdjustmentBatch, "error.adjustment_batch_invalid"},
+	{adjustments.ErrUnknownProduct, "error.product_unknown"},
+	{adjustments.ErrProductInactive, "error.line_product_inactive"},
+	{adjustments.ErrCompositeProduct, "error.line_composite"},
+	{adjustments.ErrBatchNotAllowed, "error.adjustment_batch_invalid"},
+	{adjustments.ErrUnknownBatch, "error.adjustment_batch_invalid"},
 	{store.ErrNoActiveStore, "error.no_active_store"},
 	{store.ErrSeveralActiveStores, "error.several_active_stores"},
 }
@@ -231,6 +246,10 @@ func (h *WebHandler) errText(r *http.Request, lang string, err error) string {
 	var taken *productcodes.CodeTakenError
 	if errors.As(err, &taken) {
 		return fmt.Sprintf(i18n.T(lang, "error.barcode_taken"), taken.ProductSKU, taken.ProductName)
+	}
+	var short *adjustments.NotEnoughStockError
+	if errors.As(err, &short) {
+		return fmt.Sprintf(i18n.T(lang, "error.adjustment_not_enough"), formatQuantity(lang, short.Available))
 	}
 	var brandInactive *createproduct.BrandInactiveError
 	if errors.As(err, &brandInactive) {

@@ -152,3 +152,55 @@ func TestBatchStore_TakeFIFO(t *testing.T) {
 		t.Errorf("cost: got %+v, %v", takes, err)
 	}
 }
+
+func TestBatchStore_OpenBatchesAndTakeFrom(t *testing.T) {
+	f := newProductFixture(t)
+	batches := postgres.NewBatchStore(f.tx)
+	p := f.create(t, "TEST-BA-5", "LOTE ELEGIDO TEST")
+	other := f.create(t, "TEST-BA-6", "OTRO LOTE ELEGIDO TEST")
+	newBatch := func(productID int64, number, expiry, qty string) *model.ProductBatch {
+		t.Helper()
+		b, err := batches.Create(f.ctx, &model.ProductBatch{ProductID: productID, BatchNumber: number, ExpiryDate: expiry,
+			OriginalQuantity: decimal.RequireFromString(qty), UnitCost: decimal.RequireFromString("60")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	noExpiry := newBatch(p.ID, "SIN-VTO", "", "1")
+	later := newBatch(p.ID, "L-2", "2027-02-01", "2")
+	sooner := newBatch(p.ID, "L-1", "2027-01-01", "3")
+	foreign := newBatch(other.ID, "OTRO", "2026-01-01", "5")
+
+	open, err := batches.OpenBatches(f.ctx, p.ID)
+	if err != nil || len(open) != 3 || open[0].ID != sooner.ID || open[1].ID != later.ID || open[2].ID != noExpiry.ID {
+		t.Fatalf("open: got %+v, %v", open, err)
+	}
+
+	// Del elegido, aunque no sea el que vence antes.
+	take, left, err := batches.TakeFrom(f.ctx, p.ID, later.ID, decimal.NewFromInt(1))
+	if err != nil || take == nil || take.BatchID != later.ID || !take.Quantity.Equal(decimal.NewFromInt(1)) ||
+		!take.UnitCost.Equal(decimal.RequireFromString("60")) || !left.IsZero() {
+		t.Errorf("take 1: got %+v left %s, %v", take, left, err)
+	}
+	// Más de lo que tiene: saca lo que queda y devuelve el resto.
+	take, left, err = batches.TakeFrom(f.ctx, p.ID, later.ID, decimal.NewFromInt(4))
+	if err != nil || take == nil || !take.Quantity.Equal(decimal.NewFromInt(1)) || !left.Equal(decimal.NewFromInt(3)) {
+		t.Errorf("take 4: got %+v left %s, %v", take, left, err)
+	}
+	// Vacío: no saca nada.
+	take, left, err = batches.TakeFrom(f.ctx, p.ID, later.ID, decimal.NewFromInt(1))
+	if err != nil || take != nil || !left.Equal(decimal.NewFromInt(1)) {
+		t.Errorf("take from empty: got %+v left %s, %v", take, left, err)
+	}
+	if open, _ := batches.OpenBatches(f.ctx, p.ID); len(open) != 2 {
+		t.Errorf("open after emptying L-2: got %d, want 2", len(open))
+	}
+	// El lote de otro producto no se toca.
+	if _, _, err := batches.TakeFrom(f.ctx, p.ID, foreign.ID, decimal.NewFromInt(1)); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("other product's batch: got %v, want %v", err, store.ErrNotFound)
+	}
+	if open, _ := batches.OpenBatches(f.ctx, -1); open == nil || len(open) != 0 {
+		t.Errorf("no batches: got %v, want empty", open)
+	}
+}

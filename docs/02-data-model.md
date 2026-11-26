@@ -42,6 +42,9 @@ erDiagram
     stores ||--o{ stock_counts : ""
     stock_counts ||--o{ stock_count_items : "counts"
     stock_count_items ||--o{ stock_count_entries : "loaded in sectors"
+    stores ||--o{ stock_adjustments : ""
+    products ||--o{ stock_adjustments : "leaves as"
+    stock_adjustments ||--o{ stock_movements : "explains"
     products ||--o{ stock_count_items : ""
     suppliers ||--o{ purchases : "sells to"
     suppliers ||--o{ products : "preferred for"
@@ -300,12 +303,14 @@ Indexes: `(product_id, remaining_quantity, expiry_date)` — FIFO scan picks old
 | sale_id | BIGINT | FK → sales.id, NULL | |
 | purchase_id | BIGINT | FK → purchases.id, NULL | |
 | count_id | BIGINT | FK → stock_counts.id, NULL | |
+| adjustment_id | BIGINT | FK → stock_adjustments.id, NULL | Known exit (F-09b, migration `0016`). |
 | performed_by | BIGINT | FK → users.id, NULL | Who made the movement. `NULL` until there is a login (F-13, migration `0013`), like `audit_log.user_id`. |
 | notes | VARCHAR(500) | NULL | Free-text context. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 Constraints:
-- **Exactly one source reference:** `CHECK (num_nonnulls(sale_id, purchase_id, count_id) = 1)` — no polymorphic FK.
+- **Exactly one source reference:** `CHECK (num_nonnulls(sale_id, purchase_id, count_id, adjustment_id) = 1)` — no polymorphic FK (`adjustment_id` since `0016`).
+- **A known exit only takes stock out:** `CHECK (adjustment_id IS NULL OR (movement_type = 'ADJUSTMENT' AND quantity < 0))`.
 - **Sign per type:**
   ```sql
   CHECK (
@@ -533,6 +538,23 @@ UNIQUE `(cashier_session_id, sale_number)`.
 
 > Avoids hardcoding business thresholds in code. Example: the "expiring soon" report reads `expiry_warning_days` from here instead of a constant.
 
+### 4.26 `stock_adjustments` — known exits
+
+One row per known exit (F-09b, migration `0016`): goods that left without being sold. Its movements (`ADJUSTMENT`, negative, one per batch or one without batch) reference it through `stock_movements.adjustment_id`.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| store_id | BIGINT | FK → stores.id, NOT NULL | |
+| product_id | BIGINT | FK → products.id, NOT NULL | |
+| reason | adjustment_reason | NOT NULL, CHECK (IN ('OWN_CONSUMPTION', 'DAMAGE', 'EXPIRATION', 'OTHER')) | No `THEFT` (an unexplained loss shows up in a count) and no `COUNT` (the count's own). |
+| quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | What left, positive; the movements carry the sign. |
+| notes | VARCHAR(500) | NULL | Required for `OTHER` (`CHECK (reason <> 'OTHER' OR btrim(COALESCE(notes, '')) <> '')`). |
+| created_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13). |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+> **Append-only:** a trigger rejects `UPDATE` and `DELETE`, like the ledger it explains. A mistake is fixed with a count.
+
 ---
 
 ## 5. Index Summary
@@ -551,6 +573,9 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | prices / product_costs | (product_id, valid_from DESC) | Current + historical price. |
 | stock_counts | UNIQUE(store_id) WHERE status = 'DRAFT' | One count in progress per store (F-09). |
 | stock_count_entries | (item_id) | A counted product's loads. |
+| stock_adjustments | (store_id, created_at DESC) | Latest known exits of a store (F-09b). |
+| stock_adjustments | (product_id, created_at) | A product's known exits. |
+| stock_movements | (adjustment_id) WHERE NOT NULL | A known exit's movements. |
 | products | (preferred_supplier_id) | Replenishment grouped by preferred supplier. |
 | app_settings | UNIQUE(key) | Config lookup. |
 | taxes | idx_taxes_name_unique_lower | Case-insensitive unique name |
@@ -598,8 +623,8 @@ UNIQUE `(cashier_session_id, sale_number)`.
 ### 7.3 Stock count & merma (friction-free reconciliation)
 1. **Paper capture (offline):** known exits — family consumption, breakage, spoilage — noted as they happen.
 2. **Draft count:** open `stock_counts` (DRAFT); load items (`system_quantity` snapshot) and record `counted_quantity`.
-3. **Known exits first:** enter known consumptions as `ADJUSTMENT` movements with `reason = 'OWN_CONSUMPTION' | 'DAMAGE' | 'EXPIRATION'`. System now reflects explained losses.
-4. **Confirm:** `status = CONFIRMED`. For each item where `counted <> system`, system auto-inserts `stock_movements` (`ADJUSTMENT`, `reason = 'COUNT'`, signed by direction, `count_id` reference) and moves `stock_balances` by that difference (not set to the counted quantity: goods received after counting are kept). Extra stock of a `controls_batches` product goes to batch `I-<count id>`; missing stock comes out of the batches FIFO by expiry. Detail in `03-flows-and-transactions.md` F-09. (In v1 the app does steps 2 and 4; known exits, step 3, are deferred.)
+3. **Known exits first:** enter known consumptions as `ADJUSTMENT` movements with `reason = 'OWN_CONSUMPTION' | 'DAMAGE' | 'EXPIRATION'` (in the app: `stock_adjustments`, logged any day, F-09b). System now reflects explained losses.
+4. **Confirm:** `status = CONFIRMED`. For each item where `counted <> system`, system auto-inserts `stock_movements` (`ADJUSTMENT`, `reason = 'COUNT'`, signed by direction, `count_id` reference) and moves `stock_balances` by that difference (not set to the counted quantity: goods received after counting are kept). Extra stock of a `controls_batches` product goes to batch `I-<count id>`; missing stock comes out of the batches FIFO by expiry. Detail in `03-flows-and-transactions.md` F-09. Known exits (step 3) are their own flow, F-09b.
 5. Remaining unexplained difference → true merma (potential theft signal). Reported by `reason`, keeping "known consumption" and "unknown loss" separate.
 
 ### 7.4 Cash session lifecycle

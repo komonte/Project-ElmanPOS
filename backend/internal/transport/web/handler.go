@@ -108,6 +108,7 @@ func (h *WebHandler) render(w http.ResponseWriter, r *http.Request, page string,
 	}
 	// Quién entró, para el menú (nil en el login).
 	data["CurrentUser"] = transport.CurrentUser(r.Context())
+	setCan(r, data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.engine.Render(w, lang, page, data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -121,6 +122,7 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, r *http.Request, parti
 	}
 	data["Lang"] = lang
 	data["T"] = func(key string) string { return i18n.T(lang, key) }
+	setCan(r, data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if len(statusCode) > 0 {
 		w.WriteHeader(statusCode[0])

@@ -1,0 +1,10 @@
+{{define "content"}}
+{{/* 403 (F-13): el rol no tiene permiso para esta página. El menú ya
+     muestra solo lo que el rol puede usar. */}}
+<section class="max-w-xl" role="alert">
+  <h1 class="shelf-title">{{t "forbidden.title"}}</h1>
+  <p class="mt-4 text-lg">{{with .CurrentUser}}{{printf (t "forbidden.text") (t (printf "role.%s" .Role))}}{{end}}</p>
+  <p class="mt-1 text-muted">{{t "forbidden.hint"}}</p>
+  <p class="mt-6"><a href="{{.Home}}" class="btn-primary">{{t "forbidden.home"}}</a></p>
+</section>
+{{end}}

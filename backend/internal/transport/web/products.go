@@ -231,6 +231,7 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 			data["Error"] = h.errMsg(r, err)
 			return data
 		}
+		costData["Can"] = requestCan(r)
 		data["CostData"] = costData
 	}
 

@@ -27,6 +27,8 @@
   <p class="text-muted">{{t "product.prices_empty"}}</p>
   {{end}}
 
+  {{/* Cambiar el precio: solo el admin (F-13). */}}
+  {{if can .Can "prices"}}
   <form hx-post="/products/{{.ProductID}}/prices" hx-target="#product-prices" hx-swap="outerHTML"
         class="flex flex-wrap items-end gap-3">
     <div>
@@ -37,6 +39,7 @@
     </div>
     <button type="submit" class="btn-secondary">{{t "product.price_save"}}</button>
   </form>
+  {{end}}
 
   {{/* with primero: sin datos (.Prices nil), len fallaría. */}}
   {{with .Prices}}{{if gt (len .) 1}}

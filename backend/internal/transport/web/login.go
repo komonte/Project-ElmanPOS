@@ -45,6 +45,9 @@ func (h *WebHandler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	transport.SetSessionCookie(w, login.Token, int(time.Until(login.ExpiresAt).Seconds()), h.secureCookie)
+	if next == "/" {
+		next = homeFor(login.User) // el cajero, directo a vender
+	}
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 

@@ -636,6 +636,9 @@ func TestRenderProductPrices(t *testing.T) {
 	render := func(t *testing.T, data map[string]any) string {
 		t.Helper()
 		var buf bytes.Buffer
+		if _, ok := data["Can"]; !ok {
+			data["Can"] = adminCan
+		}
 		if err := e.Render(&buf, "es", "product_prices.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
@@ -657,6 +660,13 @@ func TestRenderProductPrices(t *testing.T) {
 		}
 		if strings.Contains(html, "autofocus") || strings.Contains(html, `role="alert"`) {
 			t.Error("plain section: unexpected autofocus or alert")
+		}
+	})
+
+	t.Run("without permission: the price, no form", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Prices": history, "Can": stockCan})
+		if !strings.Contains(html, "$ 1.600,00") || strings.Contains(html, "hx-post") {
+			t.Errorf("got %s", html)
 		}
 	})
 
@@ -697,11 +707,23 @@ func TestRenderProductCosts(t *testing.T) {
 	render := func(t *testing.T, data map[string]any) string {
 		t.Helper()
 		var buf bytes.Buffer
+		if _, ok := data["Can"]; !ok {
+			data["Can"] = adminCan
+		}
 		if err := e.Render(&buf, "es", "product_costs.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
 	}
+
+	t.Run("without permission: costs and suggestion, no forms", func(t *testing.T) {
+		html := render(t, map[string]any{"ProductID": int64(7), "Costs": history,
+			"Margin": dec("35"), "Suggested": &suggested, "Can": stockCan})
+		if !strings.Contains(html, "$ 700,00") || !strings.Contains(html, "$ 1.076,92") ||
+			strings.Contains(html, "Usar como precio") || strings.Contains(html, "hx-post") {
+			t.Errorf("got %s", html)
+		}
+	})
 
 	t.Run("costs, suggestion and history", func(t *testing.T) {
 		html := render(t, map[string]any{"ProductID": int64(7), "Costs": history,

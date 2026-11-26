@@ -23,9 +23,13 @@
 <section class="p-6 border-2 border-line rounded-md bg-surface max-w-2xl space-y-4">
   <h2 class="font-display font-bold text-2xl">{{t "cash.no_register_title"}}</h2>
   <p class="text-muted">{{t "cash.no_register_hint"}}</p>
+  {{if can $.Can "cash_setup"}}
   <form method="post" action="/cash/register">
     <button type="submit" class="btn-primary">{{t "cash.create_register"}}</button>
   </form>
+  {{else}}
+  <p class="font-bold">{{t "cash.no_register_ask_admin"}}</p>
+  {{end}}
 </section>
 {{else if .Session}}
 <section id="cash-open" class="p-6 border-2 border-line border-l-8 border-l-tag rounded-md bg-surface max-w-2xl space-y-2">
@@ -70,7 +74,7 @@
           <div class="flex justify-end gap-2">
             <a href="/pos/sales/{{.ID}}/ticket" target="_blank" rel="noopener" class="btn-secondary px-3 py-1"
                aria-label="{{printf (t "cash.ticket_of") .SaleNumber}}">{{t "cash.ticket"}}</a>
-            {{if not $voided}}
+            {{if and (not $voided) (can $.Can "void")}}
             <button type="button" id="void-open-{{.ID}}" class="btn-secondary px-3 py-1" aria-controls="void-{{.ID}}"
                     aria-expanded="{{if $failed}}true{{else}}false{{end}}" onclick="cashToggleVoid(this)"
                     aria-label="{{printf (t "cash.void_of") .SaleNumber}}">{{t "cash.void"}}</button>
@@ -78,7 +82,7 @@
           </div>
         </td>
       </tr>
-      {{if not $voided}}
+      {{if and (not $voided) (can $.Can "void")}}
       <tr id="void-{{.ID}}" class="border-b border-line bg-danger-soft"{{if not $failed}} hidden{{end}}>
         <td colspan="6" class="p-4">
           <form method="post" action="/cash/sales/{{.ID}}/void" class="space-y-3" onsubmit="return cashConfirmVoid(this)"

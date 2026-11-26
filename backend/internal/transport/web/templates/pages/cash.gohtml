@@ -1,8 +1,9 @@
 {{define "content"}}
 {{/* Caja (F-11, F-12). Datos: .State (sessions.State: .Register y
      .Session, nil si no hay), .Amount (lo escrito si abrir falló), .Error,
-     y con la caja abierta .CloseFields (un closeField por medio) y
-     .CloseError (si cerrar falló: el formulario de cierre vuelve abierto). */}}
+     y con la caja abierta .Sales (las ventas de la sesión, la última
+     primero), .CloseFields (un closeField por medio) y .CloseError (si
+     cerrar falló: el formulario de cierre vuelve abierto). */}}
 <header class="mb-8">
   <h1 class="shelf-title">{{t "cash.title"}}</h1>
   <p class="mt-2 text-muted max-w-2xl">{{t "cash.hint"}}</p>
@@ -27,6 +28,45 @@
   <p>{{printf (t "cash.open_since") (formatTime .Session.OpenedAt)}}</p>
   <p>{{t "cash.opening_amount"}}: <span class="font-bold tabular">{{money .Session.OpeningAmount}}</span></p>
   <p class="pt-2"><a href="/pos" class="btn-primary">{{t "cash.go_sell"}}</a></p>
+</section>
+
+{{/* Ventas de esta caja (F-08): la última primero. La anulada queda
+     tachada, con su motivo. El ticket se reimprime en otra pestaña. */}}
+<section id="cash-sales" class="mt-8 max-w-3xl">
+  <h2 class="font-display font-bold text-2xl mb-3">{{t "cash.sales_title"}}</h2>
+  {{if not $.Sales}}
+  <p id="cash-sales-empty" class="text-muted">{{t "cash.sales_none"}}</p>
+  {{else}}
+  <table class="w-full bg-surface border-2 border-line rounded-md">
+    <thead>
+      <tr class="text-left border-b-2 border-line">
+        <th scope="col" class="p-3">{{t "cash.col_number"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_time"}}</th>
+        <th scope="col" class="p-3 text-right">{{t "cash.col_total"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_payments"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_status"}}</th>
+        <th scope="col" class="p-3"><span class="sr-only">{{t "cash.col_actions"}}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $.Sales}}
+      {{$voided := eq .Status "VOIDED"}}
+      <tr id="sale-{{.ID}}" data-status="{{.Status}}" class="border-b border-line align-top{{if $voided}} text-muted{{end}}">
+        <th scope="row" class="p-3 text-left tabular{{if $voided}} line-through{{end}}">{{.SaleNumber}}</th>
+        <td class="p-3 tabular{{if $voided}} line-through{{end}}">{{formatClock .CreatedAt}}</td>
+        <td class="p-3 text-right tabular font-bold{{if $voided}} line-through{{end}}">{{money .Total}}</td>
+        <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}</td>
+        <td class="p-3">{{if $voided}}<span class="font-bold text-danger">{{t "cash.sale_voided"}}</span>
+          <span class="block text-sm" data-void-reason>{{printf (t "cash.sale_void_reason") .VoidReason}}</span>{{else}}{{t "cash.sale_completed"}}{{end}}</td>
+        <td class="p-3 text-right">
+          <a href="/pos/sales/{{.ID}}/ticket" target="_blank" rel="noopener" class="btn-secondary"
+             aria-label="{{printf (t "cash.ticket_of") .SaleNumber}}">{{t "cash.ticket"}}</a>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
 </section>
 
 {{/* Cierre ciego (F-12): cada medio dice dónde mirar y cuántos cobros hubo,

@@ -114,6 +114,16 @@ func (s *Service) Summary(ctx context.Context, sessionID int64) (*Summary, error
 	return sum, nil
 }
 
+// Sales devuelve las ventas de la sesión, la última primero, con sus pagos
+// (sin renglones) y las anuladas con su motivo: la lista de /cash, desde
+// donde se reimprime el ticket o se anula (F-08). Vacía si no tiene.
+func (s *Service) Sales(ctx context.Context, sessionID int64) ([]*model.Sale, error) {
+	if sessionID <= 0 {
+		return nil, service.ErrInvalidID
+	}
+	return postgres.NewSaleStore(s.db).ListBySession(ctx, sessionID)
+}
+
 // PaymentCounts cuenta los cobros de la sesión por medio (solo ventas
 // COMPLETED), sin montos: al cerrar, ayuda a buscarlos en el home banking o
 // en el cierre del posnet ("hoy hubo 3 transferencias") sin mostrar lo

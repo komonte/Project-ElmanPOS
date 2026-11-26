@@ -43,3 +43,16 @@ func formatTime(t string) string {
 	}
 	return parsed.In(storeLocation()).Format(time.DateTime)
 }
+
+// formatClock es formatTime con solo la hora: "15:31". Para la lista de
+// ventas de la caja abierta, donde la fecha es la misma en todas las filas.
+func formatClock(t string) string {
+	if t == "" {
+		return "-"
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, t)
+	if err != nil {
+		return strings.Replace(t, "T", " ", 1)
+	}
+	return parsed.In(storeLocation()).Format("15:04")
+}

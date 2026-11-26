@@ -163,6 +163,62 @@ func TestRenderCash(t *testing.T) {
 		}
 	})
 
+	t.Run("open without sales", func(t *testing.T) {
+		html := render(t, map[string]any{"State": openState, "CloseFields": fields})
+		for _, s := range []string{`id="cash-sales"`, "Ventas de esta caja", `id="cash-sales-empty"`,
+			"Todavía no hay ventas en esta caja."} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		if strings.Contains(html, "<table") {
+			t.Error("no sales: no table")
+		}
+	})
+
+	t.Run("open with sales", func(t *testing.T) {
+		voidedAt := "2026-11-26T14:10:00Z"
+		list := []*model.Sale{
+			{ID: 31, SaleNumber: 12, Status: model.SaleVoided, Total: decimal.RequireFromString("1800"),
+				CreatedAt: "2026-11-26T14:00:00Z", VoidedAt: &voidedAt, VoidReason: "Se cobró dos veces",
+				Payments: []*model.Payment{{Method: model.PaymentCash, Amount: decimal.RequireFromString("1800")}}},
+			{ID: 30, SaleNumber: 11, Status: model.SaleCompleted, Total: decimal.RequireFromString("5000"),
+				CreatedAt: "2026-11-26T13:05:00Z",
+				Payments: []*model.Payment{{Method: model.PaymentCash, Amount: decimal.RequireFromString("2000")},
+					{Method: model.PaymentDebit, Amount: decimal.RequireFromString("3000")}}},
+		}
+		html := render(t, map[string]any{"State": openState, "CloseFields": fields, "Sales": list})
+		for _, s := range []string{
+			`<th scope="col" class="p-3">N.º</th>`, "Hora", "Medios", "Estado",
+			// Cobrada: hora local, total y cada medio con su monto.
+			`id="sale-30" data-status="COMPLETED"`, ">11</th>", ">10:05</td>", "$ 5.000,00",
+			`Efectivo <span class="tabular">$ 2.000,00</span></span> · <span class="whitespace-nowrap">Débito <span class="tabular">$ 3.000,00</span>`,
+			"Cobrada",
+			// Anulada: tachada, con el motivo.
+			`id="sale-31" data-status="VOIDED" class="border-b border-line align-top text-muted"`,
+			"line-through", "Anulada", "Motivo: Se cobró dos veces",
+			// El ticket se reimprime en otra pestaña.
+			`href="/pos/sales/31/ticket" target="_blank" rel="noopener"`, `href="/pos/sales/30/ticket" target="_blank"`,
+			`aria-label="Ticket de la venta N.º 11 (se abre en otra pestaña)"`,
+		} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		// La última primero, y antes del cierre.
+		if a, b, c := strings.Index(html, `id="sale-31"`), strings.Index(html, `id="sale-30"`),
+			strings.Index(html, `id="cash-close"`); !(a < b && b < c) {
+			t.Errorf("order: sale 12 at %d, sale 11 at %d, close at %d", a, b, c)
+		}
+		if strings.Contains(html, "cash-sales-empty") {
+			t.Error("with sales: no empty notice")
+		}
+		// Solo la anulada va tachada: 4 celdas.
+		if n := strings.Count(html, " line-through"); n != 4 {
+			t.Errorf("struck cells: got %d, want 4", n)
+		}
+	})
+
 	t.Run("close error", func(t *testing.T) {
 		bad := append([]closeField(nil), fields...)
 		bad[1].Typed, bad[1].Invalid = "-5", true

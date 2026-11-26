@@ -162,7 +162,8 @@ type closeField struct {
 
 // renderCash dibuja la página con el estado de la caja. data trae lo que
 // vuelve de un formulario que falló (Error, Amount; CloseError, Typed,
-// Invalid). Un error al leer el estado (sin local activo, dos cajas) se
+// Invalid). Con la caja abierta suma los campos del cierre (CloseFields) y
+// las ventas de la sesión (Sales). Un error al leer el estado (sin local activo, dos cajas) se
 // muestra en lugar de los formularios.
 func (h *WebHandler) renderCash(w http.ResponseWriter, r *http.Request, data map[string]any) {
 	if data == nil {
@@ -188,6 +189,11 @@ func (h *WebHandler) renderCash(w http.ResponseWriter, r *http.Request, data map
 			fields = append(fields, closeField{Method: m, Typed: typed[m], Count: counts[m], Invalid: m == invalid})
 		}
 		data["CloseFields"] = fields
+		list, err := h.sessions.Sales(r.Context(), st.Session.ID)
+		if err != nil {
+			data["Error"] = h.errMsg(r, err)
+		}
+		data["Sales"] = list
 	}
 	h.render(w, r, "cash.gohtml", data)
 }

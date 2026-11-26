@@ -122,7 +122,8 @@ func NewTemplateEngine() *TemplateEngine {
 			"qty": func(d decimal.Decimal) string {
 				return formatQuantity(lang, d)
 			},
-			"formatTime": formatTime,
+			"formatTime":  formatTime,
+			"formatClock": formatClock,
 			// formatTimePtr es formatTime para una fecha que puede faltar
 			// (closed_at): "-" si es nil.
 			"formatTimePtr": func(t *string) string {

@@ -73,7 +73,18 @@ psql -1 -v ON_ERROR_STOP=1 -d elman_u -f ../productos_dataset/catalog_clean.sql
 all. After loading, the next product created in the app gets the next free
 sku (e.g. `067440`).
 
-## 5. Known limits
+## 5. Stock is not part of this import
+
+The catalog import loads products, brands and barcodes only: every product
+starts with **no stock**. The stock already on the shelves is loaded with a
+**stock count** (F-09 in `03-flows-and-transactions.md`), by scanning or by
+importing a count spreadsheet (CSV with `codigo;cantidad;sector;costo;vencimiento`),
+and then confirmed like any count. That way it leaves `ADJUSTMENT`/`COUNT`
+movements, batches and average costs like the rest of the stock, and no
+spreadsheet ever writes stock directly. Count spreadsheets are data too:
+they live outside the repo.
+
+## 6. Known limits
 
 - Some "brands" are really product name fragments (`SHAMPOO DOVE OLEO NU`);
   they cannot be told apart automatically and stay as they are.

@@ -15,7 +15,8 @@
 //   - Si el producto ya está contado en el conteo abierto, se avisa
 //     (InOpenCount): una salida anotada después de contarlo está bien, pero
 //     si salió antes de contarlo se descontaría dos veces.
-//   - Sin login todavía: created_by y performed_by quedan NULL.
+//   - by es quién la anota (F-13): queda en created_by, en el performed_by
+//     de los movimientos y en el user_id de la auditoría.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrConflict...), así la API y la web los traducen igual.
@@ -83,18 +84,19 @@ type Result struct {
 	InOpenCount bool `json:"in_open_count"`
 }
 
-// Record anota una salida: guarda la salida, sus movimientos (uno por lote,
+// Record anota una salida de by: guarda la salida, sus movimientos (uno por lote,
 // o uno sin lote), resta el saldo del local y deja la auditoría, todo junto.
 // No modifica a.
 //   - service.ErrValidation: la salida está mal (envuelve el error del
 //     model), el producto no existe o es un combo, o el lote no corresponde.
 //   - service.ErrConflict: el producto está inactivo, no hay stock suficiente
 //     (*NotEnoughStockError) o no hay un único local activo.
-func (s *Service) Record(ctx context.Context, a *model.StockAdjustment) (*Result, error) {
+func (s *Service) Record(ctx context.Context, by int64, a *model.StockAdjustment) (*Result, error) {
 	if a == nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, model.ErrNilStockAdjustment)
 	}
 	in := *a
+	in.CreatedBy = &by
 	if err := in.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
 	}
@@ -148,6 +150,7 @@ func (s *Service) Record(ctx context.Context, a *model.StockAdjustment) (*Result
 
 		saved.BatchID, saved.ProductName = in.BatchID, prod.Name
 		if _, err := s.audit(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "stock_adjustments",
 			Action:   "INSERT",
 			RecordID: saved.ID,
@@ -180,6 +183,7 @@ func takeStock(ctx context.Context, tx postgres.DBTX, prod *model.Product, a *mo
 			Quantity:     qty.Neg(),
 			UnitCost:     unitCost,
 			AdjustmentID: &a.ID,
+			PerformedBy:  a.CreatedBy,
 		})
 		return err
 	}

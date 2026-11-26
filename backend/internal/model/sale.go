@@ -75,6 +75,8 @@ type Sale struct {
 	DiscountAmount   decimal.Decimal `json:"discount_amount" db:"discount_amount"`
 	Total            decimal.Decimal `json:"total" db:"total"`
 	CreatedAt        string          `json:"created_at" db:"created_at"`
+	// CreatedBy es quién cobró (F-13). nil en las ventas de antes del login.
+	CreatedBy *int64 `json:"created_by" db:"created_by"`
 	// Anulación (F-08): cuándo y por qué. Nil y vacío si no está anulada
 	// (chk_sales_void de la 0018).
 	VoidedAt   *string `json:"voided_at" db:"voided_at"`
@@ -88,6 +90,8 @@ type Sale struct {
 	RegisterName string `json:"register_name" db:"-"`
 	StoreName    string `json:"store_name" db:"-"`
 	StoreAddress string `json:"store_address" db:"-"`
+	// CreatedByName es el nombre de quién cobró (nil si no se sabe).
+	CreatedByName *string `json:"created_by_name" db:"-"`
 
 	// Change es el vuelto: lo que el efectivo entregado pasa del total. No
 	// se guarda (SettlePayments lo calcula).

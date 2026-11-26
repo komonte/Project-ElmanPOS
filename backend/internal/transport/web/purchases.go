@@ -62,7 +62,7 @@ func (h *WebHandler) PurchasesReceive(w http.ResponseWriter, r *http.Request) {
 		var p *model.Purchase
 		p, err = purchaseFromForm(r, supplierID, lines)
 		if err == nil {
-			res, rerr := h.purchases.Receive(r.Context(), p)
+			res, rerr := h.purchases.Receive(r.Context(), transport.UserID(r.Context()), p)
 			if rerr == nil {
 				h.renderPartial(w, r, "purchase_received.gohtml", map[string]any{
 					"Purchase":      res.Purchase,
@@ -215,7 +215,7 @@ func (h *WebHandler) PurchasesUsePrice(w http.ResponseWriter, r *http.Request) {
 		err = model.ErrInvalidPrice
 	} else {
 		var saved *model.Price
-		if saved, err = h.prices.Set(r.Context(), productID, unitPrice); err == nil {
+		if saved, err = h.prices.Set(r.Context(), transport.UserID(r.Context()), productID, unitPrice); err == nil {
 			h.renderPartial(w, r, "purchase_price_cell.gohtml",
 				priceCellData(productID, &saved.UnitPrice, &saved.UnitPrice, true, "", true))
 			return

@@ -16,7 +16,9 @@
 //   - Costo y vencimiento son opcionales por producto y solo se usan si
 //     sobra mercadería.
 //   - Descartar un borrador no deja rastro; confirmar es definitivo.
-//   - Sin login todavía: created_by queda NULL (0015).
+//   - by es el usuario que entró (F-13): quien abre el conteo queda en
+//     created_by; quien lo confirma, en el performed_by de los ajustes y en
+//     el user_id de la auditoría.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrConflict...), así la API y la web los traducen igual.
@@ -69,9 +71,9 @@ func New(db postgres.DBTX, tx postgres.TxRunner) *Service {
 }
 
 // Open devuelve el conteo en borrador del local activo, con sus renglones, y
-// si no hay ninguno lo abre. Si dos lo abren a la vez, los dos siguen el
-// mismo.
-func (s *Service) Open(ctx context.Context) (*model.StockCount, error) {
+// si no hay ninguno lo abre a nombre de by. Si dos lo abren a la vez, los
+// dos siguen el mismo.
+func (s *Service) Open(ctx context.Context, by int64) (*model.StockCount, error) {
 	var id int64
 	err := s.tx.InTx(ctx, func(tx postgres.DBTX) error {
 		storeID, err := activeStore(ctx, tx)
@@ -81,7 +83,7 @@ func (s *Service) Open(ctx context.Context) (*model.StockCount, error) {
 		counts := postgres.NewStockCountStore(tx)
 		c, err := counts.Draft(ctx, storeID)
 		if errors.Is(err, store.ErrNotFound) {
-			c, err = counts.CreateDraft(ctx, storeID)
+			c, err = counts.CreateDraft(ctx, storeID, &by)
 		}
 		if err != nil {
 			return err
@@ -312,7 +314,7 @@ type Result struct {
 //   - service.ErrNotFound: el conteo no existe.
 //   - service.ErrConflict: ya está confirmado, o un ajuste dejaría el saldo
 //     negativo (ErrNegativeStock, dice el producto).
-func (s *Service) Confirm(ctx context.Context, countID int64) (*Result, error) {
+func (s *Service) Confirm(ctx context.Context, by, countID int64) (*Result, error) {
 	if countID <= 0 {
 		return nil, service.ErrInvalidID
 	}
@@ -330,7 +332,7 @@ func (s *Service) Confirm(ctx context.Context, countID int64) (*Result, error) {
 			if it.Difference().IsZero() {
 				continue
 			}
-			if err := adjust(ctx, tx, c, it); err != nil {
+			if err := adjust(ctx, tx, by, c, it); err != nil {
 				return fmt.Errorf("%s: %w", it.ProductName, err)
 			}
 			res.Adjusted++
@@ -342,6 +344,7 @@ func (s *Service) Confirm(ctx context.Context, countID int64) (*Result, error) {
 		}
 		confirmed.Items = c.Items
 		_, err = s.audit(tx).Create(ctx, postgres.AuditEntry{
+			UserID:   &by,
 			Table:    "stock_counts",
 			Action:   "UPDATE",
 			RecordID: countID,
@@ -359,8 +362,9 @@ func (s *Service) Confirm(ctx context.Context, countID int64) (*Result, error) {
 	return &res, nil
 }
 
-// adjust mueve el stock de un producto del conteo por su diferencia.
-func adjust(ctx context.Context, tx postgres.DBTX, c *model.StockCount, it *model.StockCountItem) error {
+// adjust mueve el stock de un producto del conteo por su diferencia; by es
+// quién confirma.
+func adjust(ctx context.Context, tx postgres.DBTX, by int64, c *model.StockCount, it *model.StockCountItem) error {
 	diff := it.Difference()
 
 	// Primero traba el stock del producto y después lee costo y saldo (igual
@@ -402,6 +406,7 @@ func adjust(ctx context.Context, tx postgres.DBTX, c *model.StockCount, it *mode
 			Quantity:     qty,
 			UnitCost:     unitCost,
 			CountID:      &c.ID,
+			PerformedBy:  &by,
 		})
 		return err
 	}

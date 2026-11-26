@@ -14,6 +14,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar, un local y un producto
@@ -21,6 +22,7 @@ import (
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	categoryID int64
 	storeID    int64
@@ -45,6 +47,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	var taxID int64
 	f.scan(t, &taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA test costs', 21) RETURNING id;`)
 	f.scan(t, &f.categoryID, `INSERT INTO categories (name, tax_id) VALUES ('Categoria test costs', $1) RETURNING id;`, taxID)
@@ -102,10 +108,12 @@ func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 func (f *fixture) set(t *testing.T, productID int64, unitCost string) *Result {
 	t.Helper()
-	res, err := f.svc.Set(f.ctx, productID, dec(unitCost))
+	res, err := f.svc.Set(f.ctx, f.userID, productID, dec(unitCost))
 	if err != nil {
 		t.Fatalf("set %s: %v", unitCost, err)
 	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "cost audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'product_costs' AND record_id = $2"), f.userID, res.Cost.ID)
 	return res
 }
 
@@ -197,7 +205,7 @@ func TestSetSuggestsPrice(t *testing.T) {
 func TestSetInvalidCost(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, f.productID, dec("0"))
+	_, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("0"))
 	wantErr(t, err, service.ErrValidation)
 	wantErr(t, err, model.ErrInvalidCost)
 	if n := f.costsOf(t, f.productID); n != 0 {
@@ -208,14 +216,14 @@ func TestSetInvalidCost(t *testing.T) {
 func TestSetUnknownProduct(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, 999_999_999, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, 999_999_999, dec("100"))
 	wantErr(t, err, service.ErrNotFound)
 }
 
 func TestSetInvalidID(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.svc.Set(f.ctx, 0, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, 0, dec("100"))
 	wantErr(t, err, service.ErrInvalidID)
 }
 
@@ -223,7 +231,7 @@ func TestSetInactiveProduct(t *testing.T) {
 	f := newFixture(t)
 	inactive := f.newProduct(t, "INACTIVO TEST COSTS", "30", false)
 
-	_, err := f.svc.Set(f.ctx, inactive, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, inactive, dec("100"))
 	wantErr(t, err, ErrProductInactive)
 	wantErr(t, err, service.ErrConflict)
 	if n := f.costsOf(t, inactive); n != 0 {
@@ -245,7 +253,7 @@ func TestSetRollsBackCostWhenAuditFails(t *testing.T) {
 	f := newFixture(t)
 	f.svc.audit = func(postgres.DBTX) auditStore { return failingAudit{} }
 
-	_, err := f.svc.Set(f.ctx, f.productID, dec("100"))
+	_, err := f.svc.Set(f.ctx, f.userID, f.productID, dec("100"))
 	wantErr(t, err, errAuditInsert)
 	if n := f.costsOf(t, f.productID); n != 0 {
 		t.Errorf("costs left after rollback: %d, want 0", n)
@@ -299,11 +307,13 @@ func TestSetWaitsForAConcurrentReception(t *testing.T) {
 			t.Fatalf("setup %q: %v", q, err)
 		}
 	}
-	var taxID, categoryID, productID, storeID int64
+	var taxID, categoryID, productID, storeID, userID int64
 	scan(&taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA test costs lock', 21) RETURNING id;`)
 	scan(&categoryID, `INSERT INTO categories (name, tax_id) VALUES ('Categoria test costs lock', $1) RETURNING id;`, taxID)
 	scan(&productID, `INSERT INTO products (name, category_id) VALUES ('PRODUCTO TEST COSTS LOCK', $1) RETURNING id;`, categoryID)
 	scan(&storeID, `INSERT INTO stores (name, is_active) VALUES ('Local test costs lock', FALSE) RETURNING id;`)
+	scan(&userID, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.costs.lock', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`)
 	t.Cleanup(func() {
 		for _, q := range []string{
 			`DELETE FROM audit_log WHERE table_name = 'product_costs'
@@ -319,6 +329,7 @@ func TestSetWaitsForAConcurrentReception(t *testing.T) {
 		db.ExecContext(ctx, `DELETE FROM stores WHERE id = $1;`, storeID)
 		db.ExecContext(ctx, `DELETE FROM categories WHERE id = $1;`, categoryID)
 		db.ExecContext(ctx, `DELETE FROM taxes WHERE id = $1;`, taxID)
+		db.ExecContext(ctx, `DELETE FROM users WHERE id = $1;`, userID)
 	})
 
 	// Antes: 10 unidades a 100.
@@ -355,7 +366,7 @@ func TestSetWaitsForAConcurrentReception(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		res, err := New(db, postgres.NewTxRunner(db)).Set(ctx, productID, dec("300"))
+		res, err := New(db, postgres.NewTxRunner(db)).Set(ctx, userID, productID, dec("300"))
 		done <- result{res, err}
 	}()
 

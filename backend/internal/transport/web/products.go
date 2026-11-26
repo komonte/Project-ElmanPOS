@@ -11,6 +11,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
@@ -606,7 +607,7 @@ func (h *WebHandler) ProductPricesSet(w http.ResponseWriter, r *http.Request) {
 		h.renderProductPrices(w, r, productID, h.errMsg(r, model.ErrInvalidPrice), raw)
 		return
 	}
-	if _, err := h.prices.Set(r.Context(), productID, unitPrice); err != nil {
+	if _, err := h.prices.Set(r.Context(), transport.UserID(r.Context()), productID, unitPrice); err != nil {
 		// Un producto que no existe no tiene sección que redibujar.
 		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
 			h.actionError(w, r, err)
@@ -679,7 +680,7 @@ func (h *WebHandler) ProductCostsSet(w http.ResponseWriter, r *http.Request) {
 		h.renderProductCosts(w, r, productID, h.errMsg(r, model.ErrInvalidCost), raw)
 		return
 	}
-	if _, err := h.costs.Set(r.Context(), productID, unitCost); err != nil {
+	if _, err := h.costs.Set(r.Context(), transport.UserID(r.Context()), productID, unitCost); err != nil {
 		// Un producto que no existe no tiene sección que redibujar.
 		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
 			h.actionError(w, r, err)

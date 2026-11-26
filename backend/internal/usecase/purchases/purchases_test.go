@@ -16,6 +16,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar, con un solo local
@@ -25,6 +26,7 @@ import (
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	categoryID int64
 	storeID    int64
@@ -51,6 +53,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test purchases') RETURNING id;`)
 	f.scan(t, &f.supplierID, `INSERT INTO suppliers (name) VALUES ('Proveedor test purchases') RETURNING id;`)
@@ -123,11 +129,16 @@ func batchLine(productID int64, qty, cost, batch, expiry string) *model.Purchase
 
 func (f *fixture) receive(t *testing.T, total string, items ...*model.PurchaseItem) *Result {
 	t.Helper()
-	res, err := f.svc.Receive(f.ctx, &model.Purchase{SupplierID: f.supplierID, VoucherNumber: "A-0001-00000001",
+	res, err := f.svc.Receive(f.ctx, f.userID, &model.Purchase{SupplierID: f.supplierID, VoucherNumber: "A-0001-00000001",
 		Total: dec(total), Items: items})
 	if err != nil {
 		t.Fatalf("receive: %v", err)
 	}
+	id := res.Purchase.ID
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "received by", usecasetest.Author("purchases", "received_by", "id = $2"), f.userID, id)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "purchase movements", usecasetest.Author("stock_movements", "performed_by", "purchase_id = $2"), f.userID, id)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "purchase audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'purchases' AND record_id = $2"), f.userID, id)
 	return res
 }
 
@@ -140,7 +151,8 @@ func TestReceiveSavesEverything(t *testing.T) {
 		batchLine(f.batched, "2.5", "60", "L-2475", "2027-03-31"))
 	p := res.Purchase
 
-	if p.ID == 0 || p.Status != "RECEIVED" || p.ReceivedBy != nil || len(p.Items) != 2 {
+	if p.ID == 0 || p.Status != "RECEIVED" || p.ReceivedBy == nil || *p.ReceivedBy != f.userID ||
+		len(p.Items) != 2 {
 		t.Fatalf("purchase: got %+v", p)
 	}
 	if !res.TotalDifference.IsZero() {
@@ -165,7 +177,7 @@ func TestReceiveSavesEverything(t *testing.T) {
 
 	// Movimientos, saldos y costos.
 	if n := f.count(t, `SELECT count(*) FROM stock_movements WHERE purchase_id = $1 AND movement_type = 'PURCHASE'
-		AND performed_by IS NULL;`, p.ID); n != 2 {
+		AND performed_by = $2;`, p.ID, f.userID); n != 2 {
 		t.Errorf("movements: got %d, want 2", n)
 	}
 	if got := f.balance(t, f.plain); !got.Equal(dec("10")) {
@@ -357,7 +369,7 @@ func TestReceiveErrors(t *testing.T) {
 			p := tt.setup(t, f)
 			before := f.count(t, `SELECT count(*) FROM purchases;`)
 
-			_, err := f.svc.Receive(f.ctx, p)
+			_, err := f.svc.Receive(f.ctx, f.userID, p)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("got %v, want %v", err, tt.wantErr)
 			}
@@ -383,7 +395,7 @@ func TestReceiveDoesNotChangeTheInput(t *testing.T) {
 	in := &model.Purchase{SupplierID: f.supplierID, VoucherNumber: "  A-1  ", Items: []*model.PurchaseItem{
 		batchLine(f.batched, "1", "60", " L-1 ", "")}}
 
-	if _, err := f.svc.Receive(f.ctx, in); err != nil {
+	if _, err := f.svc.Receive(f.ctx, f.userID, in); err != nil {
 		t.Fatal(err)
 	}
 	if in.ID != 0 || in.VoucherNumber != "  A-1  " || in.Items[0].BatchNumber != " L-1 " ||
@@ -406,7 +418,7 @@ func TestReceiveRollsBackWhenAuditFails(t *testing.T) {
 	f := newFixture(t)
 	f.svc.audit = func(postgres.DBTX) auditStore { return failingAudit{} }
 
-	_, err := f.svc.Receive(f.ctx, &model.Purchase{SupplierID: f.supplierID, Items: []*model.PurchaseItem{
+	_, err := f.svc.Receive(f.ctx, f.userID, &model.Purchase{SupplierID: f.supplierID, Items: []*model.PurchaseItem{
 		line(f.plain, "10", "100"), batchLine(f.batched, "1", "60", "L-1", "2027-03-31")}})
 	if !errors.Is(err, errAuditInsert) {
 		t.Fatalf("got %v, want %v", err, errAuditInsert)

@@ -13,6 +13,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar, con un solo local
@@ -21,6 +22,7 @@ import (
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	categoryID int64
 	storeID    int64
@@ -47,6 +49,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test counts') RETURNING id;`)
 	var taxID int64
@@ -93,10 +99,11 @@ func (f *fixture) addStock(t *testing.T, productID int64, qty string) {
 
 func (f *fixture) open(t *testing.T) *model.StockCount {
 	t.Helper()
-	c, err := f.svc.Open(f.ctx)
+	c, err := f.svc.Open(f.ctx, f.userID)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "count opened by", usecasetest.Author("stock_counts", "created_by", "id = $2"), f.userID, c.ID)
 	return c
 }
 
@@ -133,7 +140,7 @@ func TestOpen(t *testing.T) {
 func TestOpenWithoutActiveStore(t *testing.T) {
 	f := newFixture(t)
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
-	if _, err := f.svc.Open(f.ctx); !errors.Is(err, service.ErrConflict) {
+	if _, err := f.svc.Open(f.ctx, f.userID); !errors.Is(err, service.ErrConflict) {
 		t.Errorf("got %v, want %v", err, service.ErrConflict)
 	}
 }

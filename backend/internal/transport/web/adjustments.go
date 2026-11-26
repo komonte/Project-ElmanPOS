@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 )
 
 // Salidas conocidas (F-09b): consumo propio, rotura, vencido u otra. Una por
@@ -62,7 +63,7 @@ func (h *WebHandler) AdjustmentsRecord(w http.ResponseWriter, r *http.Request) {
 	var last *adjustmentLast
 	a, err := adjustmentFromForm(form)
 	if err == nil {
-		res, rerr := h.adjustments.Record(r.Context(), a)
+		res, rerr := h.adjustments.Record(r.Context(), transport.UserID(r.Context()), a)
 		if rerr == nil {
 			last = &adjustmentLast{Name: form.ProductQ, Reason: a.Reason, Quantity: a.Quantity,
 				InOpenCount: res.InOpenCount}

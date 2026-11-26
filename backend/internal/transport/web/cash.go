@@ -53,7 +53,7 @@ func (h *WebHandler) CashOpen(w http.ResponseWriter, r *http.Request) {
 		h.renderCash(w, r, map[string]any{"Error": h.errMsg(r, model.ErrInvalidOpeningAmount), "Amount": typed})
 		return
 	}
-	if _, err := h.sessions.Open(r.Context(), amount); err != nil {
+	if _, err := h.sessions.Open(r.Context(), transport.UserID(r.Context()), amount); err != nil {
 		h.renderCash(w, r, map[string]any{"Error": h.errMsg(r, err), "Amount": typed})
 		return
 	}
@@ -73,7 +73,7 @@ func (h *WebHandler) CashClose(w http.ResponseWriter, r *http.Request) {
 		h.renderCash(w, r, map[string]any{"CloseError": msg, "Typed": typed, "Invalid": badMethod})
 		return
 	}
-	sum, err := h.sessions.Close(r.Context(), sessionID, declared)
+	sum, err := h.sessions.Close(r.Context(), transport.UserID(r.Context()), sessionID, declared)
 	if err != nil {
 		h.renderCash(w, r, map[string]any{"CloseError": h.errMsg(r, err), "Typed": typed})
 		return
@@ -111,7 +111,7 @@ func declaredFromForm(r *http.Request) (declared []*model.CashAudit, typed map[s
 func (h *WebHandler) CashVoidSale(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	reason := r.FormValue("reason")
-	if _, err := h.sales.Void(r.Context(), id, reason); err != nil {
+	if _, err := h.sales.Void(r.Context(), transport.UserID(r.Context()), id, reason); err != nil {
 		h.renderCash(w, r, map[string]any{"VoidError": h.errMsg(r, err), "VoidSaleID": id, "VoidReason": reason})
 		return
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 func d(s string) decimal.Decimal { return decimal.RequireFromString(s) }
@@ -27,6 +28,7 @@ func d(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	storeID    int64
 	categoryID int64
@@ -55,6 +57,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test sales') RETURNING id;`)
 	var taxID int64
@@ -139,10 +145,12 @@ func TestCheckout(t *testing.T) {
 			pay(model.PaymentCash, "11000"),
 		},
 	}
-	sale, err := f.svc.Checkout(f.ctx, in)
+	sale, err := f.svc.Checkout(f.ctx, f.userID, in)
 	if err != nil {
 		t.Fatalf("checkout: %v", err)
 	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "charged by", usecasetest.Author("sales", "created_by", "id = $2"), f.userID, sale.ID)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "sale movements", usecasetest.Author("stock_movements", "performed_by", "sale_id = $2"), f.userID, sale.ID)
 	if !in.Items[0].UnitPrice.Equal(d("1")) || !in.Payments[1].Amount.Equal(d("11000")) {
 		t.Error("checkout modified its input")
 	}
@@ -233,7 +241,7 @@ func TestCheckout(t *testing.T) {
 	}
 
 	// La siguiente venta es la 2, y el queso que queda sale sin lote.
-	next, err := f.svc.Checkout(f.ctx, &model.Sale{Items: []*model.SaleItem{line(f.queso, "0.300")},
+	next, err := f.svc.Checkout(f.ctx, f.userID, &model.Sale{Items: []*model.SaleItem{line(f.queso, "0.300")},
 		Payments: []*model.Payment{pay(model.PaymentDebit, "1500")}})
 	if err != nil {
 		t.Fatalf("second checkout: %v", err)
@@ -290,7 +298,7 @@ func TestCheckoutRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := f.svc.Checkout(f.ctx, &model.Sale{Items: tt.items, Payments: tt.payments})
+			_, err := f.svc.Checkout(f.ctx, f.userID, &model.Sale{Items: tt.items, Payments: tt.payments})
 			if !errors.Is(err, tt.wantErr) || !errors.Is(err, tt.kind) {
 				t.Fatalf("got %v, want %v (%v)", err, tt.wantErr, tt.kind)
 			}
@@ -318,7 +326,7 @@ func TestCheckoutRejected(t *testing.T) {
 
 	// Caja cerrada: no se vende.
 	f.exec(t, `UPDATE cashier_sessions SET status = 'CLOSED', closed_at = now() WHERE id = $1;`, f.sessionID)
-	_, err := f.svc.Checkout(f.ctx, &model.Sale{Items: []*model.SaleItem{line(f.soda, "1")}, Payments: cash("1000")})
+	_, err := f.svc.Checkout(f.ctx, f.userID, &model.Sale{Items: []*model.SaleItem{line(f.soda, "1")}, Payments: cash("1000")})
 	if !errors.Is(err, ErrRegisterClosed) {
 		t.Errorf("closed register: got %v, want %v", err, ErrRegisterClosed)
 	}
@@ -328,7 +336,7 @@ func TestCheckoutRejected(t *testing.T) {
 func TestCheckoutNoRegister(t *testing.T) {
 	f := newFixture(t)
 	f.exec(t, `UPDATE cash_registers SET is_active = FALSE WHERE id = $1;`, f.registerID)
-	_, err := f.svc.Checkout(f.ctx, &model.Sale{Items: []*model.SaleItem{line(f.soda, "1")},
+	_, err := f.svc.Checkout(f.ctx, f.userID, &model.Sale{Items: []*model.SaleItem{line(f.soda, "1")},
 		Payments: []*model.Payment{pay(model.PaymentCash, "1000")}})
 	if !errors.Is(err, ErrRegisterClosed) || !errors.Is(err, service.ErrConflict) {
 		t.Errorf("got %v, want %v", err, ErrRegisterClosed)

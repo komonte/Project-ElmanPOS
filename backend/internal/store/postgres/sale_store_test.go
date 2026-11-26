@@ -14,6 +14,14 @@ import (
 func d(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 // openSession crea un local con una caja y le abre una sesión.
+// user crea un usuario en la transacción del test y devuelve su id (F-13:
+// quién hizo cada cosa).
+func (f *productFixture) user(t *testing.T, username, name string) int64 {
+	t.Helper()
+	return f.insertID(t, `INSERT INTO users (username, name, password_hash, role)
+	                      VALUES ($1, $2, 'x', 'CASHIER') RETURNING id;`, username, name)
+}
+
 func (f *productFixture) openSession(t *testing.T) *model.CashierSession {
 	t.Helper()
 	storeID := f.insertID(t, `INSERT INTO stores (name, address) VALUES ('Local test venta', 'Calle Test 123') RETURNING id;`)

@@ -83,13 +83,20 @@ func NewCashierSessionStore(db DBTX) *CashierSessionStore {
 	return &CashierSessionStore{db: db}
 }
 
-const sessionColumns = `cs.id, cs.cash_register_id, cs.opened_by, cs.opening_amount, cs.closing_amount,
-	cs.status, cs.opened_at, cs.closed_at, r.name`
+const sessionColumns = `cs.id, cs.cash_register_id, cs.opened_by, cs.closed_by, cs.opening_amount, cs.closing_amount,
+	cs.status, cs.opened_at, cs.closed_at, r.name, uo.name, uc.name`
+
+// sessionFrom es de dónde sale una sesión: su caja y los nombres de quién la
+// abrió y la cerró (LEFT JOIN: pueden faltar).
+const sessionFrom = `cashier_sessions cs
+		JOIN cash_registers r ON r.id = cs.cash_register_id
+		LEFT JOIN users uo ON uo.id = cs.opened_by
+		LEFT JOIN users uc ON uc.id = cs.closed_by`
 
 func scanSession(row rowScanner) (*model.CashierSession, error) {
 	s := new(model.CashierSession)
-	err := row.Scan(&s.ID, &s.CashRegisterID, &s.OpenedBy, &s.OpeningAmount, &s.ClosingAmount,
-		&s.Status, &s.OpenedAt, &s.ClosedAt, &s.RegisterName)
+	err := row.Scan(&s.ID, &s.CashRegisterID, &s.OpenedBy, &s.ClosedBy, &s.OpeningAmount, &s.ClosingAmount,
+		&s.Status, &s.OpenedAt, &s.ClosedAt, &s.RegisterName, &s.OpenedByName, &s.ClosedByName)
 	return s, err
 }
 
@@ -137,14 +144,14 @@ func (s *CashierSessionStore) LockOpen(ctx context.Context, id int64) (*model.Ca
 }
 
 // Close cierra una sesión abierta (F-12): estado CLOSED, lo declarado en
-// efectivo y la hora. Quien cierra la trabó antes (LockOpen), así que ninguna
-// venta entra mientras tanto. Devuelve la sesión cerrada.
+// efectivo, la hora y quién cerró. Quien cierra la trabó antes (LockOpen),
+// así que ninguna venta entra mientras tanto. Devuelve la sesión cerrada.
 //   - ErrSessionNotOpen: no existe o ya estaba cerrada.
-func (s *CashierSessionStore) Close(ctx context.Context, id int64, closingAmount decimal.Decimal) (*model.CashierSession, error) {
+func (s *CashierSessionStore) Close(ctx context.Context, id int64, closingAmount decimal.Decimal, closedBy *int64) (*model.CashierSession, error) {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE cashier_sessions
-		SET status = 'CLOSED', closing_amount = $2, closed_at = now()
-		WHERE id = $1 AND status = 'OPEN';`, id, closingAmount)
+		SET status = 'CLOSED', closing_amount = $2, closed_at = now(), closed_by = $3
+		WHERE id = $1 AND status = 'OPEN';`, id, closingAmount, closedBy)
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +179,7 @@ func (s *CashierSessionStore) Get(ctx context.Context, id int64) (*model.Cashier
 func (s *CashierSessionStore) get(ctx context.Context, where string, arg any) (*model.CashierSession, error) {
 	got, err := scanSession(s.db.QueryRowContext(ctx, `
 		SELECT `+sessionColumns+`
-		FROM cashier_sessions cs
-		JOIN cash_registers r ON r.id = cs.cash_register_id
+		FROM `+sessionFrom+`
 		WHERE `+where+`;`, arg))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

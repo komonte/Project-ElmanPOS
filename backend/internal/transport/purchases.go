@@ -16,7 +16,7 @@ import (
 // PurchaseService es lo que la API usa del caso de uso de compras. Lo cumple
 // *purchases.Service; los tests usan uno en memoria.
 type PurchaseService interface {
-	Receive(ctx context.Context, p *model.Purchase) (*purchases.Result, error)
+	Receive(ctx context.Context, by int64, p *model.Purchase) (*purchases.Result, error)
 	Get(ctx context.Context, id int64) (*model.Purchase, error)
 }
 
@@ -70,7 +70,7 @@ func (h *PurchasesHandler) Receive(w http.ResponseWriter, r *http.Request) {
 		p.Items = append(p.Items, &model.PurchaseItem{ProductID: it.ProductID, Quantity: it.Quantity,
 			UnitCost: it.UnitCost, BatchNumber: it.BatchNumber, ExpiryDate: it.ExpiryDate})
 	}
-	res, err := h.svc.Receive(r.Context(), p)
+	res, err := h.svc.Receive(r.Context(), UserID(r.Context()), p)
 	if err != nil {
 		purchasesError(w, r, err)
 		return

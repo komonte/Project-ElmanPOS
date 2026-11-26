@@ -11,6 +11,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 func dec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
@@ -31,7 +32,7 @@ func (f *fixture) openWithSales(t *testing.T) *model.CashierSession {
 	if _, err := f.svc.CreateRegister(f.ctx); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := f.svc.Open(f.ctx, dec("5000"))
+	sess, err := f.svc.Open(f.ctx, f.userID, dec("5000"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,13 +84,16 @@ func TestClose(t *testing.T) {
 	}
 
 	// Faltan 50 en efectivo; QR sin declarar (faltan 700).
-	sum, err := f.svc.Close(f.ctx, sess.ID, []*model.CashAudit{
+	sum, err := f.svc.Close(f.ctx, f.userID, sess.ID, []*model.CashAudit{
 		{Method: model.PaymentCash, DeclaredAmount: dec("6950")},
 		{Method: model.PaymentDebit, DeclaredAmount: dec("3000")},
 	})
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "closed by", usecasetest.Author("cashier_sessions", "closed_by", "id = $2"), f.userID, sess.ID)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "close audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'cashier_sessions' AND action = 'CLOSE' AND record_id = $2"), f.userID, sess.ID)
 	if sum.Session.Status != model.SessionClosed || sum.Session.ClosingAmount == nil ||
 		!sum.Session.ClosingAmount.Equal(dec("6950")) || sum.Session.ClosedAt == nil {
 		t.Errorf("closed session: got %+v", sum.Session)
@@ -150,7 +154,7 @@ func TestClose(t *testing.T) {
 	}
 
 	// Ya cerrada no se cierra de nuevo, y la caja vuelve a abrir.
-	if _, err := f.svc.Close(f.ctx, sess.ID, nil); !errors.Is(err, store.ErrSessionNotOpen) ||
+	if _, err := f.svc.Close(f.ctx, f.userID, sess.ID, nil); !errors.Is(err, store.ErrSessionNotOpen) ||
 		!errors.Is(err, service.ErrConflict) {
 		t.Errorf("close twice: got %v", err)
 	}
@@ -158,7 +162,7 @@ func TestClose(t *testing.T) {
 		st.LastClosed.ID != sess.ID {
 		t.Errorf("after close: got %+v, %v (want no session and the last close)", st, err)
 	}
-	if _, err := f.svc.Open(f.ctx, dec("0")); err != nil {
+	if _, err := f.svc.Open(f.ctx, f.userID, dec("0")); err != nil {
 		t.Errorf("open after close: %v", err)
 	}
 }
@@ -167,11 +171,11 @@ func TestCloseValidation(t *testing.T) {
 	f := newFixture(t)
 	sess := f.openWithSales(t)
 
-	_, err := f.svc.Close(f.ctx, sess.ID, []*model.CashAudit{{Method: model.PaymentCash, DeclaredAmount: dec("-1")}})
+	_, err := f.svc.Close(f.ctx, f.userID, sess.ID, []*model.CashAudit{{Method: model.PaymentCash, DeclaredAmount: dec("-1")}})
 	if !errors.Is(err, service.ErrValidation) || !errors.Is(err, model.ErrInvalidDeclaredAmount) {
 		t.Errorf("negative: got %v", err)
 	}
-	_, err = f.svc.Close(f.ctx, sess.ID, []*model.CashAudit{
+	_, err = f.svc.Close(f.ctx, f.userID, sess.ID, []*model.CashAudit{
 		{Method: model.PaymentCash, DeclaredAmount: dec("1")},
 		{Method: model.PaymentCash, DeclaredAmount: dec("2")},
 	})
@@ -186,7 +190,7 @@ func TestCloseValidation(t *testing.T) {
 		t.Errorf("no audits after a failed close: got %d", len(audits))
 	}
 
-	if _, err := f.svc.Close(f.ctx, -1, nil); !errors.Is(err, store.ErrSessionNotOpen) {
+	if _, err := f.svc.Close(f.ctx, f.userID, -1, nil); !errors.Is(err, store.ErrSessionNotOpen) {
 		t.Errorf("unknown session: got %v", err)
 	}
 	if _, err := f.svc.Summary(f.ctx, 999999999); !errors.Is(err, service.ErrNotFound) {
@@ -202,11 +206,11 @@ func TestCloseWithoutSales(t *testing.T) {
 	if _, err := f.svc.CreateRegister(f.ctx); err != nil {
 		t.Fatal(err)
 	}
-	sess, err := f.svc.Open(f.ctx, dec("0"))
+	sess, err := f.svc.Open(f.ctx, f.userID, dec("0"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum, err := f.svc.Close(f.ctx, sess.ID, nil)
+	sum, err := f.svc.Close(f.ctx, f.userID, sess.ID, nil)
 	if err != nil || sum.Sales != 0 || sum.Voided != 0 || !sum.Total.IsZero() || sum.Close.HasDifference() {
 		t.Errorf("empty close: got %+v, %v", sum, err)
 	}

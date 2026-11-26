@@ -39,7 +39,7 @@ type StockCount struct {
 	ID      int64  `json:"id" db:"id"`
 	StoreID int64  `json:"store_id" db:"store_id"`
 	Status  string `json:"status" db:"status"`
-	// CreatedBy queda en nil hasta que haya login (F-13, migración 0015).
+	// CreatedBy es quién abrió el conteo (F-13). nil en los de antes del login.
 	CreatedBy   *int64  `json:"created_by" db:"created_by"`
 	CreatedAt   string  `json:"created_at" db:"created_at"`
 	UpdatedAt   string  `json:"updated_at" db:"updated_at"`

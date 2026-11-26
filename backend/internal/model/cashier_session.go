@@ -36,16 +36,20 @@ type CashRegister struct {
 type CashierSession struct {
 	ID             int64 `json:"id" db:"id"`
 	CashRegisterID int64 `json:"cash_register_id" db:"cash_register_id"`
-	// OpenedBy queda en nil hasta que haya login (F-13).
+	// OpenedBy y ClosedBy: quién abrió y quién cerró (F-13). nil en las
+	// sesiones de antes del login (y ClosedBy, mientras está abierta).
 	OpenedBy      *int64           `json:"opened_by" db:"opened_by"`
+	ClosedBy      *int64           `json:"closed_by" db:"closed_by"`
 	OpeningAmount decimal.Decimal  `json:"opening_amount" db:"opening_amount"`
 	ClosingAmount *decimal.Decimal `json:"closing_amount" db:"closing_amount"` // lo declarado al cerrar
 	Status        string           `json:"status" db:"status"`
 	OpenedAt      string           `json:"opened_at" db:"opened_at"`
 	ClosedAt      *string          `json:"closed_at" db:"closed_at"`
 
-	// Solo lectura, para mostrar.
-	RegisterName string `json:"register_name" db:"-"`
+	// Solo lectura, para mostrar. Los nombres son nil si no se sabe quién.
+	RegisterName string  `json:"register_name" db:"-"`
+	OpenedByName *string `json:"opened_by_name" db:"-"`
+	ClosedByName *string `json:"closed_by_name" db:"-"`
 }
 
 // Validate valida lo que se escribe al abrir. Que la caja exista y no tenga

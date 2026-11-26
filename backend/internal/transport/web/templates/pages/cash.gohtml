@@ -35,6 +35,7 @@
 <section id="cash-open" class="p-6 border-2 border-line border-l-8 border-l-tag rounded-md bg-surface max-w-2xl space-y-2">
   <h2 class="font-display font-bold text-2xl">{{printf (t "cash.open_title") .Register.Name}}</h2>
   <p>{{printf (t "cash.open_since") (formatTime .Session.OpenedAt)}}</p>
+  {{with .Session.OpenedByName}}<p id="cash-opened-by">{{t "cash.opened_by"}} <span class="font-bold">{{.}}</span></p>{{end}}
   <p>{{t "cash.opening_amount"}}: <span class="font-bold tabular">{{money .Session.OpeningAmount}}</span></p>
   <p class="pt-2"><a href="/pos" class="btn-primary">{{t "cash.go_sell"}}</a></p>
 </section>
@@ -55,6 +56,7 @@
         <th scope="col" class="p-3">{{t "cash.col_time"}}</th>
         <th scope="col" class="p-3 text-right">{{t "cash.col_total"}}</th>
         <th scope="col" class="p-3">{{t "cash.col_payments"}}</th>
+        <th scope="col" class="p-3">{{t "cash.col_charged_by"}}</th>
         <th scope="col" class="p-3">{{t "cash.col_status"}}</th>
         <th scope="col" class="p-3"><span class="sr-only">{{t "cash.col_actions"}}</span></th>
       </tr>
@@ -68,6 +70,7 @@
         <td class="p-3 tabular{{if $voided}} line-through{{end}}">{{formatClock .CreatedAt}}</td>
         <td class="p-3 text-right tabular font-bold whitespace-nowrap{{if $voided}} line-through{{end}}">{{money .Total}}</td>
         <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}</td>
+        <td class="p-3" data-charged-by>{{who .CreatedByName}}</td>
         <td class="p-3">{{if $voided}}<span class="font-bold text-danger">{{t "cash.sale_voided"}}</span>
           <span class="block text-sm" data-void-reason>{{printf (t "cash.sale_void_reason") .VoidReason}}</span>{{else}}{{t "cash.sale_completed"}}{{end}}</td>
         <td class="p-3 text-right">

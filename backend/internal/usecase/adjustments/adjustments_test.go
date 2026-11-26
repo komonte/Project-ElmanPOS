@@ -13,6 +13,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/usecasetest"
 )
 
 // fixture: una transacción que se deshace al terminar, con un solo local
@@ -21,6 +22,7 @@ import (
 type fixture struct {
 	ctx        context.Context
 	tx         *sql.Tx
+	userID     int64 // quién hace las cosas (F-13)
 	svc        *Service
 	categoryID int64
 	storeID    int64
@@ -47,6 +49,10 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { tx.Rollback() })
 
 	f := &fixture{ctx: context.Background(), tx: tx, svc: New(tx, postgres.NewSavepointRunner(tx))}
+	if err := tx.QueryRowContext(f.ctx, `INSERT INTO users (username, name, password_hash, role)
+		VALUES ('test.usuario', 'Usuario Test', 'x', 'ADMIN') RETURNING id;`).Scan(&f.userID); err != nil {
+		t.Fatal(err)
+	}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test adjustments') RETURNING id;`)
 	var taxID int64
@@ -118,10 +124,15 @@ func (f *fixture) onHand(t *testing.T, productID int64) decimal.Decimal {
 
 func (f *fixture) record(t *testing.T, a *model.StockAdjustment) *Result {
 	t.Helper()
-	res, err := f.svc.Record(f.ctx, a)
+	res, err := f.svc.Record(f.ctx, f.userID, a)
 	if err != nil {
 		t.Fatalf("record: %v", err)
 	}
+	id := res.Adjustment.ID
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "exit by", usecasetest.Author("stock_adjustments", "created_by", "id = $2"), f.userID, id)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "exit movements", usecasetest.Author("stock_movements", "performed_by", "adjustment_id = $2"), f.userID, id)
+	usecasetest.WantAuthor(t, f.ctx, f.tx, "exit audit", usecasetest.Author("audit_log", "user_id",
+		"table_name = 'stock_adjustments' AND record_id = $2"), f.userID, id)
 	return res
 }
 
@@ -267,13 +278,13 @@ func TestRecordErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := f.svc.Record(f.ctx, tt.in); !errors.Is(err, tt.wantErr) {
+			if _, err := f.svc.Record(f.ctx, f.userID, tt.in); !errors.Is(err, tt.wantErr) {
 				t.Errorf("got %v, want %v", err, tt.wantErr)
 			}
 		})
 	}
 
-	_, err = f.svc.Record(f.ctx, &model.StockAdjustment{ProductID: f.plain, Reason: model.ReasonDamage, Quantity: dec("3")})
+	_, err = f.svc.Record(f.ctx, f.userID, &model.StockAdjustment{ProductID: f.plain, Reason: model.ReasonDamage, Quantity: dec("3")})
 	var short *NotEnoughStockError
 	if !errors.As(err, &short) || !short.Available.Equal(dec("2")) {
 		t.Errorf("not enough stock: got %v, want available 2", err)
@@ -287,7 +298,7 @@ func TestRecordErrors(t *testing.T) {
 	}
 
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
-	if _, err := f.svc.Record(f.ctx, &model.StockAdjustment{ProductID: f.plain, Reason: model.ReasonDamage,
+	if _, err := f.svc.Record(f.ctx, f.userID, &model.StockAdjustment{ProductID: f.plain, Reason: model.ReasonDamage,
 		Quantity: dec("1")}); !errors.Is(err, service.ErrConflict) {
 		t.Errorf("no active store: got %v, want %v", err, service.ErrConflict)
 	}
@@ -301,7 +312,7 @@ func TestRecordInOpenCount(t *testing.T) {
 		t.Errorf("without a count: got %v, %v", in, err)
 	}
 	counts := postgres.NewStockCountStore(f.tx)
-	c, err := counts.CreateDraft(f.ctx, f.storeID)
+	c, err := counts.CreateDraft(f.ctx, f.storeID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +344,7 @@ func TestRecordRollsBack(t *testing.T) {
 	f.addStock(t, f.batched, "2")
 	f.svc.audit = func(postgres.DBTX) auditStore { return failingAudit{} }
 
-	if _, err := f.svc.Record(f.ctx, &model.StockAdjustment{ProductID: f.batched, Reason: model.ReasonExpiration,
+	if _, err := f.svc.Record(f.ctx, f.userID, &model.StockAdjustment{ProductID: f.batched, Reason: model.ReasonExpiration,
 		Quantity: dec("1")}); err == nil {
 		t.Fatal("record with failing audit: got no error")
 	}

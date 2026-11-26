@@ -13,7 +13,7 @@ import (
 // CostService es lo que la API usa del caso de uso de costos. Lo cumple
 // *costs.Service; los tests usan uno en memoria.
 type CostService interface {
-	Set(ctx context.Context, productID int64, unitCost decimal.Decimal) (*costs.Result, error)
+	Set(ctx context.Context, by, productID int64, unitCost decimal.Decimal) (*costs.Result, error)
 	History(ctx context.Context, productID int64) ([]*model.Cost, error)
 }
 
@@ -84,7 +84,7 @@ func (h *CostsHandler) Set(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	res, err := h.svc.Set(r.Context(), productID, body.UnitCost)
+	res, err := h.svc.Set(r.Context(), UserID(r.Context()), productID, body.UnitCost)
 	if err != nil {
 		pricesError(w, r, err)
 		return

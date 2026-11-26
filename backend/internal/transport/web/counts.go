@@ -64,7 +64,7 @@ func (h *WebHandler) CountsPage(w http.ResponseWriter, r *http.Request) {
 // CountsOpen handles POST /counts: abre el borrador (o sigue el abierto) y
 // vuelve a la página.
 func (h *WebHandler) CountsOpen(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.stockCounts.Open(r.Context()); err != nil {
+	if _, err := h.stockCounts.Open(r.Context(), transport.UserID(r.Context())); err != nil {
 		h.render(w, r, "counts.gohtml", map[string]any{"Section": "counts", "TitleKey": "count.title",
 			"Error": h.errMsg(r, err)})
 		return
@@ -342,7 +342,7 @@ func (h *WebHandler) CountsConfirm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
 		return
 	}
-	if _, err := h.stockCounts.Confirm(r.Context(), countID); err != nil {
+	if _, err := h.stockCounts.Confirm(r.Context(), transport.UserID(r.Context()), countID); err != nil {
 		h.renderCountReview(w, r, countID, false, h.errMsg(r, err))
 		return
 	}

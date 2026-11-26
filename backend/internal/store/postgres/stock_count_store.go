@@ -52,14 +52,15 @@ func scanStockCountItem(row rowScanner) (*model.StockCountItem, error) {
 	return it, nil
 }
 
-// CreateDraft abre un conteo en borrador en un local.
+// CreateDraft abre un conteo en borrador en un local. createdBy es quién lo
+// abre (nil: no se sabe).
 //   - ErrCountDraftExists: el local ya tiene uno en borrador (índice único
 //     parcial de 0015).
 //   - ErrInvalidReference: el local no existe.
-func (s *StockCountStore) CreateDraft(ctx context.Context, storeID int64) (*model.StockCount, error) {
+func (s *StockCountStore) CreateDraft(ctx context.Context, storeID int64, createdBy *int64) (*model.StockCount, error) {
 	c, err := scanStockCount(s.db.QueryRowContext(ctx, `
-		INSERT INTO stock_counts (store_id) VALUES ($1)
-		RETURNING `+stockCountColumns+`;`, storeID))
+		INSERT INTO stock_counts (store_id, created_by) VALUES ($1, $2)
+		RETURNING `+stockCountColumns+`;`, storeID, createdBy))
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, store.ErrCountDraftExists

@@ -232,17 +232,29 @@ func main() {
 
 	// empezar y escuchar al servidor
 
-	serverPort := getEnv("PORT", "8080")
+	cfg, err := loadServerConfig(os.Getenv)
+	if err != nil {
+		slog.Error("invalid server configuration", "error", err)
+		os.Exit(1)
+	}
 	server := &http.Server{
-		Addr:         ":" + serverPort,
-		Handler:      handler,
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:              cfg.Addr,
+		Handler:           handler,
+		TLSConfig:         cfg.TLS,
+		IdleTimeout:       time.Minute,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
 	}
 
-	slog.Info("starting server", "port", serverPort)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	slog.Info("starting server", "addr", cfg.Addr, "https", cfg.HTTPS())
+	if cfg.HTTPS() {
+		// El certificado ya está en TLSConfig (loadServerConfig lo cargó).
+		err = server.ListenAndServeTLS("", "")
+	} else {
+		err = server.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server failed: %v", err)
 	}
 }

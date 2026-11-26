@@ -35,5 +35,27 @@ Backend is organized within the `backend/` module using an idiomatic, layered Go
 ...
 ## 4. Quick Start 
 ...
+## 5. Running on the store network (HTTPS)
+
+The store's network is shared with the household and with guests, so the app must be served over **HTTPS**: otherwise the login password travels unencrypted. The server does it by itself with `TLS_CERT_FILE` and `TLS_KEY_FILE` (both or neither; without them it serves plain HTTP, for development only).
+
+With [mkcert](https://github.com/FiloSottile/mkcert), on the store's PC:
+
+```sh
+mkcert -install                                   # creates a local certificate authority and trusts it here
+mkcert -cert-file elmanpos.pem -key-file elmanpos-key.pem 192.168.0.10 elmanpos.local localhost 127.0.0.1
+```
+
+Use the PC's real LAN IP (and/or name). Then, in `.env`:
+
+```sh
+TLS_CERT_FILE=/path/to/elmanpos.pem
+TLS_KEY_FILE=/path/to/elmanpos-key.pem
+```
+
+and open `https://192.168.0.10:8080`. Every other device that uses the app (a second PC, a phone for stock counts) must trust the same authority: copy `rootCA.pem` from `mkcert -CAROOT` and install it there. **Never copy `rootCA-key.pem`**: with it anyone can make certificates the store's devices trust. The certificate files are git-ignored.
+
+If only the store's PC uses the app, `LISTEN_HOST=127.0.0.1` keeps it off the network entirely.
+
 ## 6. Project Documentation
 ...

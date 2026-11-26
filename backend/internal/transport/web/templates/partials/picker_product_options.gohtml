@@ -6,7 +6,7 @@
      vacía y :empty la oculta. */ -}}
 {{- range .Products}}
 <li role="option">
-  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}"
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}" data-weight="{{eq (printf "%s" .SaleType) "WEIGHT"}}"
           data-shelf-life="{{with .ShelfLifeDays}}{{.}}{{end}}"
           onclick="pickerPick(this)"
           class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">

@@ -24,6 +24,7 @@
   // Deja el producto elegido, trae sus lotes (y si ya está contado en el
   // conteo abierto) y pasa a la cantidad. Lo llama el buscador compartido.
   function pickerSetProduct(row, product) {
+    pickerSetUnit(row, product);
     row.querySelector('[name=product_id]').value = product.id;
     row.querySelector('[name=product_q]').value = product.name;
     row.querySelector('ul[role=listbox]').replaceChildren();

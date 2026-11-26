@@ -813,5 +813,8 @@
   "product.sale_price_hint": "Optional. Without a price the register cannot charge it. Change it later in the product's Price section.",
   "price.avg_short": "avg. %s",
   "purchase.col_voucher": "Voucher",
-  "error.quantity_not_whole": "This product goes by unit: type a whole number, without decimals."
+  "error.quantity_not_whole": "This product goes by unit: type a whole number, without decimals.",
+  "unit.kg_hint": "in kg (500 g = 0.5)",
+  "unit.units_hint": "whole units",
+  "unit.heavy_confirm": "Are you sure it is %s kg? If it was grams, write it in kg: 500 g = 0.5."
 }

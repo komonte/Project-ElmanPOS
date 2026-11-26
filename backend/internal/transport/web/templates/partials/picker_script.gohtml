@@ -10,7 +10,8 @@
      La página define:
        - pickerSetProduct(row, product): deja el producto elegido en el
          renglón (cierra la lista y mueve el cursor). product es
-         {id, name, batches, shelf_life}.
+         {id, name, batches, shelf_life, weight}. Llama a pickerSetUnit
+         para mostrar la unidad junto a la cantidad.
        - pickerQuickValues() (opcional): datos extra para el alta rápida (la
          compra manda su proveedor). */}}
 <script>
@@ -23,6 +24,7 @@
   function pickerProductFrom(button) {
     return {
       id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
+      weight: button.dataset.weight === 'true',
       shelf_life: button.dataset.shelfLife ? Number(button.dataset.shelfLife) : null,
     };
   }
@@ -126,4 +128,35 @@
     if (row.querySelector('[name=product_id]').value !== '') e.detail.shouldSwap = false;
   }
   document.addEventListener('htmx:beforeSwap', pickerDropLateSearch);
+
+  // La unidad del producto elegido junto a la cantidad (2026-11-26): los
+  // que van por peso se cargan en kg (con la ayuda "500 g = 0,5"); el resto,
+  // en unidades enteras (teclado numérico sin coma). El server lo revisa
+  // igual (model.ErrQuantityNotWhole). La unidad la pone el producto: quien
+  // carga no la elige.
+  function pickerSetUnit(row, product) {
+    const qty = row.querySelector('[name=quantity]');
+    if (!qty) return;
+    qty.dataset.weight = product.weight ? '1' : '';
+    qty.inputMode = product.weight ? 'decimal' : 'numeric';
+    const unit = row.querySelector('[data-qty-unit]');
+    if (unit) unit.textContent = product.weight ? unit.dataset.kg : unit.dataset.units;
+  }
+
+  // Un producto por peso con más de 50 kg suele ser gramos escritos como kg
+  // (500 en vez de 0,5): se pide confirmar antes de mandar. Solo en los
+  // formularios que lo piden (data-heavy-check: conteos y salidas; una
+  // compra de 60 kg puede ser real).
+  const pickerHeavyKg = 50;
+  document.addEventListener('htmx:confirm', function (e) {
+    const form = e.detail.elt;
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute('data-heavy-check')) return;
+    const qty = form.querySelector('[name=quantity][data-weight="1"]');
+    if (!qty) return;
+    const n = Number(qty.value.trim().replace(',', '.')); // como parseFormDecimal
+    if (!(n > pickerHeavyKg)) return;
+    e.preventDefault();
+    if (window.confirm('{{t "unit.heavy_confirm"}}'.replace('%s', qty.value.trim()))) e.detail.issueRequest(true);
+    else qty.focus();
+  });
 </script>

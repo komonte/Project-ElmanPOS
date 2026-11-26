@@ -10,7 +10,7 @@
   <p class="font-bold">{{.Message}}</p>
   {{if .ForLine}}
   {{with .Owner}}
-  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}"
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-batches="{{.ControlsBatches}}" data-weight="{{eq (printf "%s" .SaleType) "WEIGHT"}}"
           data-shelf-life="{{with .ShelfLifeDays}}{{.}}{{end}}"
           onclick="pickerUseExisting(this)" class="btn-secondary">{{t "product.barcode_exists_use"}}</button>
   {{end}}

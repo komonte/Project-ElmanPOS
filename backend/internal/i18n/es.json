@@ -813,5 +813,8 @@
   "product.sale_price_hint": "Opcional. Sin precio, la caja no lo puede cobrar. Después se cambia en la sección Precio del producto.",
   "price.avg_short": "prom. %s",
   "purchase.col_voucher": "Comprobante",
-  "error.quantity_not_whole": "Este producto va por unidad: escribí un número entero, sin coma."
+  "error.quantity_not_whole": "Este producto va por unidad: escribí un número entero, sin coma.",
+  "unit.kg_hint": "en kg (500 g = 0,5)",
+  "unit.units_hint": "unidades enteras",
+  "unit.heavy_confirm": "¿Seguro que son %s kg? Si eran gramos, escribilo en kg: 500 g = 0,5."
 }

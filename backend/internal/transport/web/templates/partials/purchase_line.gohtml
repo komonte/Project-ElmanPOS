@@ -38,6 +38,7 @@
     </div>
     <label class="field-label">{{t "purchase.quantity"}}
       <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Quantity}}" class="field tabular">
+      <span data-qty-unit data-kg="{{t "unit.kg_hint"}}" data-units="{{t "unit.units_hint"}}" class="block text-sm font-normal text-muted"></span>
     </label>
     <label class="field-label">{{t "purchase.unit_cost"}}
       <input type="text" name="unit_cost" inputmode="decimal" autocomplete="off" value="{{.UnitCost}}" class="field tabular">

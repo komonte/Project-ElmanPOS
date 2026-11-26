@@ -17,7 +17,7 @@
   {{$focus := "product"}}
   {{if not .Form.Sector}}{{$focus = "sector"}}{{else if and .Error .Form.ProductID}}{{$focus = "quantity"}}{{end}}
 
-  <form id="count-entry" data-picker-line hx-post="/counts/{{.Count.ID}}/entries" hx-target="#count-sheet" hx-swap="outerHTML"
+  <form id="count-entry" data-picker-line data-heavy-check hx-post="/counts/{{.Count.ID}}/entries" hx-target="#count-sheet" hx-swap="outerHTML"
         class="p-4 border-2 rounded-md bg-surface space-y-3 {{if .Error}}border-danger{{else}}border-line{{end}}">
     {{if .Error}}
     <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
@@ -55,6 +55,7 @@
         <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Form.Quantity}}"
                {{if eq $focus "quantity"}}data-focus autofocus{{end}}
                class="field tabular">
+        <span data-qty-unit data-kg="{{t "unit.kg_hint"}}" data-units="{{t "unit.units_hint"}}" class="block text-sm font-normal text-muted"></span>
       </label>
       <button type="submit" class="btn-primary md:mt-7">{{t "count.add"}}</button>
     </div>

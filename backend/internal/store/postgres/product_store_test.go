@@ -609,10 +609,14 @@ func TestProductStore_GeneratedSKU(t *testing.T) {
 			t.Fatalf("sku: got %q, want 6+ digits", p.SKU)
 		}
 	}
+	// Crece, pero no necesariamente de a uno: los paquetes de tests corren a
+	// la vez contra la misma DB y otros fixtures también crean productos sin
+	// SKU. La secuencia no se deshace con el rollback, así que otro test
+	// puede tomar un número entre estos dos.
 	a, _ := strconv.ParseInt(first.SKU, 10, 64)
 	b, _ := strconv.ParseInt(second.SKU, 10, 64)
-	if b != a+1 {
-		t.Fatalf("skus: got %q then %q, want consecutive", first.SKU, second.SKU)
+	if b <= a {
+		t.Fatalf("skus: got %q then %q, want the second one greater", first.SKU, second.SKU)
 	}
 }
 

@@ -391,12 +391,14 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 | cash_register_id | BIGINT | FK → cash_registers.id, NOT NULL | |
 | opened_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13, migration `0017`). |
 | opening_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Initial cash float. |
-| closing_amount | NUMERIC(12,2) | NULL | Declared cash at close. |
+| closing_amount | NUMERIC(12,2) | NULL | Cash **declared** at close (what was counted in the drawer, float included): the `CASH` row of `cash_audits`. Not the expected amount, and not the difference (§4.20). |
 | status | session_status | NOT NULL DEFAULT 'OPEN' | |
 | opened_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | closed_at | TIMESTAMPTZ | NULL | |
 
 > A sale requires an `OPEN` session (**BR-02**). At most one `OPEN` session per register: the partial unique index `uq_cashier_sessions_one_open` on `(cash_register_id) WHERE status = 'OPEN'` (migration `0017`) rejects a second one even when two screens open the same register at the same time.
+>
+> Closing (F-12) sets `status = 'CLOSED'`, `closing_amount` and `closed_at` in the same transaction that writes the `cash_audits` rows. A closed session never reopens, and its sales can no longer be voided (F-08), so its cash audit never changes.
 
 ### 4.16 `sales`
 
@@ -412,8 +414,12 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 | total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal − discount_amount` (prices include IVA; no discounts yet, so `total = subtotal`). |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| voided_at | TIMESTAMPTZ | NULL | When the sale was voided (F-08, migration `0018`). |
+| void_reason | VARCHAR(300) | NULL | Why it was voided: required, trimmed, up to 300 characters (F-08, migration `0018`). Also kept in `audit_log`. |
 
 UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "never repeats per register" is kept by the app (one `OPEN` session per register, and the number is read with that session locked).
+
+`chk_sales_void` (migration `0018`): `status = 'VOIDED'` ⇔ `voided_at IS NOT NULL` ⇔ `void_reason IS NOT NULL`, and the reason is never blank (`btrim(void_reason) <> ''`). A completed sale has neither; a voided one always has both. In a void (F-08) the sale row is updated in place; the stock goes back with new `RETURN` movements (plus the batches' and balances' quantities), and `payments` is not touched.
 
 ### 4.17 `sale_items`
 
@@ -461,10 +467,14 @@ UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "nev
 | id | BIGSERIAL | PK | |
 | cashier_session_id | BIGINT | FK → cashier_sessions.id, NOT NULL | |
 | method | payment_method | NOT NULL | |
-| declared_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Counted at close. |
+| declared_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | Counted at close. A method left empty is stored as `0`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-> Expected amount per method is computed from `payments` (+ opening float for CASH). Difference `declared - expected` is the audit variance (per **NFR-03**).
+UNIQUE `uq_cash_audits_session_method` on `(cashier_session_id, method)` (migration `0018`; it replaces the plain `idx_cash_audits_session_method` from `0004`, same columns): one declared amount per method and session. A close always writes the **5 rows**, one per payment method, so the audit is complete.
+
+> **Blind close:** while counting, the screen never shows the expected amounts — only where to look for each method and how many payments it had. The expected amounts and the differences are shown only after closing (F-12).
+>
+> Expected amount per method is **computed, never stored**: `CASH = opening_amount + Σ payments(CASH)`, other methods `= Σ payments(method)`, counting **only `COMPLETED` sales** (a voided sale is simply left out; there is no separate "− voids" term). Difference `declared − expected` is the audit variance (per **NFR-03**): negative is short, positive is over.
 
 ---
 
@@ -576,6 +586,7 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 | stock_movements | (batch_id) | Batch history. |
 | stock_movements | (store_id, created_at) | Store-level reports. |
 | cashier_sessions | uq_cashier_sessions_one_open: UNIQUE(cash_register_id) WHERE status = 'OPEN' | One open session per register (**BR-02**, migration `0017`). |
+| cash_audits | uq_cash_audits_session_method: UNIQUE(cashier_session_id, method) | One declared amount per method and session (F-12, migration `0018`); also reads a session's audit. |
 | sales | (cashier_session_id, sale_number) | Receipt numbering (UNIQUE per session; per register by the app, §4.16). |
 | sales | (created_at) | Daily sales reports. |
 | sale_items | (product_id) | Top-products / ABC analysis. |
@@ -637,4 +648,4 @@ One row per known exit (F-09b, migration `0016`): goods that left without being 
 5. Remaining unexplained difference → true merma (potential theft signal). Reported by `reason`, keeping "known consumption" and "unknown loss" separate.
 
 ### 7.4 Cash session lifecycle
-Open (`opening_amount`) → sales accumulate → blind close (declared amounts per method in `cash_audits`) → variance = declared vs expected → `status = CLOSED`.
+Open (`opening_amount`) → sales accumulate (and may be voided while the session is open, F-08) → blind close (declared amounts per method in `cash_audits`, 5 rows) → variance = declared vs expected, from `COMPLETED` sales only → `status = CLOSED`, audited → summary at `/cash/sessions/{id}`.

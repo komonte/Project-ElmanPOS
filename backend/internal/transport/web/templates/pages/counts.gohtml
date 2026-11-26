@@ -1,0 +1,50 @@
+{{define "content"}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "count.title"}}</h1>
+  <p class="mt-2 text-muted max-w-2xl">{{t "count.hint"}}</p>
+</header>
+
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+{{end}}
+
+{{with .Sheet}}
+{{template "count_sheet.gohtml" .}}
+
+{{/* Paneles que salen del buscador: alta de producto y agregar código. */}}
+<div id="form-modal"></div>
+
+{{/* El buscador de producto (escanear + Enter, alta rápida, agregar
+     código...). Abajo, lo que el conteo hace con el producto elegido. */}}
+{{template "picker_script.gohtml"}}
+
+<script>
+  // Deja el producto elegido en la carga y pasa a la cantidad. Lo llama el
+  // buscador compartido (picker_script.gohtml).
+  function pickerSetProduct(row, product) {
+    row.querySelector('[name=product_id]').value = product.id;
+    row.querySelector('[name=product_q]').value = product.name;
+    row.querySelector('ul[role=listbox]').replaceChildren();
+    row.querySelector('[name=quantity]').focus();
+  }
+
+  // Después de guardar (o de un error) la planilla vuelve entera: el cursor
+  // va adonde ella diga (data-focus), así se sigue escaneando sin el mouse.
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target.id !== 'count-sheet') return;
+    const el = e.detail.target.querySelector('[data-focus]');
+    if (el) el.focus();
+  });
+</script>
+{{else}}
+{{if not .Error}}
+<section class="p-6 border-2 border-line rounded-md bg-surface max-w-2xl space-y-4">
+  <h2 class="font-display font-bold text-2xl">{{t "count.none_title"}}</h2>
+  <p class="text-muted">{{t "count.none_hint"}}</p>
+  <form method="post" action="/counts">
+    <button type="submit" class="btn-primary">{{t "count.start"}}</button>
+  </form>
+</section>
+{{end}}
+{{end}}
+{{end}}

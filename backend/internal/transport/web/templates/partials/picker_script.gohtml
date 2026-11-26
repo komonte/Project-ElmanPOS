@@ -1,0 +1,129 @@
+{{/* El buscador de producto de un renglón, compartido por compras y conteos
+     (ver picker.go). Lo incluye la página una vez.
+
+     Un renglón es cualquier elemento con data-picker-line que tenga:
+       - input[name=product_q]: lo que se escribe o escanea, con
+         hx-get="/picker/product-options" y onkeydown="pickerSearchEnter(event, this)";
+       - input[name=product_id]: el producto elegido (oculto);
+       - ul[role=listbox]: los resultados.
+
+     La página define:
+       - pickerSetProduct(row, product): deja el producto elegido en el
+         renglón (cierra la lista y mueve el cursor). product es
+         {id, name, batches, shelf_life}.
+       - pickerQuickValues() (opcional): datos extra para el alta rápida (la
+         compra manda su proveedor). */}}
+<script>
+  // Elegir un producto del buscador.
+  function pickerPick(button) {
+    pickerSetProduct(button.closest('[data-picker-line]'), pickerProductFrom(button));
+  }
+
+  // Los datos de un producto en un botón (buscador, "usar ese producto").
+  function pickerProductFrom(button) {
+    return {
+      id: button.dataset.id, name: button.dataset.name, batches: button.dataset.batches === 'true',
+      shelf_life: button.dataset.shelfLife ? Number(button.dataset.shelfLife) : null,
+    };
+  }
+
+  // Los paneles que salen de un renglón (alta, agregar código) recuerdan qué
+  // renglón los abrió, para elegir ahí el producto. Su buscador queda marcado
+  // (data-modal-return): si el panel se cierra sin elegir nada, closeModal
+  // vuelve ahí.
+  let pickerPanelRow = null;
+  function pickerOpenPanel(button, url, values) {
+    pickerPanelRow = button.closest('[data-picker-line]');
+    pickerClearModalReturn();
+    pickerPanelRow.querySelector('[name=product_q]').setAttribute('data-modal-return', '');
+    htmx.ajax('GET', url, { target: '#form-modal', swap: 'innerHTML', values: values });
+  }
+
+  // Con el producto elegido el cursor va a donde diga la página: la marca ya
+  // no sirve.
+  function pickerClearModalReturn() {
+    document.querySelectorAll('[data-modal-return]').forEach(function (el) {
+      el.removeAttribute('data-modal-return');
+    });
+  }
+
+  // Alta de producto (el formulario de Productos) con lo escrito en el
+  // renglón, más lo que agregue la página (pickerQuickValues).
+  function pickerQuickProduct(button) {
+    const values = typeof pickerQuickValues === 'function' ? pickerQuickValues() : {};
+    values.q = button.dataset.q;
+    pickerOpenPanel(button, '/picker/quick-product', values);
+  }
+
+  // Agregar el código escaneado a un producto que ya existe.
+  function pickerAssignCode(button) {
+    pickerOpenPanel(button, '/picker/assign-code', { code: button.dataset.q });
+  }
+
+  // Desde el alta: el producto ya existe, solo le falta el código. Sigue
+  // siendo el mismo renglón (pickerPanelRow no cambia).
+  function pickerSwitchToAssign() {
+    htmx.ajax('GET', '/picker/assign-code', {
+      target: '#form-modal', swap: 'innerHTML',
+      values: { code: document.getElementById('product-barcode').value },
+    });
+  }
+
+  // Desde el alta: el código escrito ya es de un producto con stock propio
+  // (product_barcode_check.gohtml). Se usa ese en el renglón.
+  function pickerUseExisting(button) {
+    const row = pickerPanelRow;
+    pickerPanelRow = null;
+    closeModal();
+    if (row && row.isConnected) pickerSetProduct(row, pickerProductFrom(button));
+  }
+
+  // El servidor avisa qué producto elegir (HX-Trigger) y el panel se cierra
+  // solo (la respuesta es vacía). Si el renglón se quitó mientras tanto, el
+  // producto (o su código nuevo) queda guardado pero no se elige en ningún lado.
+  document.body.addEventListener('productChosen', function (e) {
+    const row = pickerPanelRow;
+    pickerPanelRow = null;
+    pickerClearModalReturn();
+    if (row && row.isConnected) pickerSetProduct(row, e.detail);
+  });
+
+  // Enter en el buscador de un renglón. El lector de códigos lo manda después
+  // del código, y sin esto enviaría el formulario a medio cargar. Busca al
+  // momento (sin esperar el delay del buscador) y, si hay un solo resultado,
+  // lo elige: escanear y pasar a la cantidad. Sin resultados abre el alta
+  // rápida con lo escrito. Con varios, se elige de la lista. La búsqueda con
+  // delay que quede pendiente llega después y la descarta
+  // pickerDropLateSearch (el renglón ya tiene producto).
+  function pickerSearchEnter(e, input) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const q = input.value.trim();
+    if (q === '') return;
+    const list = input.closest('[data-picker-line]').querySelector('ul[role=listbox]');
+    htmx.ajax('GET', '/picker/product-options', {
+      target: list, swap: 'innerHTML', values: { product_q: q },
+    }).then(function () {
+      const options = list.querySelectorAll('button[data-id]');
+      if (options.length === 1) {
+        pickerPick(options[0]);
+        return;
+      }
+      // Nada: escanear un código que no está abre el alta con ese código.
+      const quick = list.querySelector('[data-quick-product]');
+      if (quick) pickerQuickProduct(quick);
+    });
+  }
+
+  // Descarta los resultados de una búsqueda que llegan cuando el renglón ya
+  // tiene producto: se eligió uno antes de que respondiera la última tecla, y
+  // la respuesta tardía volvería a abrir la lista. Escribir en el buscador
+  // borra el producto elegido (oninput), así que una búsqueda nueva sí se ve.
+  function pickerDropLateSearch(e) {
+    const list = e.detail.target;
+    if (!list.matches('[data-picker-line] ul[role=listbox]')) return;
+    const row = list.closest('[data-picker-line]');
+    if (row.querySelector('[name=product_id]').value !== '') e.detail.shouldSwap = false;
+  }
+  document.addEventListener('htmx:beforeSwap', pickerDropLateSearch);
+</script>

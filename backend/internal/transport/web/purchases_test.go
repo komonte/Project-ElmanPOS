@@ -193,7 +193,7 @@ func TestRenderPurchaseForm(t *testing.T) {
 	})
 
 	t.Run("product options", func(t *testing.T) {
-		html := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "que",
+		html := render(t, "picker_product_options.gohtml", map[string]any{"Query": "que",
 			"Products": []*model.Product{{ID: 3, SKU: "000003", Name: "QUESO", ControlsBatches: true, ShelfLifeDays: new(21)},
 				{ID: 4, SKU: "000004", Name: "QUESO RALLADO"}}})
 		for _, s := range []string{`data-id="3"`, `data-name="QUESO"`, `data-batches="true"`, `data-shelf-life="21"`,
@@ -202,20 +202,20 @@ func TestRenderPurchaseForm(t *testing.T) {
 				t.Errorf("missing %q", s)
 			}
 		}
-		empty := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
+		empty := render(t, "picker_product_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
 		for _, s := range []string{"No hay productos activos", `data-quick-product data-q="zzz"`,
-			"Dar de alta «zzz»", "purchaseQuickProduct(this)"} {
+			"Dar de alta «zzz»", "pickerQuickProduct(this)"} {
 			if !strings.Contains(empty, s) {
 				t.Errorf("no results: missing %q in %s", s, empty)
 			}
 		}
 		// "zzz" no es un código: no se ofrece agregarlo a otro producto.
-		if strings.Contains(empty, "purchaseAssignCode") {
+		if strings.Contains(empty, "pickerAssignCode") {
 			t.Error("a name should not offer to assign a code")
 		}
-		code := render(t, "purchase_product_options.gohtml", map[string]any{"Query": "7790000000017",
+		code := render(t, "picker_product_options.gohtml", map[string]any{"Query": "7790000000017",
 			"IsCode": true, "Products": []*model.Product{}})
-		for _, s := range []string{"Dar de alta «7790000000017»", `data-q="7790000000017" onclick="purchaseAssignCode(this)"`,
+		for _, s := range []string{"Dar de alta «7790000000017»", `data-q="7790000000017" onclick="pickerAssignCode(this)"`,
 			"Agregar este código a un producto existente"} {
 			if !strings.Contains(code, s) {
 				t.Errorf("code: missing %q", s)
@@ -285,7 +285,12 @@ func TestRenderPurchaseForm(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}})
 		for _, s := range []string{`id="purchase-line-template"`, "function purchaseAddLine", `aria-current="page"`,
-			`<div id="form-modal"></div>`, "function purchaseQuickProduct", "addEventListener('purchaseProductChosen'", "function purchaseAssignCode", "function purchaseSwitchToAssign", "function purchaseUseExisting", "function purchaseExpiryFrom"} {
+			`<div id="form-modal"></div>`, "function purchaseExpiryFrom",
+			// El buscador compartido (picker_script.gohtml) y lo que la compra
+			// hace con el producto elegido.
+			"function pickerQuickProduct", "addEventListener('productChosen'", "function pickerAssignCode",
+			"function pickerSwitchToAssign", "function pickerUseExisting", "function pickerSetProduct",
+			"function pickerQuickValues"} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
@@ -313,7 +318,7 @@ func TestPurchaseLineSearchSwapsInsideItsList(t *testing.T) {
 
 // Si se elige un producto antes de que responda la última búsqueda, esa
 // respuesta llega después y no tiene que volver a abrir la lista. Lo hace el
-// script de la página (purchaseDropLateSearch, en htmx:beforeSwap); este test
+// buscador compartido (pickerDropLateSearch, en htmx:beforeSwap); este test
 // solo revisa que esté registrado: el comportamiento se probó en un navegador.
 func TestPurchasesPageDropsLateSearches(t *testing.T) {
 	var buf bytes.Buffer
@@ -321,8 +326,8 @@ func TestPurchasesPageDropsLateSearches(t *testing.T) {
 		"Section": "purchases", "TitleKey": "purchase.title", "Suppliers": []productOption{}}); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{"function purchaseDropLateSearch",
-		"addEventListener('htmx:beforeSwap', purchaseDropLateSearch)"} {
+	for _, s := range []string{"function pickerDropLateSearch",
+		"addEventListener('htmx:beforeSwap', pickerDropLateSearch)"} {
 		if !strings.Contains(buf.String(), s) {
 			t.Errorf("missing %q", s)
 		}
@@ -331,7 +336,7 @@ func TestPurchasesPageDropsLateSearches(t *testing.T) {
 
 // El lector de códigos manda Enter después del código. En el buscador de un
 // renglón ese Enter no tiene que enviar la compra a medio cargar: lo maneja
-// purchaseSearchEnter (busca al momento y elige si hay un solo resultado).
+// pickerSearchEnter (busca al momento y elige si hay un solo resultado).
 // Como en TestPurchasesPageDropsLateSearches, el test revisa que esté
 // conectado; el comportamiento se prueba en un navegador.
 func TestPurchaseLineSearchHandlesEnter(t *testing.T) {
@@ -341,15 +346,19 @@ func TestPurchaseLineSearchHandlesEnter(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := regexp.MustCompile(`(?s)<input type="search" name="product_q".*?>`).FindString(line.String())
-	if !strings.Contains(input, `onkeydown="purchaseSearchEnter(event, this)"`) {
-		t.Errorf("product_q must call purchaseSearchEnter on keydown, got %s", input)
+	if !strings.Contains(input, `onkeydown="pickerSearchEnter(event, this)"`) ||
+		!strings.Contains(input, `hx-get="/picker/product-options"`) {
+		t.Errorf("product_q must use the shared picker, got %s", input)
+	}
+	if !strings.Contains(line.String(), "<fieldset data-purchase-line data-picker-line") {
+		t.Error("the line must be a picker line (data-picker-line)")
 	}
 	if err := e.Render(&page, "es", "purchases.gohtml", map[string]any{
 		"Section": "purchases", "TitleKey": "purchase.title", "Suppliers": []productOption{}}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(page.String(), "function purchaseSearchEnter") {
-		t.Error("page must define purchaseSearchEnter")
+	if !strings.Contains(page.String(), "function pickerSearchEnter") {
+		t.Error("page must define pickerSearchEnter")
 	}
 }
 

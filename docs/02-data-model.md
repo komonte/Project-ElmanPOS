@@ -40,6 +40,9 @@ erDiagram
     stores ||--o{ stock_balances : ""
     stores ||--o{ cash_registers : "houses"
     stores ||--o{ stock_counts : ""
+    stock_counts ||--o{ stock_count_items : "counts"
+    stock_count_items ||--o{ stock_count_entries : "loaded in sectors"
+    products ||--o{ stock_count_items : ""
     suppliers ||--o{ purchases : "sells to"
     suppliers ||--o{ products : "preferred for"
     products ||--o{ purchase_items : ""
@@ -265,7 +268,7 @@ Rows are only appended (F-04): a new cost gets `valid_from = clock_timestamp()` 
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
-| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Within one reception, lines with the same product, number, expiry and cost merge into one row; a different cost is a separate row (F-06). Received without a number → `C-<purchase id>` (automatic batch). |
+| batch_number | VARCHAR(80) | NOT NULL | Printed lot. Within one reception, lines with the same product, number, expiry and cost merge into one row; a different cost is a separate row (F-06). Received without a number → `C-<purchase id>` (automatic batch). Extra stock found by a count → `I-<count id>` (F-09). |
 | expiry_date | DATE | NULL | NULL allowed for non-perishable batches. |
 | original_quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | Received quantity. Immutable. |
 | remaining_quantity | NUMERIC(12,3) | NOT NULL | Decremented on each FIFO allocation. |
@@ -322,14 +325,17 @@ Indexes: `(product_id, created_at)`, `(batch_id)`, `(store_id, created_at)`, `(m
 |---|---|---|---|
 | product_id | BIGINT | FK → products.id, NOT NULL | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
-| quantity | NUMERIC(12,3) | NOT NULL | Current physical stock. |
+| quantity | NUMERIC(12,3) | NOT NULL, CHECK (>= 0) | Current physical stock. Never negative. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL | |
 
 **Primary key: `(product_id, store_id)`** — one row per product per store, duplicates impossible at engine level.
+Adding uses `INSERT ... ON CONFLICT DO UPDATE`; subtracting (a count that found less) uses a plain `UPDATE`, because Postgres checks the `CHECK` on the row it tries to insert (the negative quantity) before seeing the conflict.
 Maintained inside the same transaction as every `stock_movements` insert (**P-03**).
 
-### 4.14 `stock_counts` & `stock_count_items` — physical inventory
+### 4.14 `stock_counts`, `stock_count_items` & `stock_count_entries` — physical inventory
+
+Also the initial inventory (F-09). Migration `0015` added the sectors, cost and expiry.
 
 `stock_counts`:
 | Column | Type | Constraints | Description |
@@ -337,26 +343,40 @@ Maintained inside the same transaction as every `stock_movements` insert (**P-03
 | id | BIGSERIAL | PK | |
 | store_id | BIGINT | FK → stores.id, NOT NULL | |
 | status | count_status | NOT NULL DEFAULT 'DRAFT' | |
-| created_by | BIGINT | FK → users.id, NOT NULL | |
+| created_by | BIGINT | FK → users.id, NULL | `NULL` until there is a login (F-13), like `0013`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | confirmed_at | TIMESTAMPTZ | NULL | |
 
-`stock_count_items`:
+Partial unique index `stock_counts_one_draft_per_store ON (store_id) WHERE status = 'DRAFT'`: one count in progress per store.
+
+`stock_count_items` (one row per counted product):
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | id | BIGSERIAL | PK | |
-| count_id | BIGINT | FK → stock_counts.id, NOT NULL | |
+| count_id | BIGINT | FK → stock_counts.id ON DELETE CASCADE, NOT NULL | Discarding a draft deletes its items. |
 | product_id | BIGINT | FK → products.id, NOT NULL | |
-| system_quantity | NUMERIC(12,3) | NOT NULL | Snapshot of balance when item was added. |
-| counted_quantity | NUMERIC(12,3) | NOT NULL | Physical count. |
+| system_quantity | NUMERIC(12,3) | NOT NULL | Snapshot of the store balance at the product's first load in the count. |
+| counted_quantity | NUMERIC(12,3) | NOT NULL, CHECK (>= 0) | Sum of its entries (kept by the app in the same transaction). |
+| unit_cost | NUMERIC(12,2) | NULL, CHECK (> 0) | Optional, without IVA: cost of extra stock, enters the average (F-04). |
+| expiry_date | DATE | NULL | Optional: expiry of the batch extra stock creates (`controls_batches` only). |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+| updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 UNIQUE `(count_id, product_id)`.
 
-> **Confirmation flow (§7.3):** `DRAFT` items are loaded/edited freely; on `CONFIRMED`, the system generates the adjustment movements for every item where `counted_quantity <> system_quantity`, referenced by `count_id`.
+`stock_count_entries` (one row per load: a product counted in a sector):
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| item_id | BIGINT | FK → stock_count_items.id ON DELETE CASCADE, NOT NULL | |
+| sector | VARCHAR(60) | NOT NULL, CHECK (btrim(sector) <> '') | Where it was counted ("Aisle 3", "Storeroom"). |
+| quantity | NUMERIC(12,3) | NOT NULL, CHECK (>= 0) | 0 is a valid count. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
----
+Index `(item_id)`. Removing an item's last entry deletes the item (the product is "not counted" again).
+
+> **Confirmation flow (§7.3, F-09):** `DRAFT` items are loaded/edited freely; on `CONFIRMED`, every item where `counted_quantity <> system_quantity` gets `ADJUSTMENT`/`COUNT` movements with the difference, referenced by `count_id`, and the balance moves by that difference. A confirmed count is never deleted (its movements reference it).
 
 ### 4.15 `cashier_sessions`
 
@@ -529,6 +549,8 @@ UNIQUE `(cashier_session_id, sale_number)`.
 | sales | (created_at) | Daily sales reports. |
 | sale_items | (product_id) | Top-products / ABC analysis. |
 | prices / product_costs | (product_id, valid_from DESC) | Current + historical price. |
+| stock_counts | UNIQUE(store_id) WHERE status = 'DRAFT' | One count in progress per store (F-09). |
+| stock_count_entries | (item_id) | A counted product's loads. |
 | products | (preferred_supplier_id) | Replenishment grouped by preferred supplier. |
 | app_settings | UNIQUE(key) | Config lookup. |
 | taxes | idx_taxes_name_unique_lower | Case-insensitive unique name |
@@ -577,7 +599,7 @@ UNIQUE `(cashier_session_id, sale_number)`.
 1. **Paper capture (offline):** known exits — family consumption, breakage, spoilage — noted as they happen.
 2. **Draft count:** open `stock_counts` (DRAFT); load items (`system_quantity` snapshot) and record `counted_quantity`.
 3. **Known exits first:** enter known consumptions as `ADJUSTMENT` movements with `reason = 'OWN_CONSUMPTION' | 'DAMAGE' | 'EXPIRATION'`. System now reflects explained losses.
-4. **Confirm:** `status = CONFIRMED`. For each item where `counted <> system`, system auto-inserts `stock_movements` (`ADJUSTMENT`, `reason = 'COUNT'`, signed by direction, `count_id` reference) and updates `stock_balances`.
+4. **Confirm:** `status = CONFIRMED`. For each item where `counted <> system`, system auto-inserts `stock_movements` (`ADJUSTMENT`, `reason = 'COUNT'`, signed by direction, `count_id` reference) and moves `stock_balances` by that difference (not set to the counted quantity: goods received after counting are kept). Extra stock of a `controls_batches` product goes to batch `I-<count id>`; missing stock comes out of the batches FIFO by expiry. Detail in `03-flows-and-transactions.md` F-09. (In v1 the app does steps 2 and 4; known exits, step 3, are deferred.)
 5. Remaining unexplained difference → true merma (potential theft signal). Reported by `reason`, keeping "known consumption" and "unknown loss" separate.
 
 ### 7.4 Cash session lifecycle

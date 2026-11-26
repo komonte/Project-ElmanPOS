@@ -1,0 +1,103 @@
+{{/* Planilla del conteo en borrador (F-09): la carga (sector, producto,
+     cantidad) y lo contado hasta ahora. Cada carga o quitar responde esta
+     planilla entera (#count-sheet, outerHTML).
+
+     La carga es un renglón del buscador compartido (data-picker-line, ver
+     picker_script.gohtml): escanear + Enter elige el producto y pasa a la
+     cantidad; Enter en la cantidad guarda. El sector queda puesto para el
+     producto siguiente. data-focus dice dónde va el cursor (la página lo
+     mueve ahí después de cada respuesta; autofocus, al cargar la página).
+
+     No muestra lo que dice el sistema: se ve al revisar antes de confirmar.
+
+     Datos: .Count (con .Items y sus .Entries), .Entries (cuántas cargas),
+     .Sectors (sugerencias), .Form (lo escrito), .Last (lo último cargado) y
+     .Error. */}}
+<div id="count-sheet" class="space-y-6">
+  {{$focus := "product"}}
+  {{if not .Form.Sector}}{{$focus = "sector"}}{{else if and .Error .Form.ProductID}}{{$focus = "quantity"}}{{end}}
+
+  <form id="count-entry" data-picker-line hx-post="/counts/{{.Count.ID}}/entries" hx-target="#count-sheet" hx-swap="outerHTML"
+        class="p-4 border-2 rounded-md bg-surface space-y-3 {{if .Error}}border-danger{{else}}border-line{{end}}">
+    {{if .Error}}
+    <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.Error}}</div>
+    {{else}}{{with .Last}}
+    <p role="status" class="p-3 bg-paper border-l-8 border-tag rounded-sm">
+      {{printf (t "count.loaded") .Name (qty .Quantity) .Sector}}
+      <span class="text-muted">· {{printf (t "count.loaded_total") (qty .Total)}}</span>
+    </p>
+    {{end}}{{end}}
+
+    <div class="grid gap-3 md:grid-cols-[14rem_1fr_9rem_auto] md:items-start">
+      <label class="field-label">{{t "count.sector"}}
+        <input type="text" id="count-sector" name="sector" list="count-sectors" autocomplete="off" maxlength="60" required
+               value="{{.Form.Sector}}" placeholder="{{t "count.sector_placeholder"}}"
+               {{if eq $focus "sector"}}data-focus autofocus{{end}}
+               onkeydown="if (event.key === 'Enter') { event.preventDefault(); this.form.querySelector('[name=product_q]').focus(); }"
+               class="field">
+      </label>
+      <datalist id="count-sectors">{{range .Sectors}}<option value="{{.}}"></option>{{end}}</datalist>
+      <div>
+        <label class="field-label">{{t "picker.product"}}
+          <input type="search" name="product_q" autocomplete="off" value="{{.Form.ProductQ}}"
+                 placeholder="{{t "picker.product_search"}}"
+                 hx-get="/picker/product-options" hx-trigger="input changed delay:250ms"
+                 hx-target="next ul" hx-swap="innerHTML"
+                 onkeydown="pickerSearchEnter(event, this)"
+                 oninput="this.form.querySelector('[name=product_id]').value = '';"
+                 {{if eq $focus "product"}}data-focus autofocus{{end}}
+                 class="field">
+        </label>
+        <ul role="listbox" class="mt-1 border-2 border-line rounded-md bg-surface empty:hidden max-h-64 overflow-y-auto"></ul>
+        <input type="hidden" name="product_id" value="{{.Form.ProductID}}">
+      </div>
+      <label class="field-label">{{t "count.quantity"}}
+        <input type="text" name="quantity" inputmode="decimal" autocomplete="off" value="{{.Form.Quantity}}"
+               {{if eq $focus "quantity"}}data-focus autofocus{{end}}
+               class="field tabular">
+      </label>
+      <button type="submit" class="btn-primary md:mt-7">{{t "count.add"}}</button>
+    </div>
+    <p class="field-hint">{{t "count.entry_hint"}}</p>
+  </form>
+
+  <section aria-labelledby="count-items-title" class="space-y-3">
+    <h2 id="count-items-title" class="font-display font-bold text-2xl">
+      {{t "count.counted"}}
+      <span class="text-base font-normal text-muted">· {{printf (t "count.summary") (len .Count.Items) .Entries}}</span>
+    </h2>
+    {{if .Count.Items}}
+    <ul class="border-2 border-line rounded-md bg-surface divide-y-2 divide-line">
+      {{range .Count.Items}}
+      <li class="px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="space-y-2">
+          <p class="font-bold">{{.ProductName}}</p>
+          <ul class="flex flex-wrap gap-2" aria-label="{{t "count.entries"}}">
+            {{range .Entries}}
+            <li class="flex items-center gap-1 pl-3 pr-1 py-1 border-2 border-line rounded-md">
+              <span class="text-muted">{{.Sector}}:</span> <span class="font-bold tabular">{{qty .Quantity}}</span>
+              <button type="button" hx-post="/counts/{{$.Count.ID}}/entries/{{.ID}}/delete" hx-include="#count-sector"
+                      hx-target="#count-sheet" hx-swap="outerHTML"
+                      aria-label="{{printf (t "count.remove_entry") .Sector}}"
+                      class="px-2 text-xl leading-none text-muted hover:text-danger">&times;</button>
+            </li>
+            {{end}}
+          </ul>
+        </div>
+        <p class="text-right"><span class="text-muted">{{t "count.total"}}</span>
+          <span class="block font-display font-bold text-2xl tabular">{{qty .CountedQuantity}}</span></p>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="text-muted">{{t "count.empty"}}</p>
+    {{end}}
+  </section>
+
+  <div class="flex flex-wrap items-center gap-4">
+    {{if .Count.Items}}<a href="/counts/{{.Count.ID}}/review" class="btn-primary">{{t "count.review"}}</a>{{end}}
+    <form method="post" action="/counts/{{.Count.ID}}/discard" onsubmit="return confirm('{{t "count.discard_confirm"}}')">
+      <button type="submit" class="btn-secondary">{{t "count.discard"}}</button>
+    </form>
+  </div>
+</div>

@@ -28,6 +28,8 @@ var pageFiles = []string{
 	"templates/pages/categories.gohtml",
 	"templates/pages/products.gohtml",
 	"templates/pages/purchases.gohtml",
+	"templates/pages/counts.gohtml",
+	"templates/pages/count_review.gohtml",
 }
 
 // partialFiles son los fragmentos que htmx pide sueltos (tablas, formularios)
@@ -52,11 +54,15 @@ var partialFiles = []string{
 	"templates/partials/product_barcode_check.gohtml",
 	"templates/partials/purchase_form.gohtml",
 	"templates/partials/purchase_line.gohtml",
-	"templates/partials/purchase_product_options.gohtml",
 	"templates/partials/purchase_received.gohtml",
 	"templates/partials/purchase_price_cell.gohtml",
-	"templates/partials/purchase_assign_code.gohtml",
-	"templates/partials/purchase_assign_code_options.gohtml",
+	"templates/partials/picker_product_options.gohtml",
+	"templates/partials/picker_assign_code.gohtml",
+	"templates/partials/picker_assign_code_options.gohtml",
+	"templates/partials/picker_script.gohtml",
+	"templates/partials/count_sheet.gohtml",
+	"templates/partials/count_review_row.gohtml",
+	"templates/partials/count_review_summary.gohtml",
 }
 
 type TemplateEngine struct {
@@ -100,6 +106,10 @@ func NewTemplateEngine() *TemplateEngine {
 			// español, "37.5" en inglés.
 			"percent": func(d decimal.Decimal) string {
 				return formatPercent(lang, d)
+			},
+			// qty muestra una cantidad contada: "2,5" en español, "2.5" en inglés.
+			"qty": func(d decimal.Decimal) string {
+				return formatQuantity(lang, d)
 			},
 			"formatTime": formatTime,
 		}

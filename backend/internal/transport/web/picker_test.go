@@ -34,7 +34,7 @@ func TestProductChosenTrigger(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"purchaseProductChosen":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\"","shelf_life":21}}`
+	want := `{"productChosen":{"batches":true,"id":42,"name":"QUESO \"CREMOSO\"","shelf_life":21}}`
 	if got != want {
 		t.Errorf("got %s, want %s", got, want)
 	}
@@ -45,8 +45,9 @@ func TestProductChosenTrigger(t *testing.T) {
 	}
 }
 
-// El alta desde una compra es el formulario de Productos en modo compra.
-func TestRenderProductFormForPurchase(t *testing.T) {
+// El alta desde un renglón (compra o conteo) es el formulario de Productos
+// en modo renglón.
+func TestRenderProductFormForLine(t *testing.T) {
 	e := NewTemplateEngine()
 	render := func(t *testing.T, name string, data map[string]any) string {
 		t.Helper()
@@ -68,17 +69,17 @@ func TestRenderProductFormForPurchase(t *testing.T) {
 
 	t.Run("scanned code: focus on the name", func(t *testing.T) {
 		data := base()
-		data["ForPurchase"], data["Barcode"], data["Focus"] = true, "7790895001611", "name"
+		data["ForLine"], data["Barcode"], data["Focus"] = true, "7790895001611", "name"
 		html := render(t, "product_form.gohtml", data)
-		for _, s := range []string{`hx-post="/purchases/quick-product"`, `value="7790895001611"`,
-			`/products/barcode-check?for=purchase`, "purchaseSwitchToAssign()", "+ Nueva categoría",
+		for _, s := range []string{`hx-post="/picker/quick-product"`, `value="7790895001611"`,
+			`/products/barcode-check?for=line`, "pickerSwitchToAssign()", "+ Nueva categoría",
 			`value="1" selected`} {
 			if !strings.Contains(html, s) {
 				t.Errorf("missing %q", s)
 			}
 		}
 		if strings.Contains(html, `hx-post="/products/new"`) {
-			t.Error("must not save to /products/new (it redirects out of the purchase)")
+			t.Error("must not save to /products/new (it redirects out of the purchase or count)")
 		}
 		if !regexpMatch(`id="product-name" name="name" autofocus`, html) {
 			t.Error("the name should have the focus")
@@ -91,31 +92,31 @@ func TestRenderProductFormForPurchase(t *testing.T) {
 	t.Run("typed name: focus on the category", func(t *testing.T) {
 		data := base()
 		data["Product"].(*model.Product).Name = "QUESO CREMOSO"
-		data["ForPurchase"], data["Focus"] = true, "category"
+		data["ForLine"], data["Focus"] = true, "category"
 		html := render(t, "product_form.gohtml", data)
 		if !regexpMatch(`id="product-category"[^>]*autofocus`, html) {
 			t.Error("the category should have the focus")
 		}
 		// Sin código no hay a qué producto agregárselo.
-		if strings.Contains(html, "purchaseSwitchToAssign") {
+		if strings.Contains(html, "pickerSwitchToAssign") {
 			t.Error("without a code it should not offer to assign it")
 		}
 	})
 
 	t.Run("products page is unchanged", func(t *testing.T) {
 		html := render(t, "product_form.gohtml", base())
-		if !strings.Contains(html, `hx-post="/products/new"`) || strings.Contains(html, "?for=purchase") ||
+		if !strings.Contains(html, `hx-post="/products/new"`) || strings.Contains(html, "?for=line") ||
 			!regexpMatch(`id="product-barcode"[^>]*autofocus`, html) {
 			t.Errorf("products page form changed: %s", html)
 		}
 	})
 
-	t.Run("barcode taken: use it from a purchase, edit it from products", func(t *testing.T) {
+	t.Run("barcode taken: use it from a line, edit it from products", func(t *testing.T) {
 		owner := &model.Product{ID: 3, Name: "MORTADELA", ControlsBatches: true, ShelfLifeDays: new(21)}
-		use := render(t, "product_barcode_check.gohtml", map[string]any{"ForPurchase": true,
+		use := render(t, "product_barcode_check.gohtml", map[string]any{"ForLine": true,
 			"Message": "Ya es de MORTADELA", "OwnerID": int64(3), "Owner": owner})
 		for _, s := range []string{`data-id="3"`, `data-name="MORTADELA"`, `data-batches="true"`, `data-shelf-life="21"`,
-			"purchaseUseExisting(this)", "Usar ese producto en el renglón"} {
+			"pickerUseExisting(this)", "Usar ese producto en el renglón"} {
 			if !strings.Contains(use, s) {
 				t.Errorf("purchase: missing %q", s)
 			}
@@ -124,13 +125,13 @@ func TestRenderProductFormForPurchase(t *testing.T) {
 			t.Error("purchase: must not offer to edit (it leaves the purchase)")
 		}
 		// El dueño no se puede recibir (inactivo o combo): solo el aviso.
-		none := render(t, "product_barcode_check.gohtml", map[string]any{"ForPurchase": true,
+		none := render(t, "product_barcode_check.gohtml", map[string]any{"ForLine": true,
 			"Message": "Ya es de COMBO", "OwnerID": int64(9)})
 		if strings.Contains(none, "<button") {
 			t.Errorf("purchase, owner not receivable: got %s", none)
 		}
 		edit := render(t, "product_barcode_check.gohtml", map[string]any{"Message": "Ya es de MORTADELA", "OwnerID": int64(3)})
-		if !strings.Contains(edit, `hx-get="/products/3/edit"`) || strings.Contains(edit, "purchaseUseExisting") {
+		if !strings.Contains(edit, `hx-get="/products/3/edit"`) || strings.Contains(edit, "pickerUseExisting") {
 			t.Errorf("products: got %s", edit)
 		}
 	})
@@ -147,10 +148,10 @@ func TestRenderAssignCode(t *testing.T) {
 		return buf.String()
 	}
 
-	panel := render(t, "purchase_assign_code.gohtml", map[string]any{"Code": "7790000000017",
+	panel := render(t, "picker_assign_code.gohtml", map[string]any{"Code": "7790000000017",
 		"Error": "Ese código de barras ya es del producto 000002 SODA COLA 1.5L."})
 	for _, s := range []string{"Agregar código a un producto", `role="alert"`, "000002 SODA COLA 1.5L",
-		`hx-get="/purchases/assign-code/options"`, `hx-include="#assign-code-value"`,
+		`hx-get="/picker/assign-code/options"`, `hx-include="#assign-code-value"`,
 		`id="assign-code-value" name="code" value="7790000000017"`} {
 		if !strings.Contains(panel, s) {
 			t.Errorf("panel: missing %q", s)
@@ -161,15 +162,15 @@ func TestRenderAssignCode(t *testing.T) {
 		t.Error("panel: the search must not be inside a form")
 	}
 
-	opts := render(t, "purchase_assign_code_options.gohtml", map[string]any{"Query": "soda", "Code": "7790000000017",
+	opts := render(t, "picker_assign_code_options.gohtml", map[string]any{"Query": "soda", "Code": "7790000000017",
 		"Products": []*model.Product{{ID: 2, SKU: "000002", Name: "SODA COLA 1.5L"}}})
-	for _, s := range []string{`hx-post="/purchases/assign-code"`, `name="code" value="7790000000017"`,
+	for _, s := range []string{`hx-post="/picker/assign-code"`, `name="code" value="7790000000017"`,
 		`name="product_id" value="2"`, "SODA COLA 1.5L"} {
 		if !strings.Contains(opts, s) {
 			t.Errorf("options: missing %q", s)
 		}
 	}
-	none := render(t, "purchase_assign_code_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
+	none := render(t, "picker_assign_code_options.gohtml", map[string]any{"Query": "zzz", "Products": []*model.Product{}})
 	if !strings.Contains(none, "No hay productos activos") {
 		t.Errorf("options: no results: got %s", none)
 	}

@@ -45,7 +45,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
        - Brand: the brand search offers "Create brand «X»" when the typed name is not exactly one of the listed brands (similar ones are listed first).
        - Category: "+ New category" opens a small form with name, parent (optional, active only) and VAT, prefilled from the parent's. Never from a name alone: the category sets the VAT of every sale.
   2. Save → system validates and persists (create: `INSERT`; edit: `UPDATE`).
-  - **From a purchase line (F-06):** the same create form opens in a panel over the purchase (`product_form.gohtml` with `ForPurchase`). Differences: it saves to `POST /purchases/quick-product` instead of `/products/new` and does not redirect (that would drop the half-loaded purchase): it closes and picks the new product in its line. It comes prefilled with what was typed in the line (a valid barcode goes to the code and the cursor to the name; anything else goes to the name and the cursor to the category) and the purchase's supplier as preferred supplier. The barcode check offers "Use that product in the line" instead of editing the owner (only if it can be received: active and not `COMPOSITE`). Same use case and transaction as below.
+  - **From a purchase line (F-06):** the same create form opens in a panel over the purchase (`product_form.gohtml` with `ForLine`; the same panel serves stock count lines, F-09). Differences: it saves to `POST /picker/quick-product` instead of `/products/new` and does not redirect (that would drop the half-loaded purchase): it closes and picks the new product in its line. It comes prefilled with what was typed in the line (a valid barcode goes to the code and the cursor to the name; anything else goes to the name and the cursor to the category) and the purchase's supplier as preferred supplier. The barcode check offers "Use that product in the line" instead of editing the owner (only if it can be received: active and not `COMPOSITE`). Same use case and transaction as below.
 - **DB transaction:**
   1. Before `BEGIN`: validate the product, the new brand name and the new category (if any), then normalize the barcode (if any).
   2. `BEGIN;`
@@ -77,7 +77,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **DB transaction:** single statements, no explicit transaction: `SELECT` the owner of the code (to name it if taken), then `INSERT`; or `DELETE ... WHERE id = $1 AND product_id = $2` (a code is only removed through its own product).
 - **Invariants:** a code can never belong to two products (uniqueness guarantees the POS scan resolves unambiguously). Stored codes are digits only, zero-padded to 13 (`CHECK`).
 - **Errors / rollback:** invalid code (non-digits, more than 14 digits, all zeros) → rejected; code already used → rejected, **naming the owner product** ("already belongs to 000123 COCA COLA 2L"). Two admins adding the same code at the same moment: `UNIQUE` rejects the second (without the owner's name).
-- **From a purchase line (F-06):** a scanned code that is not in the catalog may belong to a product already there without it (imported catalog, new presentation). "Add this code to an existing product" opens a panel that searches receivable products (active, not `COMPOSITE`) by name or SKU; picking one runs the same `productcodes.Add` (`POST /purchases/assign-code`) and picks the product in the line. Inactive or composite products are rejected even if posted by hand.
+- **From a purchase line (F-06):** a scanned code that is not in the catalog may belong to a product already there without it (imported catalog, new presentation). "Add this code to an existing product" opens a panel that searches receivable products (active, not `COMPOSITE`) by name or SKU; picking one runs the same `productcodes.Add` (`POST /picker/assign-code`) and picks the product in the line. Inactive or composite products are rejected even if posted by hand.
 - **Interfaces:** web edit panel; API `GET/POST /api/products/{id}/codes` (body `{"code": "..."}`, the client never sends the type) and `DELETE /api/products/{id}/codes/{codeID}`. A taken code answers `409`.
 - **Search:** the product search (web table, API `?search=`) also finds a product by its exact barcode, typed with or without the leading zeros. A partial code does not match.
 - **Edge cases:**
@@ -205,7 +205,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **API:**
   - `POST /api/purchases` with `{supplier_id, voucher_number, total, items: [{product_id, quantity, unit_cost, batch_number, expiry_date}]}` (numbers as text or number). Only what the user types: unknown fields (`status`, `batch_id`, `avg_cost`...) are rejected. → 201 `{purchase, total_difference, suggestions: [{product_id, product_name, unit_cost, avg_cost, suggested_price, current_price}]}` (`suggested_price` is `null` with margin 0; `total_difference` other than `"0"` is the warning).
   - `GET /api/purchases/{id}` → the purchase with its lines (batch number and expiry included). Missing → 404; bad id → 400.
-- **Web routes:** `GET /purchases` (page), `POST /purchases` (receive; returns the result or the form with the error), `GET /purchases/product-options` (line search), `POST /purchases/prices/{id}` ("Use as price": runs `prices.Set` and returns the row's price cell; a separate route from `POST /products/{id}/prices` only because it renders a table cell instead of the product's price section), `GET`/`POST /purchases/quick-product` (create a product from a line, F-01), `GET /purchases/assign-code`, `GET /purchases/assign-code/options` and `POST /purchases/assign-code` (add a code to an existing product, F-02). The create and add-code answers carry `HX-Trigger: purchaseProductChosen {id, name, batches, shelf_life}`, which picks the product in the line that asked.
+- **Web routes:** `GET /purchases` (page), `POST /purchases` (receive; returns the result or the form with the error), `POST /purchases/prices/{id}` ("Use as price": runs `prices.Set` and returns the row's price cell; a separate route from `POST /products/{id}/prices` only because it renders a table cell instead of the product's price section), The line product picker is shared with stock counts (F-09): `GET /picker/product-options` (line search), `GET`/`POST /picker/quick-product` (create a product from a line, F-01), `GET /picker/assign-code`, `GET /picker/assign-code/options` and `POST /picker/assign-code` (add a code to an existing product, F-02). The create and add-code answers carry `HX-Trigger: productChosen {id, name, batches, shelf_life}`, which picks the product in the line that asked.
 - **Edge cases:**
   - Non-batch products (soda): no `product_batches` row, no batch friction at reception.
   - Product missing from the catalog → create it from the line, or add the scanned code to the product it belongs to (business flow, step 2).
@@ -283,28 +283,47 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-09: Stock Count & Merma
 
-- **Actor / Role:** Stock Clerk counts; Admin confirms. Both record known exits.
-- **Trigger:** Periodic physical inventory (weekly / monthly), full or by category.
-- **Preconditions:** No restriction on concurrent sales (count items record their `system_quantity` snapshot when added).
-- **Business flow:**
-  1. **Paper capture (offline):** known exits — family consumption, breakage, spoilage — noted as they happen (low-friction).
-  2. Open a `stock_counts` in `DRAFT`; add items (system auto-snaps `system_quantity` from `stock_balances`) and record `counted_quantity`.
-  3. **Known exits first:** enter each paper-log entry as an `ADJUSTMENT` movement with `reason = 'OWN_CONSUMPTION' | 'DAMAGE' | 'EXPIRATION'` (optional `batch_id`). The system now reflects explained losses.
-  4. **Confirm:** `status = 'CONFIRMED'`.
-- **DB transaction (confirm):**
-  1. `BEGIN;`
-  2. `UPDATE stock_counts SET status='CONFIRMED', confirmed_at=now() WHERE id = $1 AND status='DRAFT';`
-  3. For each item where `counted_quantity <> system_quantity`: `INSERT INTO stock_movements (type 'ADJUSTMENT', reason 'COUNT', quantity = counted − system [signed], count_id)`; `UPDATE stock_balances SET quantity = counted_quantity;`
-  4. `COMMIT;`
+Also the **initial inventory**: the stock already on the shelves when the system starts is not loaded as a purchase, it is counted.
+
+- **Actor / Role:** Stock Clerk counts; Admin confirms. Until F-13 there is no login: anyone can do both, and `stock_counts.created_by` and `performed_by` stay `NULL` (migration `0015`, like `0013`).
+- **Trigger:** periodic physical inventory (weekly / monthly), full or by sectors; the initial inventory.
+- **Preconditions:** **exactly one active store** (as F-06): the count is for it. At most **one `DRAFT` count per store** (partial unique index): the screen always continues the open one. No restriction on concurrent purchases (or, later, sales): see the snapshot below.
+- **Business flow** (Inventory → Stock count, `/counts`):
+  1. Without an open count the page only offers "Start a count" (looking at the page creates nothing).
+  2. **Count by sectors** ("Aisle 3", "Storeroom"; free text with the sectors already used as suggestions). Type the sector, then scan or search the product with the same line picker as purchases (Enter on a scan picks it; not in the catalog → create it with the F-01 form or add the code to an existing product, F-02), type the quantity (kg for `WEIGHT` products, up to 3 decimals; **0 is valid**: "I looked here and there is none") and press Enter. Each load is a `stock_count_entries` row; the **same product in two sectors adds up**. The sector stays for the next product and the cursor goes back to the search.
+  3. The sheet lists each counted product with its loads per sector (each removable with ×) and its total. **It does not show what the system says** (blind count): the comparison is in the review. The count can be left halfway and continued another day, or discarded (deletes the draft, no stock changes).
+  4. **Review** (`/counts/{id}/review`): for each product whose count differs from its snapshot, system / counted / difference. Products that match are only counted. For a product that **goes up**, an optional **cost** (without IVA, the F-04 rules) and, if it `controls_batches`, an optional **expiry**; both save when leaving the field. A warning tells how many go up without a cost (they come in at today's average; those that never had a cost are valued at 0).
+  5. **Confirm** (asks first: it cannot be undone). The review stays as a read-only record with the confirmation date.
+- **Snapshot:** the first load of a product in the count creates its `stock_count_items` row with `system_quantity` = the product's balance in the store at that moment. Later loads only add to `counted_quantity`. Confirm moves the **difference** `counted − snapshot` on the live balance; it does **not** set the balance to the counted quantity. Goods received (or sold) after the product was counted are therefore kept. If nothing moved in between, both give the same result.
+- **DB transaction** (`usecase/stockcounts.Confirm`, one `TxRunner.InTx`):
+  1. `StockCountStore.LockDraft`: `SELECT ... FROM stock_counts WHERE id = $1 FOR UPDATE`; missing → 404, already `CONFIRMED` → 409. Every write on a count (load, remove, cost, discard) takes this lock first, so a load cannot slip in while another confirms.
+  2. Read the items (with product name, `controls_batches` and current average cost).
+  3. For each item with `counted − system ≠ 0` (an error names the product):
+     1. **Lock, then read** (as F-06): `LockOnHand` (product row and balances), then the store balance, the product and `CostStore.Current`.
+     2. If `store balance + difference < 0` → 409 `ErrNegativeStock` ("count the product again"); the whole confirm rolls back. `stock_balances.quantity >= 0` is also a DB `CHECK`.
+     3. **Goes up:** unit cost = the typed cost, else the current average, else 0. If `controls_batches`: `INSERT INTO product_batches` with `batch_number = I-<count id>` (`stockcounts.AutoBatchNumber`), the typed expiry and that cost. One `stock_movements (type 'ADJUSTMENT', reason 'COUNT', +difference, unit_cost, batch_id, count_id)`. With a typed cost, `INSERT INTO product_costs` with the F-04 average against the stock read in 3.1 (like a purchase); without one the average does not change.
+     4. **Goes down:** if `controls_batches`, take from the batches FIFO by expiry (`BatchStore.TakeFIFO`: earliest expiry first, batches without expiry last; a batch left at 0 is `is_consumed`), one movement per batch at that batch's cost; what the batches do not cover (stock from before the product controlled batches) is one movement without batch at the current average. Without batches, one movement at the current average.
+     5. `stock_balances`: add the (signed) difference.
+  4. `UPDATE stock_counts SET status = 'CONFIRMED', confirmed_at = now() WHERE id = $1 AND status = 'DRAFT'`.
+  5. `INSERT INTO audit_log (user_id NULL, 'stock_counts', 'UPDATE', count_id, new_data)` with the confirmed count and its items.
+  6. `COMMIT`.
+- **Decisions (2026-11-26):**
+  - **Products not counted are not touched** (never set to 0): a count can cover one sector, a category or the whole store, in parts.
+  - **One draft at a time** per store; discarding it leaves no trace in the stock (its items and entries go with it, `ON DELETE CASCADE`). A confirmed count can never be deleted: its movements reference it.
+  - **Inactive and `COMPOSITE` products cannot be counted** (reactivate the product; count a combo's components).
+  - **Known exits** (own consumption, damage, expiry: `OWN_CONSUMPTION`, `DAMAGE`, `EXPIRATION`) are **not in v1 yet** (F-09b). When they come, the snapshot question below has to be settled.
+  - Import of a count from a spreadsheet: later.
 - **Invariants:**
-  - After confirm: `stock_balances.quantity = counted_quantity` for every counted product.
-  - A count can only be confirmed once (`DRAFT → CONFIRMED` is one-way).
-  - The difference between system and counted, minus known exits, is the **true merma** — reports separate `OWN_CONSUMPTION`/`DAMAGE`/`EXPIRATION` from unexplained `COUNT`/`THEFT` losses.
-- **Errors / rollback:** confirming a count with pending conflicts → rollback; re-count in DRAFT before confirming.
+  - After confirm, for every adjusted product: ledger, balance and batch `remaining_quantity` changed by the same amount; `balance = counted` when nothing else moved since the snapshot.
+  - `DRAFT → CONFIRMED` is one-way; a count is confirmed at most once.
+  - Reports separate unexplained `COUNT` losses (true merma) from known exits once those exist.
+- **Errors / rollback:** any failure → full rollback (no movement, no batch, no cost, the count stays `DRAFT`). Bad load (no product, no sector, sector > 60 chars, negative quantity or > 3 decimals) → the sheet comes back with what was typed and the message.
+- **Web routes:** `GET /counts` (the open draft, or "Start a count"), `POST /counts` (open or continue), `POST /counts/{id}/entries` (one load; returns the sheet), `POST /counts/{id}/entries/{entryID}/delete`, `POST /counts/{id}/discard`, `GET /counts/{id}/review`, `POST /counts/{id}/items/{productID}/details` (cost and expiry; returns the row and the summary out of band), `POST /counts/{id}/confirm`. The product search, quick create and add-code are the shared `/picker/...` routes (F-06). No JSON API yet.
 - **Edge cases:**
-  - **Positive difference** (found more than the system says) → positive `ADJUSTMENT`; often a missing `PURCHASE` entry.
-  - Product counted physically but absent from system → create it first (F-01), then count.
-  - Batch-level count: if the physical count of a `controls_batches` product differs, the adjustment is FIFO-allocated to batches (or `batch_id` is specified manually when the clerk knows which lot is short).
+  - **Initial inventory:** every product has snapshot 0, so all go up; typing the cost seeds the average cost (F-04).
+  - **Positive difference** (more than the system says) is often a missing purchase; it gets a positive adjustment.
+  - Product counted but not in the system → create it from the line (step 2).
+  - A product that changed to `controls_batches` after it had stock: a negative difference larger than its batches takes the rest without batch.
 
 ### F-10: WEIGHT Sale Mode (a granel)
 

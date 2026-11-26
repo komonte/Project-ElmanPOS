@@ -27,6 +27,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 )
 
 //go:embed static/css/* static/js/* static/fonts/*
@@ -111,10 +112,11 @@ func main() {
 	// Recepción de compras (F-06): compra, lotes, stock y costos en una transacción.
 	purchaseSvc := purchases.New(db, postgres.NewTxRunner(db))
 	purchasesH := transport.NewPurchasesHandler(purchaseSvc)
+	stockCountSvc := stockcounts.New(db, postgres.NewTxRunner(db))
 
 	// Web UI
 	tmplEngine := web.NewTemplateEngine()
-	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc)
+	webH := web.NewWebHandler(tmplEngine, brandSvc, taxSvc, supplierSvc, categorySvc, productSvc, createProduct, productCodes, priceSvc, costSvc, purchaseSvc, stockCountSvc)
 
 	// Configurar rutas
 	mux := http.NewServeMux()
@@ -179,15 +181,25 @@ func main() {
 	mux.HandleFunc("DELETE /products/{id}/codes/{codeID}", webH.ProductCodesRemove)
 	mux.HandleFunc("POST /products/{id}/prices", webH.ProductPricesSet)
 	mux.HandleFunc("POST /products/{id}/costs", webH.ProductCostsSet)
+	mux.HandleFunc("GET /counts", webH.CountsPage)
+	mux.HandleFunc("POST /counts", webH.CountsOpen)
+	mux.HandleFunc("POST /counts/{id}/entries", webH.CountsAddEntry)
+	mux.HandleFunc("POST /counts/{id}/entries/{entryID}/delete", webH.CountsRemoveEntry)
+	mux.HandleFunc("POST /counts/{id}/discard", webH.CountsDiscard)
+	mux.HandleFunc("GET /counts/{id}/review", webH.CountsReview)
+	mux.HandleFunc("POST /counts/{id}/items/{productID}/details", webH.CountsSetDetails)
+	mux.HandleFunc("POST /counts/{id}/confirm", webH.CountsConfirm)
 	mux.HandleFunc("GET /purchases", webH.PurchasesPage)
 	mux.HandleFunc("POST /purchases", webH.PurchasesReceive)
-	mux.HandleFunc("GET /purchases/product-options", webH.PurchasesProductOptions)
 	mux.HandleFunc("POST /purchases/prices/{id}", webH.PurchasesUsePrice)
-	mux.HandleFunc("GET /purchases/quick-product", webH.PurchasesQuickProductForm)
-	mux.HandleFunc("POST /purchases/quick-product", webH.PurchasesQuickProductCreate)
-	mux.HandleFunc("GET /purchases/assign-code", webH.PurchasesAssignCodeForm)
-	mux.HandleFunc("GET /purchases/assign-code/options", webH.PurchasesAssignCodeOptions)
-	mux.HandleFunc("POST /purchases/assign-code", webH.PurchasesAssignCode)
+	// El buscador de producto de un renglón (compras y conteos): opciones,
+	// alta rápida y agregar código.
+	mux.HandleFunc("GET /picker/product-options", webH.PickerProductOptions)
+	mux.HandleFunc("GET /picker/quick-product", webH.PickerQuickProductForm)
+	mux.HandleFunc("POST /picker/quick-product", webH.PickerQuickProductCreate)
+	mux.HandleFunc("GET /picker/assign-code", webH.PickerAssignCodeForm)
+	mux.HandleFunc("GET /picker/assign-code/options", webH.PickerAssignCodeOptions)
+	mux.HandleFunc("POST /picker/assign-code", webH.PickerAssignCode)
 	mux.HandleFunc("POST /settings/language", webH.SetLanguage)
 
 	// Middleware chain

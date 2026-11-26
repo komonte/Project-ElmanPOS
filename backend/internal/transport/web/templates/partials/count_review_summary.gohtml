@@ -1,0 +1,13 @@
+{{/* Resumen de la revisión de un conteo: cuántos productos suben, bajan o
+     coinciden, y el aviso de los que suben sin costo. La respuesta de una
+     fila lo manda fuera de lugar (.Summary.OOB) para que se actualice al
+     escribir un costo. Datos: .Summary (countReviewSummary). */}}
+<div id="count-review-summary" {{if .Summary.OOB}}hx-swap-oob="true"{{end}} class="space-y-3">
+  <p class="text-lg">{{printf (t "count.review_summary") .Summary.Up .Summary.Down .Summary.Same}}</p>
+  {{if .Summary.NoCost}}
+  <div role="alert" class="p-4 bg-paper border-l-8 border-tag rounded-sm">
+    <p class="font-bold">{{printf (t "count.no_cost_warning") .Summary.NoCost}}</p>
+    {{if .Summary.ZeroCost}}<p>{{printf (t "count.zero_cost_warning") .Summary.ZeroCost}}</p>{{end}}
+  </div>
+  {{end}}
+</div>

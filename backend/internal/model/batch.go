@@ -26,3 +26,12 @@ type ProductBatch struct {
 	CreatedAt         string          `json:"created_at" db:"created_at"`
 	UpdatedAt         string          `json:"updated_at" db:"updated_at"`
 }
+
+// BatchTake es cuánto se sacó de un lote al descontar en orden FIFO
+// (BatchStore.TakeFIFO), con el costo de ese lote: el movimiento de stock de
+// esa salida va con este lote y este costo.
+type BatchTake struct {
+	BatchID  int64           `json:"batch_id"`
+	Quantity decimal.Decimal `json:"quantity"` // positiva: lo que salió del lote
+	UnitCost decimal.Decimal `json:"unit_cost"`
+}

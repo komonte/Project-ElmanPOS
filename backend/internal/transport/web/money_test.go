@@ -46,3 +46,17 @@ func TestFormatPercent(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatQuantity(t *testing.T) {
+	tests := []struct{ lang, in, want string }{
+		{"es", "2.500", "2,5"},
+		{"en", "2.500", "2.5"},
+		{"es", "1200", "1200"},
+		{"es", "0", "0"},
+	}
+	for _, tt := range tests {
+		if got := formatQuantity(tt.lang, decimal.RequireFromString(tt.in)); got != tt.want {
+			t.Errorf("%s %s: got %q, want %q", tt.lang, tt.in, got, tt.want)
+		}
+	}
+}

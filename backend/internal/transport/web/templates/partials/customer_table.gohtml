@@ -1,0 +1,45 @@
+{{/* Clientes (0025): activos primero; los inactivos en gris, para poder
+     reactivarlos. No hay "Eliminar": las ventas los nombran. Las acciones
+     mandan la búsqueda actual (hx-include) para no perder el filtro. */}}
+<table class="min-w-full text-left">
+  <thead class="border-b-2 border-line text-muted">
+    <tr>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "common.name"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "customer.phone"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "customer.notes"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "common.status"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "common.actions"}}</th>
+    </tr>
+  </thead>
+  <tbody class="divide-y divide-line">
+    {{range .Customers}}
+    <tr id="customer-{{.ID}}" class="hover:bg-paper {{if not .IsActive}}text-muted{{end}}">
+      <td class="px-3 py-3 font-bold min-w-48">{{.Name}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">{{.Phone}}</td>
+      <td class="px-3 py-3">{{.Notes}}</td>
+      <td class="px-3 py-3 whitespace-nowrap">
+        <span class="inline-flex items-center gap-2">
+          <span aria-hidden="true" class="size-3 rounded-full {{if .IsActive}}bg-stock{{else}}border-2 border-muted{{end}}"></span>
+          {{if .IsActive}}{{t "common.status_active"}}{{else}}{{t "common.status_inactive"}}{{end}}
+        </span>
+      </td>
+      <td class="px-2 py-2">
+        <div class="flex flex-wrap justify-end">
+        <button hx-get="/customers/{{.ID}}/edit" hx-target="#form-modal" hx-swap="innerHTML" data-action="edit"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-ink underline-offset-4 hover:underline">{{t "common.edit"}}</button>
+        {{if .IsActive}}
+        <button hx-patch="/customers/{{.ID}}/deactivate" hx-confirm="{{t "customer.deactivate_confirm"}}" hx-include="#search"
+                hx-target="#customers-table" hx-swap="innerHTML" data-action="deactivate"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-muted underline-offset-4 hover:underline hover:text-ink">{{t "customer.deactivate"}}</button>
+        {{else}}
+        <button hx-patch="/customers/{{.ID}}/reactivate" hx-include="#search" hx-target="#customers-table" hx-swap="innerHTML" data-action="reactivate"
+                class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-stock underline-offset-4 hover:underline">{{t "customer.reactivate"}}</button>
+        {{end}}
+        </div>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" class="px-3 py-6 text-muted" id="customers-empty">{{t "customer.empty"}}</td></tr>
+    {{end}}
+  </tbody>
+</table>

@@ -45,6 +45,7 @@ func webRoutes(h *web.WebHandler) []route {
 		reports   = model.PermReports
 		settings  = model.PermSettings
 		combos    = model.PermCombos
+		customers = model.PermCustomers
 	)
 	return []route{
 		{"GET /{$}", loggedIn, h.Index},
@@ -153,6 +154,15 @@ func webRoutes(h *web.WebHandler) []route {
 		{"GET /cash/sessions/{id}", cash, h.CashSession},
 
 		// Usuarios y contraseñas: solo el admin.
+		// Clientes (fiado): la página es del admin.
+		{"GET /customers", customers, h.CustomersList},
+		{"GET /customers/new", customers, h.CustomersNewForm},
+		{"POST /customers/new", customers, h.CustomersCreate},
+		{"GET /customers/{id}/edit", customers, h.CustomersEditForm},
+		{"POST /customers/{id}/edit", customers, h.CustomersUpdate},
+		{"PATCH /customers/{id}/deactivate", customers, h.CustomersDeactivate},
+		{"PATCH /customers/{id}/reactivate", customers, h.CustomersReactivate},
+
 		{"GET /users", users, h.UsersList},
 		{"GET /users/new", users, h.UsersNewForm},
 		{"POST /users/new", users, h.UsersCreate},

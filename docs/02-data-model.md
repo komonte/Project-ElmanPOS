@@ -628,6 +628,20 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 
 ---
 
+### 4.28 `customers` — selling on account (migration `0025`)
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| name | VARCHAR(120) | NOT NULL, CHECK (not blank) | The only required field. Unique ignoring case and end spaces (`uq_customers_name_lower` on `lower(btrim(name))`): the register does not open a second account for the same person. |
+| phone | VARCHAR(40) | NULL | |
+| notes | VARCHAR(300) | NULL | |
+| is_active | BOOLEAN | NOT NULL DEFAULT TRUE | An inactive customer is not offered at the register; the debt stays. Never deleted. |
+| created_by | BIGINT | FK → users.id, NULL | Who created it. |
+| created_at / updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | `updated_at` by trigger. |
+
+> No credit limit (decided 2026-11-28). Creating, editing and (de)activating are audited (`audit_log`, table `customers`).
+
 ## 5. Index Summary
 
 | Table | Index | Purpose |

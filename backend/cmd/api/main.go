@@ -26,6 +26,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/combos"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/customers"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
@@ -152,7 +153,8 @@ func main() {
 		WithUsers(users.New(db, postgres.NewTxRunner(db))).
 		WithReports(reports.New(db)).
 		WithSettings(settings.New(db, postgres.NewTxRunner(db))).
-		WithCombos(combos.New(db))
+		WithCombos(combos.New(db)).
+		WithCustomers(customers.New(db, postgres.NewTxRunner(db)))
 
 	// Configurar rutas
 	mux := http.NewServeMux()

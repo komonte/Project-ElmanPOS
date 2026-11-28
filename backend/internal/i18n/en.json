@@ -913,5 +913,22 @@
   "report.rounding_count_year": "Sales rounded in the last 12 months",
   "report.rounding_cash_sales": "Sales with cash",
   "report.rounding_rounded": "Rounded",
-  "report.rounding_amount": "Rounded off"
+  "report.rounding_amount": "Rounded off",
+
+  "nav.customers": "Customers (on account)",
+  "customer.title": "Customers",
+  "customer.hint": "The people who buy on account. Only the name is required and it cannot repeat. The register can also add one when selling on account. An inactive customer does not show at the register, but the debt stays.",
+  "customer.create": "New customer",
+  "customer.edit": "Edit customer",
+  "customer.search": "Search by name or phone",
+  "customer.phone": "Phone",
+  "customer.notes": "Note",
+  "customer.name_hint": "If two share a name, add something to tell them apart: «María (kiosk)».",
+  "customer.empty": "No customers.",
+  "customer.deactivate": "Deactivate",
+  "customer.reactivate": "Reactivate",
+  "customer.deactivate_confirm": "Deactivate this customer? They will not show at the register. The debt stays.",
+  "error.customer_name_taken": "There is already a customer with that name. If it is another person, add something to tell them apart.",
+  "error.customer_phone_too_long": "The phone can have up to 40 characters.",
+  "error.customer_notes_too_long": "The note can have up to 300 characters."
 }

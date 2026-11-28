@@ -1,0 +1,15 @@
+{{- /* Resultados de la búsqueda de componentes (ProductComponentsSearch).
+     Cada uno es un botón del formulario de product_components.gohtml:
+     tocarlo agrega ese producto con la cantidad escrita. Sin espacios
+     sueltos: si no hay nada, la lista queda vacía y :empty la oculta. */ -}}
+{{- range .Options}}
+<li>
+  <button type="submit" name="component_id" value="{{.ID}}"
+          class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
+    {{printf (t "product.component_add") .Name}} <span class="text-sm text-muted">· {{.SKU}} · {{t (printf "product.sale_type_%s" .SaleType)}}</span>
+  </button>
+</li>
+{{- end}}
+{{- if and .Query (not .Options)}}
+<li class="px-3 py-2 text-muted">{{t "product.component_not_found"}}</li>
+{{- end -}}

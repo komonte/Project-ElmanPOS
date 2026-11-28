@@ -57,15 +57,6 @@ func TestProductCategoryOptions(t *testing.T) {
 	}
 }
 
-func TestSaleTypeOptionsHidesCompositeForNewProducts(t *testing.T) {
-	if got := saleTypeOptions(""); slices.Contains(got, model.SaleTypeComposite) {
-		t.Fatalf("new product: got %v, want no COMPOSITE", got)
-	}
-	if got := saleTypeOptions(model.SaleTypeComposite); !slices.Contains(got, model.SaleTypeComposite) {
-		t.Fatalf("composite product: got %v, want COMPOSITE kept", got)
-	}
-}
-
 func TestParseFormDecimal(t *testing.T) {
 	tests := []struct {
 		in   string
@@ -235,7 +226,7 @@ func TestRenderProductPartials(t *testing.T) {
 			"Categories":   []productOption{{ID: 3, Label: "Fiambreria", Selected: true}},
 			"BrandName":    "SANCOR",
 			"Suppliers":    []productOption{},
-			"SaleTypes":    saleTypeOptions(product.SaleType),
+			"SaleTypes":    model.SaleTypes,
 			"MeasureUnits": model.MeasureUnits,
 		}
 		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
@@ -270,14 +261,18 @@ func TestRenderProductPartials(t *testing.T) {
 
 	t.Run("new form", func(t *testing.T) {
 		var buf bytes.Buffer
-		data := map[string]any{"Product": &model.Product{}, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits,
+		data := map[string]any{"Product": &model.Product{}, "SaleTypes": model.SaleTypes, "MeasureUnits": model.MeasureUnits,
 			"Barcode": "7790070991232"}
 		if err := e.Render(&buf, "en", "product_form.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
 		html := buf.String()
-		if !strings.Contains(html, `hx-post="/products/new"`) || strings.Contains(html, "COMPOSITE") {
-			t.Error("new form: wrong action or offers COMPOSITE")
+		// Un combo se crea vacío y sus componentes se cargan al editarlo.
+		if !strings.Contains(html, `hx-post="/products/new"`) || !strings.Contains(html, `value="COMPOSITE"`) {
+			t.Error("new form: wrong action or does not offer COMPOSITE")
+		}
+		if strings.Contains(html, `id="product-components"`) {
+			t.Error("new form: the components section is only on edit")
 		}
 		// El código interno lo genera la DB: el alta no tiene ese campo.
 		if strings.Contains(html, `name="sku"`) {
@@ -365,7 +360,7 @@ func TestRenderProductFormBrandNew(t *testing.T) {
 	e := NewTemplateEngine()
 	base := func(p *model.Product, brandNew string) string {
 		var buf bytes.Buffer
-		data := map[string]any{"Product": p, "SaleTypes": saleTypeOptions(""), "MeasureUnits": model.MeasureUnits, "BrandNew": brandNew}
+		data := map[string]any{"Product": p, "SaleTypes": model.SaleTypes, "MeasureUnits": model.MeasureUnits, "BrandNew": brandNew}
 		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {
 			t.Fatal(err)
 		}
@@ -583,7 +578,7 @@ func TestNewCategoryFromForm(t *testing.T) {
 func TestRenderProductFormNewCategory(t *testing.T) {
 	e := NewTemplateEngine()
 	render := func(data map[string]any) string {
-		data["SaleTypes"] = saleTypeOptions("")
+		data["SaleTypes"] = model.SaleTypes
 		data["MeasureUnits"] = model.MeasureUnits
 		var buf bytes.Buffer
 		if err := e.Render(&buf, "es", "product_form.gohtml", data); err != nil {

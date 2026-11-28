@@ -69,6 +69,8 @@ var partialFiles = []string{
 	"templates/partials/product_prices.gohtml",
 	"templates/partials/product_costs.gohtml",
 	"templates/partials/product_codes.gohtml",
+	"templates/partials/product_components.gohtml",
+	"templates/partials/product_component_options.gohtml",
 	"templates/partials/product_barcode_check.gohtml",
 	"templates/partials/purchase_form.gohtml",
 	"templates/partials/purchase_line.gohtml",

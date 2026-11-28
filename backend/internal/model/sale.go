@@ -120,6 +120,9 @@ type SaleItem struct {
 	CreatedAt   string `json:"created_at" db:"created_at"`
 
 	Batches []*SaleItemBatch `json:"batches" db:"-"`
+	// Components: en un renglón de combo, lo que salió de cada componente
+	// (migración 0023). Vacío en los demás.
+	Components []*SaleItemComponent `json:"components,omitempty" db:"-"`
 
 	// Solo lectura, para el ticket.
 	ProductName string   `json:"product_name" db:"-"`

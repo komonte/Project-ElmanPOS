@@ -44,6 +44,7 @@ func webRoutes(h *web.WebHandler) []route {
 		users     = model.PermUsers
 		reports   = model.PermReports
 		settings  = model.PermSettings
+		combos    = model.PermCombos
 	)
 	return []route{
 		{"GET /{$}", loggedIn, h.Index},
@@ -89,6 +90,11 @@ func webRoutes(h *web.WebHandler) []route {
 		{"PATCH /products/{id}/reactivate", catalog, h.ProductsReactivate},
 		{"POST /products/{id}/codes", catalog, h.ProductCodesAdd},
 		{"DELETE /products/{id}/codes/{codeID}", catalog, h.ProductCodesRemove},
+
+		// La receta de un combo: solo el admin.
+		{"GET /products/{id}/components/search", combos, h.ProductComponentsSearch},
+		{"POST /products/{id}/components", combos, h.ProductComponentsAdd},
+		{"DELETE /products/{id}/components/{componentID}", combos, h.ProductComponentsRemove},
 
 		// Precios, costos e impuestos: solo el admin.
 		{"POST /products/{id}/prices", prices, h.ProductPricesSet},

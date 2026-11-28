@@ -63,7 +63,7 @@ func TestRenderProductFormForLine(t *testing.T) {
 			"Product":    &model.Product{PreferredSupplierID: &supplierID},
 			"Categories": []productOption{{ID: 4, Label: "Almacén > Lácteos"}},
 			"Suppliers":  []productOption{{ID: 1, Label: "Distribuidora del Sur S.A.", Selected: true}},
-			"SaleTypes":  saleTypeOptions(""), "MeasureUnits": model.MeasureUnits,
+			"SaleTypes":  model.SaleTypes, "MeasureUnits": model.MeasureUnits,
 		}
 	}
 

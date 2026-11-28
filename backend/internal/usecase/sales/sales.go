@@ -5,7 +5,7 @@
 // Decisiones (2026-11-26):
 //   - Se vende en la sesión abierta de la única caja del local activo. Sin
 //     caja abierta no se vende (BR-02).
-//   - Solo productos activos, que no sean combos y que tengan precio.
+//   - Solo productos activos y que tengan precio.
 //   - Por unidad, cantidades enteras; por peso, kg con hasta 3 decimales y
 //     no más que app_settings max_sale_weight_kg.
 //   - Sin stock suficiente en el local, la venta se rechaza entera: el stock
@@ -27,7 +27,14 @@
 //   - Sin descuentos. Los pagos tienen que cubrir el total; solo el efectivo
 //     puede pasarse (el vuelto no se guarda).
 //   - Número de venta por caja, sin repetirse entre sesiones.
-//   - Combos (expandir sus componentes) quedan para después.
+//   - Combos (2026-11-28, migración 0023): el renglón es el combo, con su
+//     precio y el IVA de su categoría; el stock sale de sus componentes (la
+//     cantidad del renglón por la de la receta), cada uno con sus
+//     movimientos y lotes, y queda en sale_item_components. El costo del
+//     renglón es lo que costaron sus componentes. Lo que piden los renglones
+//     y los combos se suma por producto: 1 atado de 20 y 3 sueltos piden 23
+//     sueltos. En modo arranque, lo que falta de un componente queda en su
+//     Uncovered. Anular no cambia: devuelve cada movimiento de la venta.
 //   - by es el usuario que cobra (F-13): queda en sales.created_by y en el
 //     performed_by de los movimientos.
 //
@@ -61,12 +68,17 @@ const StartupModeKey = "startup_mode"
 var defaultMaxWeight = decimal.NewFromInt(50)
 
 var (
-	ErrRegisterClosed   = fmt.Errorf("the cash register is not open: %w", service.ErrConflict)
-	ErrUnknownProduct   = fmt.Errorf("product does not exist: %w", service.ErrValidation)
-	ErrProductInactive  = fmt.Errorf("product is inactive: %w", service.ErrConflict)
-	ErrCompositeProduct = fmt.Errorf("composite products cannot be sold yet: %w", service.ErrValidation)
-	ErrNoPrice          = fmt.Errorf("product has no price: %w", service.ErrConflict)
-	ErrNotEnoughStock   = fmt.Errorf("not enough stock: %w", service.ErrConflict)
+	ErrRegisterClosed  = fmt.Errorf("the cash register is not open: %w", service.ErrConflict)
+	ErrUnknownProduct  = fmt.Errorf("product does not exist: %w", service.ErrValidation)
+	ErrProductInactive = fmt.Errorf("product is inactive: %w", service.ErrConflict)
+	// ErrComboEmpty: un combo sin componentes no tiene de dónde sacar stock.
+	ErrComboEmpty = fmt.Errorf("%w: %w", service.ErrConflict, model.ErrComboWithoutComponents)
+	// ErrComboComponent: un componente del combo ya no sirve (se desactivó,
+	// pasó a ser combo...). Envuelve el error del model; LineError.Component
+	// dice cuál.
+	ErrComboComponent = fmt.Errorf("a component of the combo cannot be sold: %w", service.ErrConflict)
+	ErrNoPrice        = fmt.Errorf("product has no price: %w", service.ErrConflict)
+	ErrNotEnoughStock = fmt.Errorf("not enough stock: %w", service.ErrConflict)
 	// ErrOpenPriceMissing: un artículo sin registrar sin precio escrito.
 	ErrOpenPriceMissing = fmt.Errorf("write the price of the unregistered item: %w", service.ErrValidation)
 )
@@ -78,18 +90,26 @@ const maxScannedCode = 40
 // mensaje, y envuelve el error puntual (ErrNoPrice, ErrNotEnoughStock, un
 // error de cantidad del model...). Con ErrNotEnoughStock, Available es lo
 // que hay en el local.
+//
+// En un combo, Component es el componente con el problema (el que no
+// alcanza, el que se desactivó); vacío en los demás renglones.
 type LineError struct {
 	ProductID   int64
 	ProductName string
+	Component   string
 	Available   decimal.Decimal
 	Err         error
 }
 
 func (e *LineError) Error() string {
-	if errors.Is(e.Err, ErrNotEnoughStock) {
-		return fmt.Sprintf("%s: %v (there is %s)", e.ProductName, e.Err, e.Available)
+	name := e.ProductName
+	if e.Component != "" {
+		name += ": " + e.Component
 	}
-	return fmt.Sprintf("%s: %v", e.ProductName, e.Err)
+	if errors.Is(e.Err, ErrNotEnoughStock) {
+		return fmt.Sprintf("%s: %v (there is %s)", name, e.Err, e.Available)
+	}
+	return fmt.Sprintf("%s: %v", name, e.Err)
 }
 
 func (e *LineError) Unwrap() error { return e.Err }
@@ -148,14 +168,25 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 			return err
 		}
 
-		// Primero traba todo el stock, en orden de id, y después lee.
+		// Las recetas de los combos se leen antes de trabar: dicen qué stock
+		// hay que trabar. Cambiar una receta solo afecta las ventas que vienen.
+		comps, err := comboComponents(ctx, tx, sale.Items)
+		if err != nil {
+			return err
+		}
+
+		// Primero traba todo el stock (renglones y componentes), en orden de
+		// id, y después lee.
 		balances := postgres.NewStockBalanceStore(tx)
-		ids := make([]int64, len(sale.Items))
-		for i, it := range sale.Items {
-			ids[i] = it.ProductID
+		ids := make([]int64, 0, len(sale.Items))
+		for _, it := range sale.Items {
+			ids = append(ids, it.ProductID)
+			for _, c := range comps[it.ProductID] {
+				ids = append(ids, c.ComponentID)
+			}
 		}
 		slices.Sort(ids)
-		for _, id := range ids {
+		for _, id := range slices.Compact(ids) {
 			if _, err := balances.LockOnHand(ctx, id); err != nil {
 				if errors.Is(err, store.ErrNotFound) {
 					return &LineError{ProductID: id, Err: ErrUnknownProduct}
@@ -165,8 +196,9 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		}
 
 		products := make(map[int64]*model.Product, len(sale.Items))
+		var draws []*draw
 		for i, it := range sale.Items {
-			prod, err := priceLine(ctx, tx, it, storeID, maxWeight, startup)
+			prod, lineDraws, err := priceLine(ctx, tx, it, maxWeight, comps[it.ProductID])
 			if err != nil {
 				return err
 			}
@@ -176,6 +208,10 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 				return fmt.Errorf("%w: line %d: %w", service.ErrValidation, i+1, model.ErrSaleDuplicateProduct)
 			}
 			products[it.ProductID] = prod
+			draws = append(draws, lineDraws...)
+		}
+		if err := checkStock(ctx, tx, draws, storeID, startup); err != nil {
+			return err
 		}
 
 		if err := sale.ComputeTotals(); err != nil {
@@ -190,27 +226,21 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 			return err
 		}
 		// Los lotes salen antes de guardar: la venta guarda de qué lote salió
-		// cada renglón y su costo.
-		unbatched := make(map[int64]decimal.Decimal, len(sale.Items))
-		avgCosts := make(map[int64]decimal.Decimal, len(sale.Items))
-		for _, it := range sale.Items {
-			if products[it.ProductID].OpenPrice {
-				continue // sin stock propio: no sale de ningún lado
-			}
-			left, avg, err := takeBatches(ctx, tx, products[it.ProductID], it)
-			if err != nil {
+		// cada renglón (y cada componente) y su costo.
+		for _, d := range draws {
+			if err := takeBatches(ctx, tx, d); err != nil {
 				return err
 			}
-			unbatched[it.ProductID], avgCosts[it.ProductID] = left, avg
 		}
+		lineCosts(sale.Items, draws)
 		if err := postgres.NewSaleStore(tx).Create(ctx, sale); err != nil {
 			return err
 		}
 
 		movements := postgres.NewStockMovementStore(tx)
-		move := func(it *model.SaleItem, batch *int64, qty, unitCost decimal.Decimal) error {
+		move := func(productID int64, batch *int64, qty, unitCost decimal.Decimal) error {
 			_, err := movements.Create(ctx, &model.StockMovement{
-				ProductID:    it.ProductID,
+				ProductID:    productID,
 				StoreID:      storeID,
 				BatchID:      batch,
 				MovementType: model.MovementSale,
@@ -221,23 +251,20 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 			})
 			return err
 		}
-		for _, it := range sale.Items {
-			if products[it.ProductID].OpenPrice {
-				continue
-			}
-			for _, b := range it.Batches {
-				if err := move(it, &b.BatchID, b.Quantity, b.UnitCost); err != nil {
+		for _, d := range draws {
+			for _, b := range d.batches {
+				if err := move(d.prod.ID, &b.BatchID, b.Quantity, b.UnitCost); err != nil {
 					return err
 				}
 			}
 			// Lo no cubierto no tiene movimiento: el sistema nunca lo tuvo.
-			if left := unbatched[it.ProductID].Sub(it.Uncovered); left.IsPositive() {
-				if err := move(it, nil, left, avgCosts[it.ProductID]); err != nil {
+			if left := d.left.Sub(d.uncovered()); left.IsPositive() {
+				if err := move(d.prod.ID, nil, left, d.avg); err != nil {
 					return err
 				}
 			}
-			if out := it.Quantity.Sub(it.Uncovered); out.IsPositive() {
-				if _, err := balances.Add(ctx, it.ProductID, storeID, out.Neg()); err != nil {
+			if out := d.qty.Sub(d.uncovered()); out.IsPositive() {
+				if _, err := balances.Add(ctx, d.prod.ID, storeID, out.Neg()); err != nil {
 					return err
 				}
 			}
@@ -321,62 +348,190 @@ func StartupMode(ctx context.Context, db postgres.DBTX) (bool, error) {
 	return on, err
 }
 
-// priceLine revisa un renglón (producto vendible, cantidad, stock) y le pone
-// precio, IVA y nombre. El stock ya está trabado. Con startup (modo
-// arranque), la falta de stock no frena: lo que falta va a it.Uncovered.
-func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, storeID int64,
-	maxWeight decimal.Decimal, startup bool) (*model.Product, error) {
-	prod, err := postgres.NewProductStore(tx).GetByID(ctx, it.ProductID)
+// priceLine revisa un renglón (producto vendible, cantidad) y le pone
+// precio, IVA y nombre. Devuelve también de dónde sale su stock: el mismo
+// producto o, si es un combo, sus componentes (comps, su receta); un
+// artículo sin registrar no saca de ningún lado. El stock lo revisa
+// checkStock, con todo el carrito.
+func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, maxWeight decimal.Decimal,
+	comps []*model.ProductComponent) (*model.Product, []*draw, error) {
+	products := postgres.NewProductStore(tx)
+	prod, err := products.GetByID(ctx, it.ProductID)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, &LineError{ProductID: it.ProductID, Err: ErrUnknownProduct}
+		return nil, nil, &LineError{ProductID: it.ProductID, Err: ErrUnknownProduct}
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	lineErr := func(err error) *LineError {
 		return &LineError{ProductID: prod.ID, ProductName: prod.Name, Err: err}
 	}
-	switch {
-	case !prod.IsActive:
-		return nil, lineErr(ErrProductInactive)
-	case prod.SaleType == model.SaleTypeComposite:
-		return nil, lineErr(ErrCompositeProduct)
+	if !prod.IsActive {
+		return nil, nil, lineErr(ErrProductInactive)
 	}
 	if err := it.ValidateQuantity(prod.SaleType, maxWeight); err != nil {
-		return nil, lineErr(fmt.Errorf("%w: %w", service.ErrValidation, err))
+		return nil, nil, lineErr(fmt.Errorf("%w: %w", service.ErrValidation, err))
 	}
 	if prod.OpenPrice {
-		return openPriceLine(ctx, tx, it, prod, lineErr)
+		p, err := openPriceLine(ctx, tx, it, prod, lineErr)
+		return p, nil, err
 	}
 	it.ScannedCode = "" // solo lo guarda un artículo sin registrar
 
+	// De dónde sale: el producto mismo, o los componentes del combo (cada
+	// uno, la cantidad del renglón por la de la receta).
+	var draws []*draw
+	if prod.SaleType != model.SaleTypeComposite {
+		draws = []*draw{{item: it, prod: prod, qty: it.Quantity}}
+	} else {
+		if len(comps) == 0 {
+			return nil, nil, lineErr(ErrComboEmpty)
+		}
+		it.Components = make([]*model.SaleItemComponent, 0, len(comps))
+		for _, c := range comps {
+			comp, err := products.GetByID(ctx, c.ComponentID)
+			if err != nil {
+				return nil, nil, err
+			}
+			qty := it.Quantity.Mul(c.Quantity)
+			// La receta pudo quedar vieja (el componente se desactivó o pasó
+			// a ser combo después de cargarla): se revisa en cada venta.
+			if err := model.CheckComponent(prod, comp, c.Quantity); err != nil {
+				e := lineErr(fmt.Errorf("%w: %w", ErrComboComponent, err))
+				e.Component = comp.Name
+				return nil, nil, e
+			}
+			sc := &model.SaleItemComponent{ProductID: comp.ID, Quantity: qty}
+			it.Components = append(it.Components, sc)
+			draws = append(draws, &draw{item: it, prod: comp, qty: qty, comp: sc})
+		}
+	}
+
 	price, err := postgres.NewPriceStore(tx).Current(ctx, prod.ID)
 	if errors.Is(err, store.ErrNotFound) {
-		return nil, lineErr(ErrNoPrice)
+		return nil, nil, lineErr(ErrNoPrice)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rate, err := taxRate(ctx, tx, prod)
 	if err != nil {
-		return nil, err
-	}
-
-	available, err := postgres.NewStockBalanceStore(tx).OnHandAt(ctx, prod.ID, storeID)
-	if err != nil {
-		return nil, err
-	}
-	if it.Quantity.GreaterThan(available) && startup {
-		it.Uncovered = it.Quantity.Sub(decimal.Max(available, decimal.Zero))
-	} else if it.Quantity.GreaterThan(available) {
-		e := lineErr(ErrNotEnoughStock)
-		e.Available = available
-		return nil, e
+		return nil, nil, err
 	}
 
 	it.UnitPrice, it.TaxRate = price.UnitPrice, rate
 	it.ProductName, it.SaleType = prod.Name, prod.SaleType
-	return prod, nil
+	return prod, draws, nil
+}
+
+// draw es una salida de stock de un renglón: del producto del renglón o de
+// un componente del combo (comp). takeBatches llena los lotes y costos.
+type draw struct {
+	item *model.SaleItem
+	prod *model.Product           // de quién sale el stock
+	qty  decimal.Decimal          // cuánto
+	comp *model.SaleItemComponent // nil si sale del producto del renglón
+
+	batches []*model.SaleItemBatch
+	left    decimal.Decimal // lo que salió sin lote (incluye lo no cubierto)
+	avg     decimal.Decimal // costo promedio vigente, al que sale left
+	cost    decimal.Decimal // costo total de qty
+}
+
+// uncovered es cuánto de la salida el sistema no tenía (modo arranque).
+func (d *draw) uncovered() decimal.Decimal {
+	if d.comp != nil {
+		return d.comp.Uncovered
+	}
+	return d.item.Uncovered
+}
+
+func (d *draw) setUncovered(q decimal.Decimal) {
+	if d.comp != nil {
+		d.comp.Uncovered = q
+	} else {
+		d.item.Uncovered = q
+	}
+}
+
+// comboComponents lee la receta de los combos del carrito, por combo. Los
+// productos que no son combos (o no existen) no están en el mapa.
+func comboComponents(ctx context.Context, tx postgres.DBTX, items []*model.SaleItem) (map[int64][]*model.ProductComponent, error) {
+	ids := make([]int64, len(items))
+	for i, it := range items {
+		ids[i] = it.ProductID
+	}
+	byPack, err := postgres.NewProductComponentStore(tx).ListByPacks(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	// Solo cuentan las recetas de los combos: un producto que dejó de serlo
+	// puede tener filas viejas.
+	for id := range byPack {
+		p, err := postgres.NewProductStore(tx).GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if p.SaleType != model.SaleTypeComposite {
+			delete(byPack, id)
+		}
+	}
+	return byPack, nil
+}
+
+// checkStock revisa el stock de todo el carrito, ya trabado: lo que piden
+// los renglones y los combos se suma por producto (1 atado de 20 y 3
+// sueltos piden 23 sueltos). Lo que hay se reparte en el orden del carrito.
+// Sin alcanzar, la venta se rechaza (el error nombra el renglón y, si es un
+// combo, el componente); en modo arranque, lo que falta queda en el
+// Uncovered de esa salida.
+func checkStock(ctx context.Context, tx postgres.DBTX, draws []*draw, storeID int64, startup bool) error {
+	balances := postgres.NewStockBalanceStore(tx)
+	left := map[int64]decimal.Decimal{} // lo que queda de cada producto
+	for _, d := range draws {
+		have, ok := left[d.prod.ID]
+		if !ok {
+			var err error
+			if have, err = balances.OnHandAt(ctx, d.prod.ID, storeID); err != nil {
+				return err
+			}
+			have = decimal.Max(have, decimal.Zero)
+		}
+		if d.qty.GreaterThan(have) {
+			if !startup {
+				e := &LineError{ProductID: d.item.ProductID, ProductName: d.item.ProductName,
+					Err: ErrNotEnoughStock, Available: have}
+				if d.comp != nil {
+					e.Component = d.prod.Name
+				}
+				return e
+			}
+			d.setUncovered(d.qty.Sub(have))
+		}
+		left[d.prod.ID] = decimal.Max(have.Sub(d.qty), decimal.Zero)
+	}
+	return nil
+}
+
+// lineCosts pone el costo de cada renglón con stock: el de su producto o, en
+// un combo, la suma de lo que salió de sus componentes (cada componente
+// guarda su costo por unidad).
+func lineCosts(items []*model.SaleItem, draws []*draw) {
+	total := map[*model.SaleItem]decimal.Decimal{}
+	for _, d := range draws {
+		total[d.item] = total[d.item].Add(d.cost)
+		if d.comp != nil {
+			d.comp.UnitCost = d.cost.Div(d.qty).Round(2)
+			d.item.Batches = append(d.item.Batches, d.batches...) // el lote dice de qué producto es
+		} else {
+			d.item.Batches = d.batches
+		}
+	}
+	for _, it := range items {
+		if cost, ok := total[it]; ok {
+			it.UnitCost = cost.Div(it.Quantity).Round(2)
+		}
+	}
 }
 
 // openPriceLine arma el renglón de un artículo sin registrar: el precio que
@@ -410,35 +565,32 @@ func taxRate(ctx context.Context, db postgres.DBTX, prod *model.Product) (decima
 	return tax.Rate, nil
 }
 
-// takeBatches saca el renglón de los lotes (FIFO) si el producto los
-// controla, llena it.Batches y el costo del renglón (it.UnitCost: el
-// promedio de lo que salió). Devuelve lo que salió sin lote y el costo
-// promedio vigente, al que sale eso.
-func takeBatches(ctx context.Context, tx postgres.DBTX, prod *model.Product,
-	it *model.SaleItem) (left, avg decimal.Decimal, err error) {
-	avg = decimal.Zero
-	if c, err := postgres.NewCostStore(tx).Current(ctx, prod.ID); err == nil {
-		avg = c.AvgCost
+// takeBatches saca la salida d de los lotes (FIFO) si el producto los
+// controla, y llena d.batches, lo que salió sin lote (d.left), el costo
+// promedio vigente al que sale eso (d.avg) y el costo total (d.cost).
+func takeBatches(ctx context.Context, tx postgres.DBTX, d *draw) error {
+	d.avg = decimal.Zero
+	if c, err := postgres.NewCostStore(tx).Current(ctx, d.prod.ID); err == nil {
+		d.avg = c.AvgCost
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return decimal.Zero, decimal.Zero, err
+		return err
 	}
 
-	left = it.Quantity
+	d.left = d.qty
 	cost := decimal.Zero // costo total de lo que salió
-	if prod.ControlsBatches {
-		takes, rest, err := postgres.NewBatchStore(tx).TakeFIFO(ctx, prod.ID, left)
+	if d.prod.ControlsBatches {
+		takes, rest, err := postgres.NewBatchStore(tx).TakeFIFO(ctx, d.prod.ID, d.left)
 		if err != nil {
-			return decimal.Zero, decimal.Zero, err
+			return err
 		}
 		for _, t := range takes {
-			it.Batches = append(it.Batches, &model.SaleItemBatch{BatchID: t.BatchID, Quantity: t.Quantity, UnitCost: t.UnitCost})
+			d.batches = append(d.batches, &model.SaleItemBatch{BatchID: t.BatchID, Quantity: t.Quantity, UnitCost: t.UnitCost})
 			cost = cost.Add(t.Quantity.Mul(t.UnitCost))
 		}
-		left = rest
+		d.left = rest
 	}
-	cost = cost.Add(left.Mul(avg))
-	it.UnitCost = cost.Div(it.Quantity).Round(2)
-	return left, avg, nil
+	d.cost = cost.Add(d.left.Mul(d.avg))
+	return nil
 }
 
 // lineOrValidation: un error de ComputeTotals que nombra un renglón ("line
@@ -472,8 +624,8 @@ type Option struct {
 }
 
 // Search busca productos para vender por nombre, SKU o código de barras
-// (escanear): los activos que no son combos, hasta 20, con su precio y su
-// stock en el local activo.
+// (escanear): los activos, hasta 20, con su precio y su stock en el local
+// activo. El stock de un combo es cuántos alcanzan con el de sus componentes.
 //   - service.ErrConflict: no hay un único local activo.
 func (s *Service) Search(ctx context.Context, query string) ([]Option, error) {
 	storeID, err := postgres.NewStoreStore(s.db).ActiveID(ctx)
@@ -484,13 +636,20 @@ func (s *Service) Search(ctx context.Context, query string) ([]Option, error) {
 	if err != nil {
 		return nil, err
 	}
+	var packIDs []int64
+	for _, p := range found {
+		if p.SaleType == model.SaleTypeComposite {
+			packIDs = append(packIDs, p.ID)
+		}
+	}
+	comps, err := postgres.NewProductComponentStore(s.db).ListByPacks(ctx, packIDs)
+	if err != nil {
+		return nil, err
+	}
 	prices := postgres.NewPriceStore(s.db)
 	balances := postgres.NewStockBalanceStore(s.db)
 	options := make([]Option, 0, len(found))
 	for _, p := range found {
-		if p.SaleType == model.SaleTypeComposite {
-			continue
-		}
 		o := Option{ID: p.ID, Name: p.Name, SKU: p.SKU, SaleType: p.SaleType, OpenPrice: p.OpenPrice}
 		price, err := prices.Current(ctx, p.ID)
 		switch {
@@ -499,12 +658,36 @@ func (s *Service) Search(ctx context.Context, query string) ([]Option, error) {
 		case !errors.Is(err, store.ErrNotFound):
 			return nil, err
 		}
-		if o.OnHand, err = balances.OnHandAt(ctx, p.ID, storeID); err != nil {
+		if p.SaleType == model.SaleTypeComposite {
+			o.OnHand, err = comboOnHand(ctx, balances, comps[p.ID], storeID)
+		} else {
+			o.OnHand, err = balances.OnHandAt(ctx, p.ID, storeID)
+		}
+		if err != nil {
 			return nil, err
 		}
 		options = append(options, o)
 	}
 	return options, nil
+}
+
+// comboOnHand es cuántos combos enteros alcanzan con el stock de sus
+// componentes: el mínimo de (stock del componente / cantidad de la receta).
+// Sin componentes, 0.
+func comboOnHand(ctx context.Context, balances *postgres.StockBalanceStore, comps []*model.ProductComponent,
+	storeID int64) (decimal.Decimal, error) {
+	var out decimal.Decimal
+	for i, c := range comps {
+		have, err := balances.OnHandAt(ctx, c.ComponentID, storeID)
+		if err != nil {
+			return decimal.Zero, err
+		}
+		n := decimal.Max(have, decimal.Zero).Div(c.Quantity).Floor()
+		if i == 0 || n.LessThan(out) {
+			out = n
+		}
+	}
+	return out, nil
 }
 
 // Get devuelve una venta para el ticket. service.ErrNotFound si no existe.

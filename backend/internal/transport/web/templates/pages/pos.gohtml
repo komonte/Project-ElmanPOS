@@ -135,6 +135,7 @@
      data-tendered="{{t "pos.tendered"}}" data-amount="{{t "pos.amount"}}"
      data-not-found="{{t "pos.scan_not_found"}}" data-no-price="{{t "pos.scan_no_price"}}"
      data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
+     data-startup-warn="{{t "pos.startup_warn"}}" data-startup="{{if $.StartupMode}}1{{end}}"
      data-ticket="{{t "ticket.title"}}"></div>
 
 <script>
@@ -336,8 +337,12 @@
         lineTotal = Math.round(milli * price / 1000);
         const stock = Number(row.dataset.stock);
         warn.hidden = milli <= stock;
-        warn.textContent = posText.stockWarn.replace('%s', posFormatQty(stock));
-        if (milli > stock) linesOk = false;
+        // En modo arranque la falta de stock no frena el cobro: avisa y el
+        // resto queda para contar.
+        const startup = posText.startup === '1';
+        warn.textContent = (startup ? posText.startupWarn : posText.stockWarn)
+          .replace('%s', posFormatQty(Math.max(stock, 0)));
+        if (milli > stock && !startup) linesOk = false;
       }
       row.querySelector('[data-total]').textContent = lineTotal ? posMoney(lineTotal) : '';
       total += lineTotal;

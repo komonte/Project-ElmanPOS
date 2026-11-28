@@ -108,8 +108,11 @@ type SaleItem struct {
 	UnitPrice decimal.Decimal `json:"unit_price" db:"unit_price"` // con IVA; por kg si es a granel
 	// UnitCost es el costo promedio de lo que salió: cada lote a su costo y
 	// lo que no tiene lote al promedio vigente (el detalle está en Batches).
-	UnitCost  decimal.Decimal `json:"unit_cost" db:"unit_cost"`
-	TaxRate   decimal.Decimal `json:"tax_rate" db:"tax_rate"` // 21 = 21 %
+	UnitCost decimal.Decimal `json:"unit_cost" db:"unit_cost"`
+	TaxRate  decimal.Decimal `json:"tax_rate" db:"tax_rate"` // 21 = 21 %
+	// Uncovered es cuánto del renglón el sistema no tenía (modo arranque,
+	// migración 0021): no salió del stock y queda para contar. 0 casi siempre.
+	Uncovered decimal.Decimal `json:"uncovered_quantity" db:"uncovered_quantity"`
 	CreatedAt string          `json:"created_at" db:"created_at"`
 
 	Batches []*SaleItemBatch `json:"batches" db:"-"`

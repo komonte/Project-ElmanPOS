@@ -263,7 +263,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - `SUM(payments.amount) = sales.total`.
   - Ledger equals balance: `Σ stock_movements.quantity(product) = stock_balances.quantity(product)`.
   - Every `sale_item_batches` row has a matching `stock_movements` row with the same `batch_id` — **but not the other way around**: the uncovered rest has a movement without batch and no `sale_item_batches` row.
-  - For each line, `Σ` of its `SALE` movements = `−quantity`.
+  - For each line, `Σ` of its `SALE` movements = `−(quantity − uncovered_quantity)` (`uncovered_quantity` is 0 unless startup mode is on).
 - **Errors / rollback:** any failure → full rollback (**BR-04**); the cart stays on screen for retry.
   - Validation (quantities, payments, line rounding to $0, a combo, unknown product) → 400.
   - Register closed, no / several stores or registers, inactive product, no price, not enough stock → 409. Without a price the message says to ask an administrator (Dashboard → Pending prices).
@@ -275,6 +275,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - Split payment (AR$2,000 cash + AR$3,000 transfer) → two `payments` rows.
   - `WEIGHT` line (0.300 kg): FIFO allocates fractional quantities from batches.
   - Undoing a completed sale is **only** possible via F-08 (full void).
+- **Startup mode** (`app_settings.startup_mode`, migration `0021`; Administration → Settings, admin only, audited): the store loads its stock shelf by shelf, so for a while products are sold before they are counted. While it is on, "not enough stock" does not reject the line: what the store has goes out as usual (batches FIFO, then without batch) and the rest is saved in `sale_items.uncovered_quantity`, with no movement and no change to the balance, which stays at 0, never negative. The line cost still counts the rest at the current average (0 without a cost: the margin report flags it). The cart shows "the system has N: the rest is left to count" instead of blocking. A void gives back only what went out (its movements). The rest stays pending until a confirmed count takes its snapshot of the product after the sale: the count measures what is really left, so nothing else is needed (**Reports → Sold without stock**, R-08). Off, the old rule holds.
 
 ### F-08: Full Void
 
@@ -541,6 +542,10 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Semantics** (`/reports/expiring`, `ReportStore.Expiring`): `product_batches` with `remaining_quantity > 0` and `expiry_date <= today + N days` (today in the store's time zone), including inactive products' batches (the goods expire anyway). N is `app_settings.expiry_warning_days` (missing, not a whole number, ≤ 0 or > 366 → 30, logged); the page can look 7, 15, 30, 60 or the configured days ahead (`?days=`) without changing the setting.
 - **Output:** two sections, **Expired** (oldest first) and **Expires in the next N days**: product, batch, expiry date with "expired 3 days ago" / "expires today" / "in 12 days", `remaining_quantity` (kg for weight products) and its value at the batch `unit_cost`; totals in $ for both.
 - **Action link:** "Write off" opens Stock exits (F-09b) with the product, the batch and the reason `EXPIRATION` already set (`/adjustments?product_id=&batch_id=&reason=EXPIRATION`) and the cursor on the quantity. Not offered for an inactive product (the exit would reject it).
+
+### R-08: Sold without stock (startup mode)
+- **Semantics** (`/reports/unstocked`, `ReportStore.Unstocked`, permission `stock`): products with pending `sale_items.uncovered_quantity` (see F-07, startup mode): sale `COMPLETED` and no `CONFIRMED` count whose `stock_count_items` row for the product was created after the sale.
+- **Output:** product, total sold without stock, in how many sales, last sale and today's stock; the ones with more sales first (they move the most: count them first). "Go count" opens the stock count; "Print" for counting with the list in hand. The dashboard shows the startup mode and how many products are pending.
 
 ### R-03: Top Products / ABC
 - **Semantics:** aggregate `sale_items` by `product_id` for a period: units, revenue, margin (via `unit_cost` snapshots).

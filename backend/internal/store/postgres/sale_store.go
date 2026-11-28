@@ -72,10 +72,11 @@ func (s *SaleStore) create(ctx context.Context, sale *model.Sale) error {
 	for _, it := range sale.Items {
 		it.SaleID = sale.ID
 		if err := s.db.QueryRowContext(ctx, `
-			INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, unit_cost, tax_rate)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, unit_cost, tax_rate,
+			                        uncovered_quantity)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING id, created_at;`,
-			it.SaleID, it.ProductID, it.Quantity, it.UnitPrice, it.UnitCost, it.TaxRate,
+			it.SaleID, it.ProductID, it.Quantity, it.UnitPrice, it.UnitCost, it.TaxRate, it.Uncovered,
 		).Scan(&it.ID, &it.CreatedAt); err != nil {
 			return err
 		}

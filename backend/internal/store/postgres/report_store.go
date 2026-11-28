@@ -270,6 +270,78 @@ func (s *ReportStore) Restock(ctx context.Context, since time.Time) ([]model.Res
 	return out, rows.Err()
 }
 
+// unstockedPending son los renglones vendidos sin stock (modo arranque,
+// 0021) que siguen pendientes: de ventas sin anular y sin un conteo
+// confirmado que haya sacado la foto del producto después de la venta. Esa
+// foto mide lo que de verdad queda, así que el conteo los resuelve.
+const unstockedPending = `
+	SELECT si.product_id, si.uncovered_quantity, s.id AS sale_id, s.created_at
+	FROM sale_items si JOIN sales s ON s.id = si.sale_id
+	WHERE si.uncovered_quantity > 0 AND s.status = 'COMPLETED'
+	  AND NOT EXISTS (
+	      SELECT 1 FROM stock_count_items ci JOIN stock_counts c ON c.id = ci.count_id
+	      WHERE c.status = 'CONFIRMED' AND ci.product_id = si.product_id
+	        AND ci.created_at > s.created_at)`
+
+// Unstocked devuelve los productos vendidos sin stock que hay que contar,
+// los que más ventas tienen arriba (los de más rotación), con su stock de
+// hoy.
+func (s *ReportStore) Unstocked(ctx context.Context) ([]model.UnstockedItem, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		WITH pending AS (`+unstockedPending+`
+		), bal AS (
+			SELECT product_id, SUM(quantity) AS q FROM stock_balances GROUP BY product_id
+		)
+		SELECT p.id, p.sku, p.name, p.sale_type, SUM(x.uncovered_quantity), COUNT(DISTINCT x.sale_id),
+		       MIN(x.created_at), MAX(x.created_at), COALESCE(MAX(bal.q), 0)
+		FROM pending x
+		JOIN products p ON p.id = x.product_id
+		LEFT JOIN bal ON bal.product_id = p.id
+		GROUP BY p.id
+		ORDER BY COUNT(DISTINCT x.sale_id) DESC, MAX(x.created_at) DESC, p.name;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.UnstockedItem
+	for rows.Next() {
+		var it model.UnstockedItem
+		if err := rows.Scan(&it.ProductID, &it.SKU, &it.Name, &it.SaleType, &it.Uncovered, &it.Sales,
+			&it.FirstSold, &it.LastSold, &it.OnHand); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// UnstockedFor dice, de los productos ids, cuánto vendió cada uno sin stock
+// y sigue pendiente. Los que no tienen nada pendiente no están en el mapa.
+func (s *ReportStore) UnstockedFor(ctx context.Context, ids []int64) (map[int64]decimal.Decimal, error) {
+	out := map[int64]decimal.Decimal{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT x.product_id, SUM(x.uncovered_quantity)
+		FROM (`+unstockedPending+`) x
+		WHERE x.product_id = ANY($1)
+		GROUP BY x.product_id;`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var q decimal.Decimal
+		if err := rows.Scan(&id, &q); err != nil {
+			return nil, err
+		}
+		out[id] = q
+	}
+	return out, rows.Err()
+}
+
 // Expiring devuelve los lotes con stock que vencen hasta until (incluido;
 // también los ya vencidos), el que vence primero arriba (R-02). Entran los
 // de productos desactivados: la mercadería se vence igual.

@@ -436,7 +436,10 @@ UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "nev
 | unit_price | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | **Snapshot** (BR-03). |
 | unit_cost | NUMERIC(12,2) | NOT NULL | **Snapshot** cost for margin. |
 | tax_rate | NUMERIC(5,2) | NOT NULL | Applied IVA rate snapshot. |
+| uncovered_quantity | NUMERIC(12,3) | NOT NULL DEFAULT 0, CHECK (>= 0 AND <= quantity) | Startup mode (migration `0021`): how much of the line the system did not have. It has no `stock_movements` row and does not touch `stock_balances` (which never goes negative). Partial index on `product_id` where `> 0`. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+> A line with `uncovered_quantity > 0` is **pending** while its sale is `COMPLETED` and no `CONFIRMED` count has a `stock_count_items` row for the product created (snapshot taken) after the sale. That is derived in the query (`ReportStore.Unstocked`): nothing is written to resolve it, and voiding the sale drops it.
 
 ### 4.18 `sale_item_batches` — FIFO allocation (P-04)
 
@@ -567,6 +570,7 @@ Keys in use:
 |---|---|---|---|
 | `expiry_warning_days` | days, e.g. `30` | seed | R-02: how far ahead the expiring report looks by default. Missing or not a whole number from 1 to 366 → 30. |
 | `currency` | `"ARS"` | seed | nothing yet |
+| `startup_mode` | boolean, `false` | migration `0021` | Startup mode: a sale may sell more than the system stock; the rest goes to `sale_items.uncovered_quantity` and the "Sold without stock" list. Changed by the admin in Administration → Settings (audited). Missing key → off. |
 | `max_sale_weight_kg` | kg, `50` | migration `0017` (not the seed: a database with the real catalog needs it too) | F-10: a heavier sale line is rejected as a typing mistake. Missing key → 50. |
 
 ### 4.26 `stock_adjustments` — known exits

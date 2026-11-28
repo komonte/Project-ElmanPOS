@@ -10,6 +10,11 @@
 //     no más que app_settings max_sale_weight_kg.
 //   - Sin stock suficiente en el local, la venta se rechaza entera: el stock
 //     inicial se carga antes con un conteo.
+//   - Salvo en modo arranque (StartupModeKey, 2026-11-28): el local carga su
+//     stock de a poco y no se puede frenar la caja. Lo que el sistema no
+//     tiene se vende igual: sale lo que hay (el saldo queda en 0, nunca
+//     negativo) y el resto queda en el renglón (Uncovered), sin movimiento,
+//     para contarlo. Ver reports.Unstocked.
 //   - Precio vigente y IVA de la categoría, copiados en el renglón (BR-03).
 //   - De un producto con lotes, sale de los lotes en orden FIFO; lo que los
 //     lotes no cubren sale sin lote. Cada lote a su costo y sin lote al costo
@@ -41,6 +46,10 @@ import (
 
 // MaxWeightKey es el ajuste con el peso máximo por renglón (migración 0017).
 const MaxWeightKey = "max_sale_weight_kg"
+
+// StartupModeKey es el ajuste del modo arranque (migración 0021). Si no
+// está, es como si estuviera apagado.
+const StartupModeKey = "startup_mode"
 
 // defaultMaxWeight se usa si el ajuste no está (alguien lo borró).
 var defaultMaxWeight = decimal.NewFromInt(50)
@@ -123,6 +132,10 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		} else if err != nil {
 			return err
 		}
+		startup, err := StartupMode(ctx, tx)
+		if err != nil {
+			return err
+		}
 
 		// Primero traba todo el stock, en orden de id, y después lee.
 		balances := postgres.NewStockBalanceStore(tx)
@@ -142,7 +155,7 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 
 		products := make(map[int64]*model.Product, len(sale.Items))
 		for _, it := range sale.Items {
-			prod, err := priceLine(ctx, tx, it, storeID, maxWeight)
+			prod, err := priceLine(ctx, tx, it, storeID, maxWeight, startup)
 			if err != nil {
 				return err
 			}
@@ -195,13 +208,16 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 					return err
 				}
 			}
-			if left := unbatched[it.ProductID]; left.IsPositive() {
+			// Lo no cubierto no tiene movimiento: el sistema nunca lo tuvo.
+			if left := unbatched[it.ProductID].Sub(it.Uncovered); left.IsPositive() {
 				if err := move(it, nil, left, avgCosts[it.ProductID]); err != nil {
 					return err
 				}
 			}
-			if _, err := balances.Add(ctx, it.ProductID, storeID, it.Quantity.Neg()); err != nil {
-				return err
+			if out := it.Quantity.Sub(it.Uncovered); out.IsPositive() {
+				if _, err := balances.Add(ctx, it.ProductID, storeID, out.Neg()); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -221,7 +237,7 @@ func copyInput(in *model.Sale) *model.Sale {
 			out.Items = append(out.Items, nil)
 			continue
 		}
-		out.Items = append(out.Items, &model.SaleItem{ProductID: it.ProductID, Quantity: it.Quantity})
+		out.Items = append(out.Items, &model.SaleItem{ProductID: it.ProductID, Quantity: it.Quantity, Uncovered: decimal.Zero})
 	}
 	for _, p := range in.Payments {
 		if p == nil {
@@ -263,10 +279,21 @@ func lockSession(ctx context.Context, tx postgres.DBTX) (int64, *model.CashierSe
 	return storeID, sess, err
 }
 
+// StartupMode dice si el modo arranque está prendido. Sin el ajuste,
+// apagado.
+func StartupMode(ctx context.Context, db postgres.DBTX) (bool, error) {
+	on, err := postgres.NewSettingStore(db).Bool(ctx, StartupModeKey)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	return on, err
+}
+
 // priceLine revisa un renglón (producto vendible, cantidad, stock) y le pone
-// precio, IVA y nombre. El stock ya está trabado.
+// precio, IVA y nombre. El stock ya está trabado. Con startup (modo
+// arranque), la falta de stock no frena: lo que falta va a it.Uncovered.
 func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, storeID int64,
-	maxWeight decimal.Decimal) (*model.Product, error) {
+	maxWeight decimal.Decimal, startup bool) (*model.Product, error) {
 	prod, err := postgres.NewProductStore(tx).GetByID(ctx, it.ProductID)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, &LineError{ProductID: it.ProductID, Err: ErrUnknownProduct}
@@ -303,7 +330,9 @@ func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, storeI
 	if err != nil {
 		return nil, err
 	}
-	if it.Quantity.GreaterThan(available) {
+	if it.Quantity.GreaterThan(available) && startup {
+		it.Uncovered = it.Quantity.Sub(decimal.Max(available, decimal.Zero))
+	} else if it.Quantity.GreaterThan(available) {
 		e := lineErr(ErrNotEnoughStock)
 		e.Available = available
 		return nil, e

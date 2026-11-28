@@ -31,6 +31,13 @@ func (h *WebHandler) PosPage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data["State"] = st
 	}
+	// Modo arranque: el carrito no frena por falta de stock (el servidor
+	// decide igual al cobrar).
+	if h.settings != nil {
+		if s, err := h.settings.Get(r.Context()); err == nil {
+			data["StartupMode"] = s.StartupMode
+		}
+	}
 	h.render(w, r, "pos.gohtml", data)
 }
 

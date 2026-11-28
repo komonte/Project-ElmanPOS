@@ -88,3 +88,16 @@ func (h *WebHandler) ReportsExpiring(w http.ResponseWriter, r *http.Request) {
 		"Expired": expiringRows(lang, rep.Expired), "Soon": expiringRows(lang, rep.Soon),
 	})
 }
+
+// ReportsUnstocked handles GET /reports/unstocked: los productos vendidos sin
+// stock (modo arranque) que hay que contar.
+func (h *WebHandler) ReportsUnstocked(w http.ResponseWriter, r *http.Request) {
+	items, err := h.reports.Unstocked(r.Context())
+	if err != nil {
+		http.Error(w, h.errMsg(r, err), http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, "report_unstocked.gohtml", map[string]any{
+		"Section": "reports_unstocked", "TitleKey": "report.unstocked_title", "Items": items,
+	})
+}

@@ -1,0 +1,44 @@
+{{define "content"}}
+{{/* Vendidos sin stock (modo arranque). Datos: .Items
+     ([]model.UnstockedItem, los de más ventas arriba). Se imprime para
+     salir a contar con la lista. */}}
+<header class="flex flex-wrap items-end justify-between gap-4 mb-6">
+  <div>
+    <h1 class="shelf-title">{{t "report.unstocked_title"}}</h1>
+    <p class="mt-4 text-lg text-muted max-w-2xl print:hidden">{{t "report.unstocked_hint"}}</p>
+  </div>
+  <div class="flex gap-3 print:hidden">
+    {{if .Items}}<a id="unstocked-count" href="/counts" class="btn-primary">{{t "report.unstocked_count"}}</a>{{end}}
+    <button id="report-print" type="button" onclick="window.print()" class="btn-secondary">{{t "report.print"}}</button>
+  </div>
+</header>
+
+{{if not .Items}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{t "report.unstocked_empty"}}</p>
+{{else}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table id="unstocked-table" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_product"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_uncovered"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_unstocked_sales"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_last_sold"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_stock"}}</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .Items}}
+      <tr data-product="{{.ProductID}}">
+        <th scope="row" class="px-3 py-2 font-normal"><span class="block font-bold">{{.Name}}</span><span class="block text-sm text-muted">{{.SKU}}</span></th>
+        <td class="px-3 py-2 text-right font-bold">{{qty .Uncovered}}{{if eq .SaleType "WEIGHT"}} kg{{end}}</td>
+        <td class="px-3 py-2 text-right">{{.Sales}}</td>
+        <td class="px-3 py-2 whitespace-nowrap">{{formatTime .LastSold}}</td>
+        <td class="px-3 py-2 text-right">{{qty .OnHand}}{{if eq .SaleType "WEIGHT"}} kg{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

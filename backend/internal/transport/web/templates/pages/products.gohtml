@@ -7,6 +7,9 @@
 </header>
 
 <div id="form-modal"></div>
+{{/* ?new_code= (desde Códigos sin registrar): abre el alta con ese código ya
+     puesto, sin copiarlo a mano. */}}
+{{with .NewCode}}<div hidden hx-get="/products/new?barcode={{.}}" hx-trigger="load" hx-target="#form-modal" hx-swap="innerHTML" data-new-code="{{.}}"></div>{{end}}
 
 {{/* El buscador arranca con el foco: se puede escanear directo (el escáner
      manda el código y un Enter, que dispara la búsqueda). Después del Enter

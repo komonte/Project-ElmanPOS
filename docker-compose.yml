@@ -7,8 +7,11 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+    # Only this PC reaches Postgres: everything else goes through the app.
+    # Docker bypasses the host firewall (ufw), so the bind address is the
+    # only lock. Never publish it as "5432:5432" (open to the whole LAN).
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

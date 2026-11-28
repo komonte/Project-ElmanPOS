@@ -374,6 +374,11 @@ func (h *WebHandler) ProductsList(w http.ResponseWriter, r *http.Request) {
 
 	data["Section"] = "products"
 	data["TitleKey"] = "product.title"
+	// Desde Códigos sin registrar: abre el alta con el código. Solo si es un
+	// código de barras válido; si no, la página normal.
+	if code, err := model.NormalizeBarcode(r.URL.Query().Get("new_code")); err == nil {
+		data["NewCode"] = code
+	}
 	h.render(w, r, "products.gohtml", data)
 }
 

@@ -109,7 +109,7 @@ func TestRenderOpenPrice(t *testing.T) {
 				Quantity: decimal.RequireFromString("3"), LastPrice: decimal.RequireFromString("350"),
 				LastSold: "2026-11-28T15:00:00Z", SoldAs: "VARIOS 21"}}})
 		mustHave(t, html, "<title>ElmanPOS - Códigos sin registrar</title>", `href="/reports/unregistered" aria-current="page"`,
-			`data-code="7790000000017"`, "$ 350,00", "VARIOS 21", `href="/products?search=7790000000017"`)
+			`data-code="7790000000017"`, "$ 350,00", "VARIOS 21", `href="/products?new_code=7790000000017"`)
 		empty := render(t, "report_unregistered.gohtml", stockCan, map[string]any{})
 		mustHave(t, empty, `id="report-empty"`)
 	})
@@ -123,4 +123,23 @@ func TestRenderOpenPrice(t *testing.T) {
 // openState es la caja abierta, para dibujar la página de vender.
 func openState() *sessions.State {
 	return &sessions.State{Register: &model.CashRegister{ID: 1, Name: "Caja 1"}, Session: &model.CashierSession{ID: 3}}
+}
+
+// Desde Códigos sin registrar, Productos abre el alta con el código puesto.
+func TestProductsPageOpensNewWithCode(t *testing.T) {
+	e := NewTemplateEngine()
+	var buf bytes.Buffer
+	if err := e.Render(&buf, "es", "products.gohtml", map[string]any{"Can": adminCan, "NewCode": "7790000000017"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `hx-get="/products/new?barcode=7790000000017" hx-trigger="load"`) {
+		t.Error("the new-product form does not open with the code")
+	}
+	buf.Reset()
+	if err := e.Render(&buf, "es", "products.gohtml", map[string]any{"Can": adminCan}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "data-new-code") {
+		t.Error("opens the form without a code")
+	}
 }

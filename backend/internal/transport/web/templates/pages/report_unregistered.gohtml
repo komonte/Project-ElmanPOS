@@ -33,7 +33,7 @@
         <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{money .LastPrice}}</td>
         <td class="px-3 py-2 whitespace-nowrap">{{formatTime .LastSold}}</td>
         <td class="px-3 py-2">{{.SoldAs}}</td>
-        <td class="px-3 py-2 text-right print:hidden"><a href="/products?search={{.Code}}" class="font-bold underline underline-offset-4">{{t "report.unregistered_create"}}</a></td>
+        <td class="px-3 py-2 text-right print:hidden"><a href="/products?new_code={{.Code}}" class="font-bold underline underline-offset-4">{{t "report.unregistered_create"}}</a></td>
       </tr>
       {{end}}
     </tbody>

@@ -79,10 +79,10 @@
           <legend class="font-display font-bold text-2xl mb-3">{{t "product.group_classification"}}</legend>
           <div>
             <label for="product-category" class="field-label">{{t "product.category"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-            <select id="product-category" name="category_id" required aria-describedby="product-category-hint" {{if eq .Focus "category"}}autofocus{{end}} class="field" {{if .NewCategory}}disabled{{end}}>
+            <select onchange="productPriceVat(this.form)" id="product-category" name="category_id" required aria-describedby="product-category-hint" {{if eq .Focus "category"}}autofocus{{end}} class="field" {{if .NewCategory}}disabled{{end}}>
               <option value="" disabled {{if not .Product.CategoryID}}selected{{end}}>{{t "product.category_choose"}}</option>
               {{range .Categories}}
-              <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}{{if .Inactive}} {{t "product.inactive_suffix"}}{{end}}</option>
+              <option value="{{.ID}}" data-vat="{{.VatNote}}" {{if .Selected}}selected{{end}}>{{.Label}}{{if .Inactive}} {{t "product.inactive_suffix"}}{{end}}</option>
               {{end}}
             </select>
             <span id="product-category-hint" class="field-hint">{{t "product.category_hint"}}</span>
@@ -105,7 +105,7 @@
                 <label for="new-category-parent" class="field-label">{{t "product.category_new_parent"}}</label>
                 {{/* Al elegir el padre, el IVA se completa con el suyo. */}}
                 <select id="new-category-parent" name="new_category_parent_id" {{if not .NewCategory}}disabled{{end}} class="field"
-                        onchange="const tax = this.selectedOptions[0].dataset.tax; if (tax) this.form.elements.new_category_tax_id.value = tax;">
+                        onchange="const tax = this.selectedOptions[0].dataset.tax; if (tax) this.form.elements.new_category_tax_id.value = tax; productPriceVat(this.form);">
                   <option value="">{{t "product.category_new_parent_none"}}</option>
                   {{range .CategoryParents}}
                   <option value="{{.ID}}" data-tax="{{.TaxID}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
@@ -114,10 +114,10 @@
               </div>
               <div>
                 <label for="new-category-tax" class="field-label">{{t "product.category_new_tax"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
-                <select id="new-category-tax" name="new_category_tax_id" required aria-describedby="new-category-tax-hint" {{if not .NewCategory}}disabled{{end}} class="field max-w-60">
+                <select id="new-category-tax" name="new_category_tax_id" required onchange="productPriceVat(this.form)" aria-describedby="new-category-tax-hint" {{if not .NewCategory}}disabled{{end}} class="field max-w-60">
                   <option value="" {{if not .NewCategory}}selected{{else if not .NewCategory.TaxID}}selected{{end}}>{{t "product.category_new_tax_choose"}}</option>
                   {{range .Taxes}}
-                  <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
+                  <option value="{{.ID}}" data-vat="{{.VatNote}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>
                   {{end}}
                 </select>
                 <span id="new-category-tax-hint" class="field-hint">{{t "product.category_new_tax_hint"}}</span>
@@ -231,7 +231,10 @@
                propia sección abajo. */}}
           {{if and (not .Product.ID) (can .Can "prices")}}
           <div>
-            <label for="product-price" class="field-label">{{t "product.sale_price"}}</label>
+            {{/* La nota dice qué incluye el precio con el IVA de la categoría
+                 elegida (o de la nueva); la cambia productPriceVat. */}}
+            <label for="product-price" class="field-label">{{t "product.sale_price"}}
+              <span class="font-normal text-muted">(<span id="product-price-vat" data-default="{{t "product.price_vat_default"}}">{{or .VatNote (t "product.price_vat_default")}}</span>)</span></label>
             <input type="text" id="product-price" name="price" inputmode="decimal" autocomplete="off" aria-describedby="product-price-hint"
                    value="{{.Price}}" class="field max-w-40 tabular">
             <span id="product-price-hint" class="field-hint">{{t "product.sale_price_hint"}}</span>
@@ -253,7 +256,7 @@
       {{/* Al editar: el precio, el costo y los códigos de barra, fuera del
            <form> del producto. */}}
       {{if .Product.ID}}
-      {{template "product_prices.gohtml" (dict "ProductID" .Product.ID "Prices" .Prices "Can" .Can "OpenPrice" .Product.OpenPrice "OpenPriceAllowed" .OpenPriceAllowed)}}
+      {{template "product_prices.gohtml" (dict "ProductID" .Product.ID "Prices" .Prices "Can" .Can "OpenPrice" .Product.OpenPrice "OpenPriceAllowed" .OpenPriceAllowed "VatNote" .VatNote)}}
       {{with .CostData}}{{template "product_costs.gohtml" .}}{{end}}
       {{template "product_codes.gohtml" (dict "ProductID" .Product.ID "Codes" .Codes)}}
       {{end}}

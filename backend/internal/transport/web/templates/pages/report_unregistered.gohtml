@@ -1,0 +1,43 @@
+{{define "content"}}
+{{/* Códigos cobrados como artículo sin registrar que todavía no son de
+     ningún producto. Datos: .Codes ([]model.UnregisteredCode, los más
+     vendidos arriba). */}}
+<header class="flex flex-wrap items-end justify-between gap-4 mb-6">
+  <div>
+    <h1 class="shelf-title">{{t "report.unregistered_title"}}</h1>
+    <p class="mt-4 text-lg text-muted max-w-2xl print:hidden">{{t "report.unregistered_hint"}}</p>
+  </div>
+  <button id="report-print" type="button" onclick="window.print()" class="btn-secondary print:hidden">{{t "report.print"}}</button>
+</header>
+
+{{if not .Codes}}
+<p id="report-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted">{{t "report.unregistered_empty"}}</p>
+{{else}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table id="unregistered-table" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "report.col_code"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_unstocked_sales"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.col_last_price"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_last_sold"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_sold_as"}}</th>
+        <th scope="col" class="px-3 py-3 print:hidden"><span class="sr-only">{{t "report.unregistered_create"}}</span></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .Codes}}
+      <tr data-code="{{.Code}}">
+        <th scope="row" class="px-3 py-2 font-bold tabular">{{.Code}}</th>
+        <td class="px-3 py-2 text-right">{{.Sales}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{money .LastPrice}}</td>
+        <td class="px-3 py-2 whitespace-nowrap">{{formatTime .LastSold}}</td>
+        <td class="px-3 py-2">{{.SoldAs}}</td>
+        <td class="px-3 py-2 text-right print:hidden"><a href="/products?search={{.Code}}" class="font-bold underline underline-offset-4">{{t "report.unregistered_create"}}</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}
+{{end}}

@@ -113,7 +113,11 @@ type SaleItem struct {
 	// Uncovered es cuánto del renglón el sistema no tenía (modo arranque,
 	// migración 0021): no salió del stock y queda para contar. 0 casi siempre.
 	Uncovered decimal.Decimal `json:"uncovered_quantity" db:"uncovered_quantity"`
-	CreatedAt string          `json:"created_at" db:"created_at"`
+	// ScannedCode es el código escaneado que no estaba, en el renglón de un
+	// artículo sin registrar (migración 0022), para darlo de alta después.
+	// Vacío si no se escaneó nada.
+	ScannedCode string `json:"scanned_code,omitempty" db:"scanned_code"`
+	CreatedAt   string `json:"created_at" db:"created_at"`
 
 	Batches []*SaleItemBatch `json:"batches" db:"-"`
 
@@ -162,7 +166,10 @@ func (s *Sale) Validate() error {
 		if err := it.validate(); err != nil {
 			return fmt.Errorf("line %d: %w", i+1, err)
 		}
-		if seen[it.ProductID] {
+		// Un artículo sin registrar (precio escrito en el renglón) puede ir
+		// en varios renglones, cada uno con su precio y su código; que el
+		// producto lo sea lo revisa el caso de uso.
+		if seen[it.ProductID] && !it.UnitPrice.IsPositive() {
 			return fmt.Errorf("line %d: %w", i+1, ErrSaleDuplicateProduct)
 		}
 		seen[it.ProductID] = true

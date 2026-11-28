@@ -109,6 +109,9 @@ type Product struct {
 	PreferredSupplierID *int64           `json:"preferred_supplier_id" db:"preferred_supplier_id"`
 	IsConsignment       bool             `json:"is_consignment" db:"is_consignment"`
 	IsActive            bool             `json:"is_active" db:"is_active"`
+	// OpenPrice: artículo sin registrar (migración 0022). La caja escribe el
+	// precio en cada renglón y la venta no mueve stock. Lo marca el admin.
+	OpenPrice bool `json:"open_price" db:"open_price"`
 
 	// Solo lectura: el store los llena con un JOIN. Create y Update los ignoran.
 	BrandName    string `json:"brand_name,omitempty" db:"-"`

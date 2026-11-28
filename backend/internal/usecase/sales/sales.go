@@ -16,6 +16,11 @@
 //     negativo) y el resto queda en el renglón (Uncovered), sin movimiento,
 //     para contarlo. Ver reports.Unstocked.
 //   - Precio vigente y IVA de la categoría, copiados en el renglón (BR-03).
+//   - Artículo sin registrar (producto con open_price, migración 0022): el
+//     precio lo escribe la caja en el renglón y no mueve stock (no tiene
+//     stock propio, ni lotes, ni costo: el margen lo avisa como sin costo).
+//     Si se escaneó un código que no estaba, queda en el renglón
+//     (ScannedCode) para darlo de alta después.
 //   - De un producto con lotes, sale de los lotes en orden FIFO; lo que los
 //     lotes no cubren sale sin lote. Cada lote a su costo y sin lote al costo
 //     promedio vigente. El promedio no cambia.
@@ -35,6 +40,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/shopspring/decimal"
 
@@ -61,7 +67,12 @@ var (
 	ErrCompositeProduct = fmt.Errorf("composite products cannot be sold yet: %w", service.ErrValidation)
 	ErrNoPrice          = fmt.Errorf("product has no price: %w", service.ErrConflict)
 	ErrNotEnoughStock   = fmt.Errorf("not enough stock: %w", service.ErrConflict)
+	// ErrOpenPriceMissing: un artículo sin registrar sin precio escrito.
+	ErrOpenPriceMissing = fmt.Errorf("write the price of the unregistered item: %w", service.ErrValidation)
 )
+
+// maxScannedCode es el largo de sale_items.scanned_code.
+const maxScannedCode = 40
 
 // LineError es un problema con un renglón: dice qué producto es, para el
 // mensaje, y envuelve el error puntual (ErrNoPrice, ErrNotEnoughStock, un
@@ -154,10 +165,15 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		}
 
 		products := make(map[int64]*model.Product, len(sale.Items))
-		for _, it := range sale.Items {
+		for i, it := range sale.Items {
 			prod, err := priceLine(ctx, tx, it, storeID, maxWeight, startup)
 			if err != nil {
 				return err
+			}
+			// Repetido solo un artículo sin registrar: el stock y los lotes
+			// de los demás se cuentan por producto.
+			if _, dup := products[it.ProductID]; dup && !prod.OpenPrice {
+				return fmt.Errorf("%w: line %d: %w", service.ErrValidation, i+1, model.ErrSaleDuplicateProduct)
 			}
 			products[it.ProductID] = prod
 		}
@@ -178,6 +194,9 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		unbatched := make(map[int64]decimal.Decimal, len(sale.Items))
 		avgCosts := make(map[int64]decimal.Decimal, len(sale.Items))
 		for _, it := range sale.Items {
+			if products[it.ProductID].OpenPrice {
+				continue // sin stock propio: no sale de ningún lado
+			}
 			left, avg, err := takeBatches(ctx, tx, products[it.ProductID], it)
 			if err != nil {
 				return err
@@ -203,6 +222,9 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 			return err
 		}
 		for _, it := range sale.Items {
+			if products[it.ProductID].OpenPrice {
+				continue
+			}
 			for _, b := range it.Batches {
 				if err := move(it, &b.BatchID, b.Quantity, b.UnitCost); err != nil {
 					return err
@@ -237,7 +259,17 @@ func copyInput(in *model.Sale) *model.Sale {
 			out.Items = append(out.Items, nil)
 			continue
 		}
-		out.Items = append(out.Items, &model.SaleItem{ProductID: it.ProductID, Quantity: it.Quantity, Uncovered: decimal.Zero})
+		// El precio solo se usa si es un artículo sin registrar (priceLine);
+		// a los demás se les pone el vigente.
+		code := strings.TrimSpace(it.ScannedCode)
+		if n, err := model.NormalizeBarcode(code); err == nil {
+			code = n // igual que en product_codes, para encontrarlo al darlo de alta
+		}
+		if len(code) > maxScannedCode {
+			code = code[:maxScannedCode]
+		}
+		out.Items = append(out.Items, &model.SaleItem{ProductID: it.ProductID, Quantity: it.Quantity,
+			UnitPrice: it.UnitPrice, ScannedCode: code})
 	}
 	for _, p := range in.Payments {
 		if p == nil {
@@ -313,6 +345,10 @@ func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, storeI
 	if err := it.ValidateQuantity(prod.SaleType, maxWeight); err != nil {
 		return nil, lineErr(fmt.Errorf("%w: %w", service.ErrValidation, err))
 	}
+	if prod.OpenPrice {
+		return openPriceLine(ctx, tx, it, prod, lineErr)
+	}
+	it.ScannedCode = "" // solo lo guarda un artículo sin registrar
 
 	price, err := postgres.NewPriceStore(tx).Current(ctx, prod.ID)
 	if errors.Is(err, store.ErrNotFound) {
@@ -339,6 +375,24 @@ func priceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, storeI
 	}
 
 	it.UnitPrice, it.TaxRate = price.UnitPrice, rate
+	it.ProductName, it.SaleType = prod.Name, prod.SaleType
+	return prod, nil
+}
+
+// openPriceLine arma el renglón de un artículo sin registrar: el precio que
+// escribió la caja (con dos decimales), el IVA de la categoría, costo 0 y
+// sin stock.
+func openPriceLine(ctx context.Context, tx postgres.DBTX, it *model.SaleItem, prod *model.Product,
+	lineErr func(error) *LineError) (*model.Product, error) {
+	price := it.UnitPrice.Round(2)
+	if !price.IsPositive() {
+		return nil, lineErr(ErrOpenPriceMissing)
+	}
+	rate, err := taxRate(ctx, tx, prod)
+	if err != nil {
+		return nil, err
+	}
+	it.UnitPrice, it.TaxRate, it.UnitCost, it.Uncovered = price, rate, decimal.Zero, decimal.Zero
 	it.ProductName, it.SaleType = prod.Name, prod.SaleType
 	return prod, nil
 }
@@ -413,6 +467,8 @@ type Option struct {
 	Price *decimal.Decimal `json:"price"`
 	// OnHand es el stock del local activo.
 	OnHand decimal.Decimal `json:"on_hand"`
+	// OpenPrice: artículo sin registrar, el precio se escribe en la caja.
+	OpenPrice bool `json:"open_price"`
 }
 
 // Search busca productos para vender por nombre, SKU o código de barras
@@ -435,7 +491,7 @@ func (s *Service) Search(ctx context.Context, query string) ([]Option, error) {
 		if p.SaleType == model.SaleTypeComposite {
 			continue
 		}
-		o := Option{ID: p.ID, Name: p.Name, SKU: p.SKU, SaleType: p.SaleType}
+		o := Option{ID: p.ID, Name: p.Name, SKU: p.SKU, SaleType: p.SaleType, OpenPrice: p.OpenPrice}
 		price, err := prices.Current(ctx, p.ID)
 		switch {
 		case err == nil:
@@ -476,4 +532,19 @@ func translate(err error) error {
 		return fmt.Errorf("%w: %w", service.ErrConflict, err)
 	}
 	return err
+}
+
+// OpenItems son los artículos sin registrar que la caja puede usar (activos,
+// por nombre): cuando un código no está, se ofrece cobrarlo como uno de
+// ellos, con el precio escrito.
+func (s *Service) OpenItems(ctx context.Context) ([]Option, error) {
+	found, err := postgres.NewProductStore(s.db).OpenPriceProducts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Option, 0, len(found))
+	for _, p := range found {
+		out = append(out, Option{ID: p.ID, Name: p.Name, SKU: p.SKU, SaleType: p.SaleType, OpenPrice: true})
+	}
+	return out, nil
 }

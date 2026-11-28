@@ -297,6 +297,8 @@ var errorKeys = []struct {
 	{model.ErrSaleQuantityNotWhole, "error.sale_quantity_not_whole"},
 	// Conteos, salidas y compras: los productos por unidad, enteros.
 	{model.ErrQuantityNotWhole, "error.quantity_not_whole"},
+	{sales.ErrOpenPriceMissing, "error.open_price_missing"},
+	{prices.ErrOpenPriceKind, "error.open_price_kind"},
 	{model.ErrSaleWeightTooLarge, "error.sale_weight_too_large"},
 	{model.ErrSaleLineTotalZero, "error.sale_line_zero"},
 	{model.ErrSaleTotalTooLarge, "error.sale_total_too_large"},
@@ -455,6 +457,12 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 	if can(r, model.PermStock) && h.reports != nil {
 		if items, err := h.reports.Unstocked(ctx); err == nil {
 			data["UnstockedCount"] = len(items)
+		}
+	}
+	// Códigos cobrados como artículo sin registrar: para quien da de alta.
+	if can(r, model.PermCatalog) && h.reports != nil {
+		if codes, err := h.reports.UnregisteredCodes(ctx); err == nil {
+			data["UnregisteredCount"] = len(codes)
 		}
 	}
 	h.render(w, r, "index.gohtml", data)

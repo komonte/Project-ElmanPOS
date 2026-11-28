@@ -101,3 +101,16 @@ func (h *WebHandler) ReportsUnstocked(w http.ResponseWriter, r *http.Request) {
 		"Section": "reports_unstocked", "TitleKey": "report.unstocked_title", "Items": items,
 	})
 }
+
+// ReportsUnregistered handles GET /reports/unregistered: los códigos cobrados
+// como artículo sin registrar que hay que dar de alta.
+func (h *WebHandler) ReportsUnregistered(w http.ResponseWriter, r *http.Request) {
+	codes, err := h.reports.UnregisteredCodes(r.Context())
+	if err != nil {
+		http.Error(w, h.errMsg(r, err), http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, "report_unregistered.gohtml", map[string]any{
+		"Section": "reports_unregistered", "TitleKey": "report.unregistered_title", "Codes": codes,
+	})
+}

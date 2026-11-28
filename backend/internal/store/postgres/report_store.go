@@ -342,6 +342,38 @@ func (s *ReportStore) UnstockedFor(ctx context.Context, ids []int64) (map[int64]
 	return out, rows.Err()
 }
 
+// UnregisteredCodes devuelve los códigos cobrados como artículo sin
+// registrar (ventas sin anular) que todavía no son de ningún producto, los
+// que más se vendieron arriba. Un código deja la lista cuando alguien lo da
+// de alta (product_codes): no se escribe nada para resolverlo.
+func (s *ReportStore) UnregisteredCodes(ctx context.Context) ([]model.UnregisteredCode, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT si.scanned_code, COUNT(DISTINCT s.id), SUM(si.quantity),
+		       (ARRAY_AGG(si.unit_price ORDER BY s.created_at DESC, si.id DESC))[1],
+		       MAX(s.created_at),
+		       (ARRAY_AGG(p.name ORDER BY s.created_at DESC, si.id DESC))[1]
+		FROM sale_items si
+		JOIN sales s ON s.id = si.sale_id AND s.status = 'COMPLETED'
+		JOIN products p ON p.id = si.product_id
+		WHERE si.scanned_code IS NOT NULL
+		  AND NOT EXISTS (SELECT 1 FROM product_codes pc WHERE pc.code = si.scanned_code)
+		GROUP BY si.scanned_code
+		ORDER BY COUNT(DISTINCT s.id) DESC, MAX(s.created_at) DESC;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.UnregisteredCode
+	for rows.Next() {
+		var c model.UnregisteredCode
+		if err := rows.Scan(&c.Code, &c.Sales, &c.Quantity, &c.LastPrice, &c.LastSold, &c.SoldAs); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // Expiring devuelve los lotes con stock que vencen hasta until (incluido;
 // también los ya vencidos), el que vence primero arriba (R-02). Entran los
 // de productos desactivados: la mercadería se vence igual.

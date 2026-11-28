@@ -68,3 +68,36 @@ func TestUnstocked(t *testing.T) {
 		t.Errorf("UnstockedFor(nil): %v, %v", empty, err)
 	}
 }
+
+// Códigos cobrados como artículo sin registrar (0022): salen hasta que se
+// dan de alta; las ventas anuladas no cuentan.
+func TestUnregisteredCodes(t *testing.T) {
+	f := newFixture(t)
+	now := time.Now()
+	s := f.session(t, now.Add(-5*time.Hour), "0")
+	sold := func(at time.Time, voided bool, code, price string) {
+		f.sale(t, s, at, voided, []item{{f.unit, "1", price, "0", "21"}}, map[string]string{"CASH": price})
+		f.exec(t, `UPDATE sale_items SET scanned_code = $2
+			WHERE sale_id = (SELECT id FROM sales WHERE cashier_session_id = $1 ORDER BY id DESC LIMIT 1);`, s, code)
+	}
+	sold(now.Add(-3*time.Hour), false, "2999000000101", "300")
+	sold(now.Add(-time.Hour), false, "2999000000101", "350")
+	sold(now.Add(-2*time.Hour), true, "2999000000102", "100")  // anulada
+	sold(now.Add(-2*time.Hour), false, "2999000000103", "100") // y después se da de alta
+	f.exec(t, `INSERT INTO product_codes (product_id, code_type, code) VALUES ($1, 'INTERNAL', '2999000000103');`, f.weight)
+
+	codes, err := f.svc.UnregisteredCodes(f.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := map[string]bool{}
+	for _, c := range codes {
+		mine[c.Code] = true
+		if c.Code == "2999000000101" && (c.Sales != 2 || !c.LastPrice.Equal(d("350")) || c.SoldAs != "UNIDAD TEST") {
+			t.Errorf("2999000000101: %+v", c)
+		}
+	}
+	if !mine["2999000000101"] || mine["2999000000102"] || mine["2999000000103"] {
+		t.Errorf("codes: %v", mine)
+	}
+}

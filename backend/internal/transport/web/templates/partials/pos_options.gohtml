@@ -3,6 +3,16 @@
      precio se muestra deshabilitado: no se puede vender. Sin espacios sueltos:
      si no hay nada, la lista queda vacía y :empty la oculta. */ -}}
 {{- range .Options}}
+{{- if .OpenPrice}}
+<li role="option">
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-type="{{.SaleType}}" data-open="1" data-code=""
+          onclick="posAdd(this)"
+          class="flex w-full items-baseline justify-between gap-4 text-left px-3 py-2 hover:bg-paper focus:bg-paper">
+    <span>{{.Name}} <span class="text-sm text-muted">· {{.SKU}}</span></span>
+    <span class="font-bold whitespace-nowrap">{{t "pos.open_price"}}</span>
+  </button>
+</li>
+{{- else}}
 <li role="option">
   <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-type="{{.SaleType}}"
           data-price="{{with .Price}}{{.}}{{end}}" data-stock="{{.OnHand}}"
@@ -13,6 +23,16 @@
   </button>
 </li>
 {{- end}}
+{{- end}}
 {{- if and .Query (not .Options)}}
 <li class="px-3 py-2 text-muted" data-not-found>{{printf (t "pos.not_found") .Query}}</li>
+{{- /* Lo que no está se puede cobrar como artículo sin registrar, con el
+       precio escrito; el código queda guardado para darlo de alta. */}}
+{{- range .OpenItems}}
+<li role="option">
+  <button type="button" data-id="{{.ID}}" data-name="{{.Name}}" data-type="{{.SaleType}}" data-open="1"
+          data-code="{{$.Query}}" data-open-offer onclick="posAdd(this)"
+          class="block w-full text-left px-3 py-2 font-bold hover:bg-paper focus:bg-paper">{{printf (t "pos.open_offer") .Name}}</button>
+</li>
+{{- end}}
 {{- end -}}

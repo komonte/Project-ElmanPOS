@@ -325,6 +325,17 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - Void while the register is being closed → the void waits for the close or the close waits for the void (both lock the session first); in either order the cash audit is consistent.
   - Partial returns (refund a single line) → **deferred** (§7). v1 is all-or-nothing void.
 
+
+### F-08b: Returns (devoluciones)
+
+- **Actor / Role:** Admin only (permission `returns`; it takes money out of the register). Audited (`audit_log`, table `sale_returns`).
+- **Trigger:** a customer brings back part or all of a sale, from any day (a void, F-08, is only for the open session and the whole sale).
+- **Decisions (2026-11-28, with the store):** always from a sale (found by its number, on the ticket); only what was sold, at its price, never more than sold minus already returned. Per line the goods go **back to the shelf** (a `RETURN` movement with the original `sale_id`, at the line cost, no batch; a combo gives back its components from `sale_item_components`; an unregistered item has no stock) or are **shrinkage** (broken, expired: no movement, the goods never come back). The money goes back by **any method**, not only how it was paid, split if needed, adding up exactly to the return total; it comes out of the open session (its close expects less of that method). `ACCOUNT` lowers the debt of the sale's customer, only for a sale with a customer and up to the debt.
+- **Amount:** per line `quantity × unit_price × total / subtotal` (prorates the cash rounding), rounded to cents; the sum never exceeds what is left of the sale's total.
+- **Flow** (`/returns`): type the sale number → the sale with each line's sold and returnable quantity → quantity to return and "Back to the shelf" (ticked) per line → the total to give back (computed on screen, again on the server) → one or more methods with amounts → reason (required, ≤ 300) → confirm. The result says what to give back by method.
+- **DB** (`usecase/sales.Return`, migration `0028`, one transaction): lock the open session, `SaleStore.Lock` the sale (voided → 409), read what was already returned, validate, lock the products that go back in id order, insert `RETURN` movements and add to `stock_balances`, insert `sale_returns`, `sale_return_items`, `sale_return_payments` and `audit_log`.
+- **Effects:** `SaleStore.PaidByMethod` subtracts the session's return payments (expected at the close); `CustomerStore.Debts` subtracts `ACCOUNT` returns, and the customer's account lists them. A sale with returns can no longer be voided (`ErrSaleHasReturns`).
+- **Not yet:** the sales and margin reports (R-06, R-07) do not subtract returns.
 ### F-09: Stock Count & Merma
 
 Also the **initial inventory**: the stock already on the shelves when the system starts is not loaded as a purchase, it is counted.

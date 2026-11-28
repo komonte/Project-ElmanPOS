@@ -123,8 +123,14 @@ func (h *WebHandler) CashVoidSale(w http.ResponseWriter, r *http.Request) {
 // $ 2.000,00 en efectivo y $ 3.000,00 por débito." El efectivo ya viene sin
 // el vuelto (SettlePayments).
 func refundNotice(lang string, sale *model.Sale) string {
-	paid := make(map[string]decimal.Decimal, len(sale.Payments))
-	for _, p := range sale.Payments {
+	return fmt.Sprintf(i18n.T(lang, "cash.voided_notice"), sale.SaleNumber, refundList(lang, sale.Payments))
+}
+
+// refundList dice qué devolver por medio, en el orden de SaleMethods:
+// "$ 2.000,00 en efectivo y $ 3.000,00 por débito".
+func refundList(lang string, payments []*model.Payment) string {
+	paid := make(map[string]decimal.Decimal, len(payments))
+	for _, p := range payments {
 		paid[p.Method] = paid[p.Method].Add(p.Amount)
 	}
 	var parts []string
@@ -140,7 +146,7 @@ func refundNotice(lang string, sale *model.Sale) string {
 			list = strings.Join(parts[:n-1], ", ") + i18n.T(lang, "cash.refund_and") + list
 		}
 	}
-	return fmt.Sprintf(i18n.T(lang, "cash.voided_notice"), sale.SaleNumber, list)
+	return list
 }
 
 // CashSession handles GET /cash/sessions/{id}: el resumen de un cierre. Una

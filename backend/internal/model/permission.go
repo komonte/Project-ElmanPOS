@@ -30,10 +30,11 @@ const (
 	PermSettings  Permission = "settings"   // configuración del negocio (modo arranque)
 	PermCombos    Permission = "combos"     // los componentes de un combo (F-05)
 	PermCustomers Permission = "customers"  // editar y desactivar clientes (fiado)
+	PermReturns   Permission = "returns"    // devoluciones (sacan plata de la caja)
 )
 
 // Permissions son todos los permisos.
-var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings, PermCombos, PermCustomers}
+var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings, PermCombos, PermCustomers, PermReturns}
 
 // rolePermissions es la matriz de F-13.
 var rolePermissions = map[string][]Permission{

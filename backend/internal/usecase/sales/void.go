@@ -69,6 +69,12 @@ func (s *Service) Void(ctx context.Context, by, saleID int64, reason string) (*m
 		if err := sale.CanVoid(); err != nil {
 			return ErrSaleAlreadyVoided
 		}
+		// Con devoluciones, anular devolvería dos veces lo ya devuelto.
+		if has, err := postgres.NewSaleReturnStore(tx).HasReturns(ctx, saleID); err != nil {
+			return err
+		} else if has {
+			return ErrSaleHasReturns
+		}
 
 		movements, err := postgres.NewStockMovementStore(tx).SaleMovements(ctx, saleID)
 		if err != nil {

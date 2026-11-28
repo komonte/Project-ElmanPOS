@@ -1,0 +1,124 @@
+{{define "content"}}
+{{/* Devoluciones (0028), solo el admin. Datos: .Number, .View
+     (sales.ReturnView), .Methods, .Reason, .Error, .Done. */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "return.title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "return.hint"}}</p>
+</header>
+
+{{with .Done}}
+<div id="return-done" role="status" class="mb-6 p-4 bg-surface border-2 border-line border-l-8 border-l-stock rounded-md max-w-3xl font-bold text-xl">{{.}}</div>
+{{end}}
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold max-w-3xl">{{.Error}}</div>
+{{end}}
+
+<form method="get" action="/returns" class="mb-8 flex flex-wrap items-end gap-3">
+  <div>
+    <label for="return-number" class="field-label">{{t "return.sale_number"}}</label>
+    <input type="text" id="return-number" name="number" inputmode="numeric" autocomplete="off" required
+           value="{{.Number}}" {{if not .View}}autofocus{{end}} class="field max-w-40 tabular">
+  </div>
+  <button type="submit" class="btn-secondary">{{t "return.find"}}</button>
+</form>
+
+{{with .View}}{{$v := .}}
+{{if eq .Sale.Status "VOIDED"}}
+<p class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold max-w-3xl">{{t "return.voided"}}</p>
+{{else}}
+<form id="return-form" method="post" action="/returns" class="space-y-6"
+      data-ratio="{{if .Sale.Subtotal.IsPositive}}{{.Sale.Total.Div .Sale.Subtotal}}{{else}}1{{end}}" data-left="{{.Left}}" data-confirm="{{t "return.confirm"}}">
+  <input type="hidden" name="sale_number" value="{{.Sale.SaleNumber}}">
+  <p class="text-lg">{{printf (t "return.sale_info") .Sale.SaleNumber (formatTime .Sale.CreatedAt) (money .Sale.Total)}}
+    {{with .Sale.CustomerName}} · {{t "pos.customer"}}: <span class="font-bold">{{.}}</span>{{end}}
+    {{if .Refunded.IsPositive}}<span class="block text-muted">{{printf (t "return.already") (money .Refunded)}}</span>{{end}}</p>
+  <div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+    <table id="return-lines" class="min-w-full text-left">
+      <thead class="border-b-2 border-line text-muted">
+        <tr>
+          <th class="px-3 py-3">{{t "pos.product"}}</th>
+          <th class="px-3 py-3 text-right">{{t "return.sold"}}</th>
+          <th class="px-3 py-3 text-right">{{t "return.left"}}</th>
+          <th class="px-3 py-3 text-right">{{t "pos.unit_price"}}</th>
+          <th class="px-3 py-3">{{t "return.quantity"}}</th>
+          <th class="px-3 py-3">{{t "return.restock"}}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-line">
+        {{range .Sale.Items}}{{$left := .Quantity.Sub (index $v.Returned .ID)}}
+        <tr data-line data-price="{{.UnitPrice}}">
+          <th scope="row" class="px-3 py-2 font-bold">{{.ProductName}}</th>
+          <td class="px-3 py-2 text-right tabular">{{qty .Quantity}}</td>
+          <td class="px-3 py-2 text-right tabular">{{qty $left}}</td>
+          <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{money .UnitPrice}}</td>
+          <td class="px-3 py-2">{{if $left.IsPositive}}
+            <input type="text" name="qty_{{.ID}}" inputmode="decimal" autocomplete="off" placeholder="0" data-qty
+                   class="field py-1 max-w-28 tabular text-right" oninput="returnRecalc()">{{else}}<span class="text-muted">{{t "return.none_left"}}</span>{{end}}</td>
+          <td class="px-3 py-2">{{if $left.IsPositive}}
+            <label class="inline-flex items-center gap-2"><input type="checkbox" name="restock_{{.ID}}" checked> {{t "return.to_shelf"}}</label>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="field-hint">{{t "return.restock_hint"}}</p>
+
+  <div class="max-w-3xl space-y-3">
+    <p class="text-2xl">{{t "return.total"}}: <span id="return-total" class="font-bold tabular">$ 0,00</span></p>
+    <div id="return-pays" class="space-y-2">
+      <div class="flex flex-wrap items-end gap-2" data-pay>
+        <select name="pay_method" class="field max-w-56" aria-label="{{t "collect.method"}}">
+          {{range $.Methods}}<option value="{{.}}">{{t (printf "pos.method_%s" .)}}</option>{{end}}
+        </select>
+        <input type="text" name="pay_amount" inputmode="decimal" autocomplete="off" placeholder="$" data-pay-amount
+               class="field max-w-40 tabular text-right" aria-label="{{t "collect.amount"}}">
+        <input type="text" name="pay_ref" maxlength="120" autocomplete="off" placeholder="{{t "pos.reference"}}" class="field max-w-48">
+      </div>
+    </div>
+    <button type="button" onclick="returnAddPay()" class="btn-secondary px-3 py-1">{{t "return.add_method"}}</button>
+    <p class="field-hint">{{t "return.money_hint"}}</p>
+    <div>
+      <label for="return-reason" class="field-label">{{t "return.reason"}} <span class="font-normal text-muted">{{t "common.required"}}</span></label>
+      <input type="text" id="return-reason" name="reason" required maxlength="300" value="{{$.Reason}}" class="field">
+    </div>
+    <button type="submit" id="return-submit" class="btn-primary text-xl"
+            onclick="return confirm(document.getElementById('return-form').dataset.confirm)">{{t "return.submit"}}</button>
+  </div>
+</form>
+<script>
+  // Lo que se devuelve: cantidad × precio, prorrateado si la venta tuvo
+  // redondeo en efectivo (el servidor lo calcula igual). Lo pone en el
+  // primer pago si no se tocó.
+  function returnParse(s) {
+    s = (s || '').trim().replace(/\./g, '').replace(',', '.');
+    const n = Number(s);
+    return s === '' || isNaN(n) ? 0 : n;
+  }
+  function returnRecalc() {
+    const form = document.getElementById('return-form');
+    let cents = 0;
+    form.querySelectorAll('tr[data-line]').forEach(function (row) {
+      const q = row.querySelector('[data-qty]');
+      if (!q) return;
+      const qty = Number((q.value || '0').trim().replace(',', '.')) || 0;
+      cents += Math.round(qty * Number(row.dataset.price) * Number(form.dataset.ratio) * 100);
+    });
+    cents = Math.min(cents, Math.round(Number(form.dataset.left) * 100));
+    const s = (cents / 100).toFixed(2);
+    const [w, c] = s.split('.');
+    document.getElementById('return-total').textContent = '$ ' + w.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + c;
+    const first = form.querySelector('[data-pay-amount]');
+    if (form.querySelectorAll('[data-pay]').length === 1) first.value = cents ? s.replace('.', ',') : '';
+  }
+  function returnAddPay() {
+    const box = document.getElementById('return-pays');
+    const row = box.querySelector('[data-pay]').cloneNode(true);
+    row.querySelector('[data-pay-amount]').value = '';
+    row.querySelector('[name=pay_ref]').value = '';
+    box.appendChild(row);
+    row.querySelector('[data-pay-amount]').focus();
+  }
+</script>
+{{end}}
+{{end}}
+{{end}}

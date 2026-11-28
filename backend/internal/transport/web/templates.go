@@ -40,6 +40,7 @@ var pageFiles = []string{
 	"templates/pages/users.gohtml",
 	"templates/pages/customers.gohtml",
 	"templates/pages/pos_collect.gohtml",
+	"templates/pages/returns.gohtml",
 	"templates/pages/report_debtors.gohtml",
 	"templates/pages/customer_account.gohtml",
 	"templates/pages/report_sales.gohtml",

@@ -127,8 +127,9 @@ type Debtor struct {
 }
 
 // AccountEntry es un movimiento de la cuenta de un cliente: lo fiado en
-// una venta (Method ACCOUNT, con SaleNumber; monto positivo) o un pago
-// (monto negativo). Balance es lo que debía después.
+// una venta (Method ACCOUNT, con SaleNumber; monto positivo), un pago
+// (monto negativo) o una devolución a cuenta corriente (Method RETURN, con
+// el número de la venta; negativo). Balance es lo que debía después.
 type AccountEntry struct {
 	At         string          `json:"at"`
 	SaleNumber int             `json:"sale_number"` // 0 en un pago

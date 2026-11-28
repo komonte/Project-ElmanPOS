@@ -33,3 +33,9 @@ func (s *Service) UnstockedFor(ctx context.Context, ids []int64) (map[int64]deci
 func (s *Service) UnregisteredCodes(ctx context.Context) ([]model.UnregisteredCode, error) {
 	return postgres.NewReportStore(s.db).UnregisteredCodes(ctx)
 }
+
+// ProductStock es el stock de los productos ids (todos los locales) y si
+// alguna vez se movieron: la columna Stock de Productos.
+func (s *Service) ProductStock(ctx context.Context, ids []int64) (map[int64]postgres.StockInfo, error) {
+	return postgres.NewProductStore(s.db).Stock(ctx, ids)
+}

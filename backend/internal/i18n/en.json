@@ -986,5 +986,10 @@
   "error.collect_amount": "Type the amount, greater than 0.",
 
   "pos.by_amount_hint": "Sell by amount: type how much money (also with the $ key)",
-  "pos.kg_note": "= %s kg"
+  "pos.kg_note": "= %s kg",
+
+  "product.stock_uncovered": "Sold without stock: %s",
+  "product.stock_col": "Stock",
+  "product.stock_not_counted": "Not counted",
+  "product.stock_none_hint": "No stock of its own (combo or unregistered item)."
 }

@@ -986,5 +986,10 @@
   "error.collect_amount": "Escribí el monto, mayor que 0.",
 
   "pos.by_amount_hint": "Vender por importe: escribí cuánta plata (también con la tecla $)",
-  "pos.kg_note": "= %s kg"
+  "pos.kg_note": "= %s kg",
+
+  "product.stock_uncovered": "Vendido sin stock: %s",
+  "product.stock_col": "Stock",
+  "product.stock_not_counted": "Sin contar",
+  "product.stock_none_hint": "No tiene stock propio (combo o artículo sin registrar)."
 }

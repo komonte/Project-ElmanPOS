@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
@@ -380,4 +383,38 @@ func (s *ProductStore) OpenPriceProducts(ctx context.Context) ([]*model.Product,
 	return s.queryProducts(ctx, productSelect+`
 		WHERE p.open_price AND p.is_active
 		ORDER BY p.name, p.sku;`)
+}
+
+// StockInfo es el stock de un producto en todos los locales y si alguna vez
+// tuvo un movimiento (compra, conteo, venta...). En modo arranque, 0 sin
+// movimientos es "todavía no se contó", no "no hay".
+type StockInfo struct {
+	OnHand decimal.Decimal
+	Moved  bool
+}
+
+// Stock devuelve el StockInfo de los productos ids (todos están en el mapa).
+func (s *ProductStore) Stock(ctx context.Context, ids []int64) (map[int64]StockInfo, error) {
+	out := make(map[int64]StockInfo, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT x.id,
+		       COALESCE((SELECT SUM(b.quantity) FROM stock_balances b WHERE b.product_id = x.id), 0),
+		       EXISTS (SELECT 1 FROM stock_movements m WHERE m.product_id = x.id)
+		FROM unnest($1::bigint[]) AS x(id);`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var info StockInfo
+		if err := rows.Scan(&id, &info.OnHand, &info.Moved); err != nil {
+			return nil, err
+		}
+		out[id] = info
+	}
+	return out, rows.Err()
 }

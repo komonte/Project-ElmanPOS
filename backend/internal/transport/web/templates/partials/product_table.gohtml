@@ -10,6 +10,7 @@
       <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "product.category"}}</th>
       <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "product.sale_type"}}</th>
       <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "product.price_col"}}</th>
+      <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "product.stock_col"}}</th>
       <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap ">{{t "common.status"}}</th>
       <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "common.actions"}}</th>
     </tr>
@@ -25,6 +26,14 @@
       <td class="px-3 py-3 whitespace-nowrap">{{.CategoryName}}</td>
       <td class="px-3 py-3 whitespace-nowrap">{{t (printf "product.sale_type_%s" .SaleType)}}</td>
       <td class="px-3 py-3 whitespace-nowrap text-right tabular">{{with .CurrentPrice}}{{money .}}{{else}}<span class="text-muted">—</span>{{end}}</td>
+      {{/* Stock (todos los locales). En modo arranque, un producto que
+           nunca se movió dice "Sin contar": 0 no quiere decir "no hay". */}}
+      <td class="px-3 py-3 whitespace-nowrap text-right tabular" data-stock>{{if $.Stock}}{{with index $.Stock .ID}}
+        {{- if .None}}<span class="text-muted" title="{{t "product.stock_none_hint"}}">—</span>
+        {{- else if .NotCount}}<span class="text-muted italic" data-not-counted>{{t "product.stock_not_counted"}}</span>
+        {{- else}}<span class="{{if not .OnHand.IsPositive}}text-danger font-bold{{end}}">{{qty .OnHand}}{{if .Weight}} kg{{end}}</span>{{end}}
+        {{- if .Uncovered.IsPositive}}<span class="block text-sm font-bold text-danger" data-uncovered>{{printf (t "product.stock_uncovered") (qty .Uncovered)}}</span>{{end}}
+      {{- end}}{{end}}</td>
       <td class="px-3 py-3 whitespace-nowrap">
         <span class="inline-flex items-center gap-2">
           <span aria-hidden="true" class="size-3 rounded-full {{if .IsActive}}bg-stock{{else}}border-2 border-muted{{end}}"></span>
@@ -49,7 +58,7 @@
     </tr>
     {{else}}
     <tr>
-      <td colspan="7" class="px-4 py-12 text-center text-muted whitespace-normal">{{t "common.no_results"}}</td>
+      <td colspan="8" class="px-4 py-12 text-center text-muted whitespace-normal">{{t "common.no_results"}}</td>
     </tr>
     {{end}}
   </tbody>

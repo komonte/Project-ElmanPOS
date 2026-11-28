@@ -68,6 +68,8 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - Mass import (SEPA ETL): sets `reorder_point`, `margin_percent`, and category defaults in bulk; individual products are tuned later.
   - Deactivating (`is_active = FALSE`) keeps history intact; product disappears from POS search but remains in reports.
 
+- **Stock column** (2026-11-28): the products table (`/products`) shows each product's stock in all stores (`ProductStore.Stock`, one query for the shown rows), in kg for weight products, in red when 0 or less. A combo or an unregistered item shows "—" (no stock of its own). **In startup mode**, a product that never had a stock movement shows "Not counted" instead of 0: 0 there does not mean "none". A product with pending sold-without-stock also shows "Sold without stock: N".
+
 ### F-02: Barcode Management
 
 - **Actor / Role:** Admin or Stock Clerk (permission `catalog`, F-13).

@@ -382,7 +382,51 @@ func (h *WebHandler) productsTableData(r *http.Request) (map[string]any, error) 
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"Products": list, "Shown": len(list), "Total": total}, nil
+	data := map[string]any{"Products": list, "Shown": len(list), "Total": total}
+	h.addProductStock(r, data, list)
+	return data, nil
+}
+
+// productStock es lo que muestra la columna Stock de un producto.
+type productStock struct {
+	None      bool            // combo o artículo sin registrar: no tiene stock propio
+	NotCount  bool            // modo arranque y nunca tuvo un movimiento: no se contó
+	OnHand    decimal.Decimal // stock de todos los locales
+	Weight    bool            // en kg
+	Uncovered decimal.Decimal // vendido sin stock, pendiente de contar
+}
+
+// addProductStock pone en data["Stock"] la columna Stock de cada producto
+// de la lista. Si no se puede leer, la columna queda vacía (no rompe la
+// tabla).
+func (h *WebHandler) addProductStock(r *http.Request, data map[string]any, list []*model.Product) {
+	if h.reports == nil {
+		return
+	}
+	ctx := r.Context()
+	ids := make([]int64, len(list))
+	for i, p := range list {
+		ids[i] = p.ID
+	}
+	info, err := h.reports.ProductStock(ctx, ids)
+	if err != nil {
+		return
+	}
+	startup := false
+	if h.settings != nil {
+		if st, err := h.settings.Get(ctx); err == nil {
+			startup = st.StartupMode
+		}
+	}
+	pending, _ := h.reports.UnstockedFor(ctx, ids)
+	out := make(map[int64]productStock, len(list))
+	for _, p := range list {
+		ps := productStock{OnHand: info[p.ID].OnHand, Weight: p.SaleType == model.SaleTypeWeight, Uncovered: pending[p.ID]}
+		ps.None = p.SaleType == model.SaleTypeComposite || p.OpenPrice
+		ps.NotCount = startup && !info[p.ID].Moved
+		out[p.ID] = ps
+	}
+	data["Stock"] = out
 }
 
 // ProductsBrandOptions handles GET /products/brand-options: las marcas

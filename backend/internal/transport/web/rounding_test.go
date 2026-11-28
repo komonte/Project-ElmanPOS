@@ -104,3 +104,33 @@ func TestRenderPosByAmount(t *testing.T) {
 		}
 	}
 }
+
+// Columna Stock de Productos: en modo arranque, 0 sin movimientos es "Sin
+// contar"; un combo no tiene stock propio.
+func TestRenderProductStock(t *testing.T) {
+	e := NewTemplateEngine()
+	list := []*model.Product{
+		{ID: 1, Name: "SODA", SaleType: model.SaleTypeUnit, IsActive: true},
+		{ID: 2, Name: "QUESO", SaleType: model.SaleTypeWeight, IsActive: true},
+		{ID: 3, Name: "NUEVO", SaleType: model.SaleTypeUnit, IsActive: true},
+		{ID: 4, Name: "ATADO", SaleType: model.SaleTypeComposite, IsActive: true},
+	}
+	stock := map[int64]productStock{
+		1: {OnHand: dec("12")},
+		2: {OnHand: dec("0"), Weight: true, Uncovered: dec("0.5")},
+		3: {NotCount: true},
+		4: {None: true},
+	}
+	var buf bytes.Buffer
+	if err := e.Render(&buf, "es", "product_table.gohtml", map[string]any{"Products": list, "Stock": stock,
+		"Can": adminCan}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	for _, s := range []string{">12</span>", "0 kg", "Vendido sin stock: 0,5", "data-not-counted", "Sin contar",
+		"No tiene stock propio"} {
+		if !strings.Contains(html, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}

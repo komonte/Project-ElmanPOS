@@ -839,5 +839,9 @@
   "dashboard.startup_text": "La caja vende aunque no haya stock en el sistema.",
   "dashboard.startup_pending_one": "1 producto vendido sin stock para contar",
   "dashboard.startup_pending": "%d productos vendidos sin stock para contar",
-  "pos.startup_warn": "Hay %s en el sistema: el resto queda para contar (modo arranque)."
+  "pos.startup_warn": "Hay %s en el sistema: el resto queda para contar (modo arranque).",
+  "picker.unstocked": "Vendido sin stock: %s. Contá lo que hay antes de acomodar lo nuevo.",
+  "purchase.unstocked_title": "Antes de acomodar: contá lo que ya había",
+  "purchase.unstocked_hint": "Estos productos se vendieron sin stock en el sistema (modo arranque). La compra entró bien; falta saber cuánto queda de la mercadería vieja. Contala en Conteo de stock antes de mezclarla con la nueva.",
+  "purchase.unstocked_item": "%s vendido sin stock"
 }

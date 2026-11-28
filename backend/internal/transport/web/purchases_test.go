@@ -228,6 +228,35 @@ func TestRenderPurchaseForm(t *testing.T) {
 		}
 	})
 
+	t.Run("received: count what was sold without stock first", func(t *testing.T) {
+		html := render(t, "purchase_received.gohtml", map[string]any{
+			"Purchase":  &model.Purchase{ID: 378, Items: make([]*model.PurchaseItem, 2)},
+			"Unstocked": []model.UnstockedItem{{ProductID: 5, Name: "OREO", Uncovered: decimal.RequireFromString("3")}}})
+		for _, s := range []string{`id="purchase-unstocked"`, "Antes de acomodar", `data-product="5"`, "OREO",
+			"3 vendido sin stock", `href="/counts"`} {
+			if !strings.Contains(html, s) {
+				t.Errorf("missing %q", s)
+			}
+		}
+		plain := render(t, "purchase_received.gohtml", map[string]any{
+			"Purchase": &model.Purchase{ID: 379, Items: make([]*model.PurchaseItem, 1)}})
+		if strings.Contains(plain, `id="purchase-unstocked"`) {
+			t.Error("warning without products sold without stock")
+		}
+	})
+
+	t.Run("product options mark what was sold without stock", func(t *testing.T) {
+		html := render(t, "picker_product_options.gohtml", map[string]any{"Query": "oreo",
+			"Products":  []*model.Product{{ID: 5, SKU: "000005", Name: "OREO"}, {ID: 6, SKU: "000006", Name: "OREO MINI"}},
+			"Unstocked": map[int64]string{5: "3"}})
+		if n := strings.Count(html, "data-unstocked"); n != 1 {
+			t.Errorf("marks: got %d, want 1", n)
+		}
+		if !strings.Contains(html, "Vendido sin stock: 3.") {
+			t.Error("missing the mark text")
+		}
+	})
+
 	t.Run("page", func(t *testing.T) {
 		html := render(t, "purchases.gohtml", map[string]any{"Section": "purchases", "TitleKey": "purchase.title",
 			"Suppliers": []productOption{}, "Can": adminCan})

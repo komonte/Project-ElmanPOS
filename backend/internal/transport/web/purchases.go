@@ -65,7 +65,8 @@ func (h *WebHandler) PurchasesReceive(w http.ResponseWriter, r *http.Request) {
 					"HasDifference": !res.TotalDifference.IsZero(),
 					// Los precios se ponen en el detalle de la factura
 					// (/purchases/{id}): ahí el resultado manda.
-					"Products": len(res.Suggestions),
+					"Products":  len(res.Suggestions),
+					"Unstocked": h.unstockedIn(r.Context(), res.Purchase.Items),
 				})
 				return
 			}
@@ -168,4 +169,30 @@ func (h *WebHandler) purchaseErrMsg(r *http.Request, err error, line int) string
 		msg = fmt.Sprintf(i18n.T(lang, "purchase.line_error"), line, msg)
 	}
 	return msg
+}
+
+// unstockedIn son los productos de la compra que se vendieron sin stock
+// (modo arranque) y todavía no se contaron. Lo que llegó en la compra está
+// bien; lo que falta saber es cuánto queda de la mercadería vieja. Conviene
+// contarlo antes de acomodar lo nuevo, así no se mezclan. Si la lista falla,
+// no hay aviso: la compra ya se guardó.
+func (h *WebHandler) unstockedIn(ctx context.Context, items []*model.PurchaseItem) []model.UnstockedItem {
+	if h.reports == nil || len(items) == 0 {
+		return nil
+	}
+	inPurchase := make(map[int64]bool, len(items))
+	for _, it := range items {
+		inPurchase[it.ProductID] = true
+	}
+	all, err := h.reports.Unstocked(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []model.UnstockedItem
+	for _, it := range all {
+		if inPurchase[it.ProductID] {
+			out = append(out, it)
+		}
+	}
+	return out
 }

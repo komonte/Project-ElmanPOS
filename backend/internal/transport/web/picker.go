@@ -10,6 +10,7 @@ import (
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 )
 
 // El buscador de producto de un renglón, compartido por compras (F-06) y
@@ -43,7 +44,8 @@ func (h *WebHandler) PickerProductOptions(w http.ResponseWriter, r *http.Request
 	}
 	_, codeErr := model.NormalizeBarcode(query)
 	h.renderPartial(w, r, "picker_product_options.gohtml", map[string]any{
-		"Products": products, "Query": query, "IsCode": codeErr == nil})
+		"Products": products, "Query": query, "IsCode": codeErr == nil,
+		"Unstocked": h.unstockedOf(r.Context(), products)})
 }
 
 // stockProducts busca productos con stock propio: activos (lo hace
@@ -202,4 +204,27 @@ func (h *WebHandler) PickerAssignCode(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Trigger", trigger)
 	w.WriteHeader(http.StatusOK)
+}
+
+// unstockedOf dice, de los productos encontrados, cuáles se vendieron sin
+// stock y faltan contar (modo arranque), para marcarlos en la lista: al
+// recibir una compra conviene contar lo que hay antes de acomodar lo nuevo.
+// Si falla, sin marcas.
+func (h *WebHandler) unstockedOf(ctx context.Context, products []*model.Product) map[int64]string {
+	if h.reports == nil || len(products) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(products))
+	for i, p := range products {
+		ids[i] = p.ID
+	}
+	pending, err := h.reports.UnstockedFor(ctx, ids)
+	if err != nil {
+		return nil
+	}
+	out := make(map[int64]string, len(pending))
+	for id, q := range pending {
+		out[id] = formatQuantity(transport.GetLocale(ctx), q)
+	}
+	return out
 }

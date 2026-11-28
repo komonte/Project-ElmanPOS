@@ -11,6 +11,9 @@
           onclick="pickerPick(this)"
           class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
     {{.Name}} <span class="text-sm text-muted">· {{.SKU}}{{if .ControlsBatches}} · {{t "picker.controls_batches"}}{{end}}</span>
+    {{- if $.Unstocked}}{{with index $.Unstocked .ID}}
+    <span class="block text-sm font-bold text-danger" data-unstocked>{{printf (t "picker.unstocked") .}}</span>
+    {{- end}}{{end}}
   </button>
 </li>
 {{- end}}

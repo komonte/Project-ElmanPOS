@@ -57,6 +57,12 @@ and open `https://192.168.0.10:8080`. Every other device that uses the app (a se
 
 If only the store's PC uses the app, `LISTEN_HOST=127.0.0.1` keeps it off the network entirely.
 
+### The database stays on the store's PC
+
+`docker-compose.yml` publishes Postgres on `127.0.0.1` only: the other devices reach the data through the app, never straight to the database. Docker bypasses the host firewall (`ufw`), so that bind address is the only lock; do not change it back to `5432:5432`.
+
+On the store's PC, `.env` gets a new database name (not `elman_u`, not `elman_demo`) and a long password of its own: `elman_u_dev` is the development one. Postgres reads `DB_PASSWORD` only when the volume is created; to change it later, also run `ALTER USER <user> PASSWORD '...'` inside the database.
+
 ### First login
 
 Every page asks for a username and password. The seed users (`admin`, `cajero`, `stock`) have no real password yet: set one from the store's PC, then log in with it.

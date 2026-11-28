@@ -3,7 +3,7 @@ export
 
 DB_URL := postgresql://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
 
-.PHONY: help not-store db-up db-down db-stop db-reset db-migrate-up db-migrate-down db-seed psql passwd \
+.PHONY: help not-store backup restore-test db-up db-down db-stop db-reset db-migrate-up db-migrate-down db-seed psql passwd \
         build-ui build lint test dev check \
         api-brands api-taxes web-root web-brands web-taxes web-es
 
@@ -18,6 +18,8 @@ help:
 	@echo "  make db-seed        Load seed data"
 	@echo "  make psql           Open psql shell"
 	@echo "  make passwd U=admin Set a user's password (asks twice, hidden)"
+	@echo "  make backup         Copy the database now (scripts/backup.sh)"
+	@echo "  make restore-test   Restore the newest copy into a throwaway DB and compare"
 	@echo ""
 	@echo "=== Build ==="
 	@echo "  make build-ui       Build Tailwind CSS"
@@ -83,6 +85,14 @@ db-migrate-down: not-store
 ## Load the dev seed (expects a freshly migrated DB)
 db-seed: not-store
 	psql "$(DB_URL)" -v ON_ERROR_STOP=1 -f db/seed.sql
+
+## Copy the database now (the nightly copy runs from a systemd timer)
+backup:
+	scripts/backup.sh
+
+## Prove the newest copy restores (throwaway database, live one only read)
+restore-test:
+	scripts/restore-test.sh
 
 ## Open a psql shell against the local DB
 psql:

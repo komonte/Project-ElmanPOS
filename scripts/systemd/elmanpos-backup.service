@@ -1,0 +1,13 @@
+# Nightly copy of the ElmanPOS database (scripts/backup.sh).
+# Install: see README, "Backups". Replace /path/to/Project-ElmanPOS and
+# <pc-user> (a user in the docker group) before copying to /etc/systemd/system/.
+[Unit]
+Description=ElmanPOS database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=<pc-user>
+WorkingDirectory=/path/to/Project-ElmanPOS
+ExecStart=/path/to/Project-ElmanPOS/scripts/backup.sh

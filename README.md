@@ -65,6 +65,29 @@ On the store's PC, `.env` gets a new database name (not `elman_u`, not `elman_de
 
 Also set `ELMAN_ENV=store` in the root `.env`. Some make targets delete the database (`db-down` and `db-reset` remove the Docker volume) or write test rows into the `.env` database (`test`, `check`), and sales and stock movements can never be deleted. With `ELMAN_ENV=store` those targets refuse to run. To stop Postgres without losing anything: `make db-stop`.
 
+### Backups
+
+Sales, stock and costs cannot be rebuilt if the disk dies, so the store's PC copies the database every night:
+
+```sh
+make backup         # a copy now: before an update, after the initial count
+make restore-test   # restore the newest copy into a throwaway DB and compare row counts
+```
+
+`scripts/backup.sh` writes `pg_dump -Fc` to `BACKUP_DIR` (default `~/elmanpos-backups`): `daily/` keeps 14 days, `monthly/` keeps the first copy of each month for good. Each copy is checked with `pg_restore --list` before it counts. With `BACKUP_OFFSITE` set (a synced folder, a mounted drive) every new copy also goes there; if that folder is missing the script fails, so the timer shows it. A copy that stays on the same disk is not enough: take one away at least once a week.
+
+Every night at 23:30 with systemd (edit the paths and the user, a member of the `docker` group, first):
+
+```sh
+sudo cp scripts/systemd/elmanpos-backup.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now elmanpos-backup.timer
+systemctl list-timers elmanpos-backup.timer   # next run
+journalctl -u elmanpos-backup                 # what each run did
+```
+
+Run `make restore-test` once after setting it up, and again every few months. To bring a copy back for real, stop the app first, then `pg_restore --clean --if-exists -d <db>` from inside the container.
+
 ### First login
 
 Every page asks for a username and password. The seed users (`admin`, `cajero`, `stock`) have no real password yet: set one from the store's PC, then log in with it.

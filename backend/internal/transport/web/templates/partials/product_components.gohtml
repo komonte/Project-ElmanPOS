@@ -1,0 +1,73 @@
+{{/* Componentes de un combo (F-05), en el panel de edición del combo. Como
+     los códigos de barra, va fuera del <form> del producto y cada acción
+     guarda al momento y devuelve esta misma sección (outerHTML). Solo quien
+     tiene el permiso combos (el admin) ve el formulario y "Quitar".
+
+     Datos: .ProductID, .Components, .Can, y al volver de una acción
+     .ComponentError y .QuantityValue (lo que se escribió, si hubo error). */}}
+<section id="product-components" class="mt-5 pt-6 space-y-5" aria-labelledby="product-components-title">
+  <div>
+    <h3 id="product-components-title" class="font-display font-bold text-2xl">{{t "product.components"}}</h3>
+    <p class="text-sm text-muted">{{t "product.components_hint"}}</p>
+  </div>
+
+  {{if .ComponentError}}
+  <div role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold">{{.ComponentError}}</div>
+  {{end}}
+
+  {{if .Components}}
+  <ul class="divide-y-2 divide-line border-2 border-line rounded-md">
+    {{$productID := .ProductID}}{{$can := can .Can "combos"}}
+    {{range .Components}}
+    <li class="flex items-center justify-between gap-4 px-4 py-3">
+      <span>
+        <span class="font-display font-bold text-lg tabular">{{if eq (printf "%s" .ComponentSaleType) "WEIGHT"}}{{printf (t "product.component_qty_kg") (qty .Quantity)}}{{else}}{{printf (t "product.component_qty") (qty .Quantity)}}{{end}}</span>
+        <span class="font-bold">{{.ComponentName}}</span>
+        <span class="text-sm text-muted"> · {{.ComponentSKU}}</span>
+        {{if not .ComponentActive}}<span class="text-sm font-bold text-danger"> · {{t "product.component_inactive"}}</span>{{end}}
+      </span>
+      {{if $can}}
+      <button type="button" hx-delete="/products/{{$productID}}/components/{{.ID}}"
+              hx-confirm="{{t "product.component_remove_confirm"}}"
+              hx-target="#product-components" hx-swap="outerHTML"
+              class="px-2 py-1 whitespace-nowrap rounded-sm font-bold text-danger underline-offset-4 hover:underline">{{t "product.component_remove"}}</button>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="font-bold text-danger">{{t "product.components_empty"}}</p>
+  {{end}}
+
+  {{if can .Can "combos"}}
+  {{/* Cada resultado de la búsqueda es un botón de este formulario
+       (name=component_id): tocarlo agrega ese producto con la cantidad
+       escrita. Enter en la búsqueda busca, no envía (el escáner manda un
+       Enter después del código). */}}
+  <form hx-post="/products/{{.ProductID}}/components" hx-target="#product-components" hx-swap="outerHTML"
+        class="space-y-3">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="grow">
+        <label for="product-component-search" class="field-label">{{t "product.component_search"}}</label>
+        <input type="search" id="product-component-search" name="q" autocomplete="off" maxlength="100"
+               aria-describedby="product-component-search-hint"
+               hx-get="/products/{{.ProductID}}/components/search" hx-target="#product-component-options" hx-swap="innerHTML"
+               hx-trigger="input changed delay:300ms, search, keydown[key=='Enter']"
+               onkeydown="if (event.key === 'Enter') event.preventDefault()"
+               class="field">
+        <span id="product-component-search-hint" class="field-hint">{{t "product.component_search_hint"}}</span>
+      </div>
+      <div>
+        <label for="product-component-qty" class="field-label">{{t "product.component_quantity"}}</label>
+        <input type="text" id="product-component-qty" name="quantity" inputmode="decimal" autocomplete="off" required
+               aria-describedby="product-component-qty-hint" value="{{.QuantityValue}}"
+               class="field max-w-40 tabular">
+      </div>
+    </div>
+    <span id="product-component-qty-hint" class="field-hint">{{t "product.component_quantity_hint"}}</span>
+    <ul id="product-component-options" class="border-2 border-line rounded-md divide-y-2 divide-line empty:hidden"></ul>
+  </form>
+  {{else}}
+  <p class="text-sm text-muted">{{t "product.components_admin_only"}}</p>
+  {{end}}
+</section>

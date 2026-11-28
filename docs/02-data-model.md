@@ -57,6 +57,8 @@ erDiagram
     cashier_sessions ||--o{ sales : ""
     sales ||--o{ sale_items : "contains"
     sale_items ||--o{ sale_item_batches : "allocated from"
+    sale_items ||--o{ sale_item_components : "combo drew from"
+    products ||--o{ sale_item_components : ""
     sales ||--o{ payments : "paid with"
     cashier_sessions ||--o{ cash_audits : ""
     products ||--o{ sale_items : ""
@@ -194,8 +196,10 @@ Supports **multiple barcodes per product** (manufacturer packaging changes, dual
 | quantity | NUMERIC(12,3) | NOT NULL, CHECK (quantity > 0) | Component units consumed per pack sold. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
-CHECK: `pack_id <> component_id`. Index: `(pack_id)`.
-> Selling a pack decrements component stock (BOM semantics); packs have no stock of their own.
+CHECK: `pack_id <> component_id`. Index: `(pack_id)`. UNIQUE `(pack_id, component_id)` (migration `0023`): a component appears once per combo; setting it again changes its quantity.
+> Selling a pack decrements component stock (BOM semantics); packs have no stock of their own. Example: a pack of cigarettes is 20 loose ones, a bag is 10 candies; only the loose product has stock, and each has its own price.
+>
+> **Rules (app, `model.CheckComponent`):** the pack is `COMPOSITE`; a component is an active `UNIT` or `WEIGHT` product, never another `COMPOSITE` (no nesting) nor an open-price item (no stock); a `UNIT` component needs a whole quantity, a `WEIGHT` one is in kg with up to 3 decimals. Checked again at every sale, since a component may have been deactivated after the recipe was saved. Only the admin changes a recipe (permission `combos`, F-05).
 
 ### 4.7 `prices` & `product_costs` — price/cost history
 
@@ -443,6 +447,21 @@ UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "nev
 
 > A line with `uncovered_quantity > 0` is **pending** while its sale is `COMPLETED` and no `CONFIRMED` count has a `stock_count_items` row for the product created (snapshot taken) after the sale. That is derived in the query (`ReportStore.Unstocked`): nothing is written to resolve it, and voiding the sale drops it.
 
+### 4.17b `sale_item_components` — what a combo line drew (migration `0023`)
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| sale_item_id | BIGINT | FK → sale_items.id, NOT NULL | The combo line. |
+| product_id | BIGINT | FK → products.id, NOT NULL | The component. |
+| quantity | NUMERIC(12,3) | NOT NULL, CHECK (> 0) | Line quantity × recipe quantity (2 packs of 20 → 40). |
+| unit_cost | NUMERIC(12,2) | NOT NULL | Cost per component unit of what went out (batches + average). |
+| uncovered_quantity | NUMERIC(12,3) | NOT NULL DEFAULT 0, CHECK (>= 0 AND <= quantity) | Startup mode: the part the system did not have, like `sale_items.uncovered_quantity`. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+UNIQUE `(sale_item_id, product_id)`. Indexes: `(product_id)`, and partial `(product_id)` where `uncovered_quantity > 0`.
+> A **snapshot** of the recipe at sale time: changing the recipe later does not touch past sales. The combo line itself (`sale_items`) carries the combo's price and its category's IVA; its `unit_cost` is what its components cost, per combo. Its `uncovered_quantity` stays 0: what was missing is per component, here, and counts as pending for **the component** (`ReportStore.Unstocked`). The restock report (R-01) also counts `quantity` as sold of the component. The components' batches go to `sale_item_batches` of the combo line (the batch says which product it is); their `stock_movements` carry the sale's `sale_id`, so a void (F-08) returns them like any other.
+
 ### 4.18 `sale_item_batches` — FIFO allocation (P-04)
 
 | Column | Type | Constraints | Description |
@@ -642,11 +661,11 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 
 ### 6.1 Sale (atomic, BR-04)
 1. Lock the `OPEN` session of the only register of the active store (**BR-02**).
-2. Lock affected products and `stock_balances` rows in ascending `product_id` order — prevents negative stock and deadlocks under concurrency.
-3. Price each line (current price + its category's IVA, **snapshots**, **BR-03**), check stock, compute totals and settle payments.
+2. Lock affected products and `stock_balances` rows in ascending `product_id` order — prevents negative stock and deadlocks under concurrency. A combo's components are locked too (its recipe is read first).
+3. Price each line (current price + its category's IVA, **snapshots**, **BR-03**), check stock, compute totals and settle payments. The stock is checked for the whole cart, adding what the lines and the combos' components ask of each product.
 4. Read the next `sale_number` of the register.
 5. FIFO-allocate from `product_batches` (decrement `remaining_quantity`); what the batches do not cover goes out without a batch at the average cost.
-6. Insert the `sales` header **first** (the other rows reference it by FK), then `sale_items`, `sale_item_batches` (one per batch touched) and `payments` (one per method; split allowed).
+6. Insert the `sales` header **first** (the other rows reference it by FK), then `sale_items`, `sale_item_batches` (one per batch touched), `sale_item_components` (combo lines) and `payments` (one per method; split allowed).
 7. Insert one `stock_movements` (type `SALE`, negative, `sale_id`) **per batch allocation**, with its `batch_id`, plus one without batch for the uncovered rest.
 8. Decrement `stock_balances`.
 9. `COMMIT`. Any failure → full rollback (**BR-04**).
@@ -673,8 +692,9 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 
 ### 7.2 COMPOSITE packs (seasonal candy box)
 - Pack is a `COMPOSITE` product with `product_components` rows.
-- Selling a pack decrements component stock (one `stock_movements` per component).
-- Pack carries its own `product_codes` entry (`INTERNAL` type) for a store-printed barcode.
+- Selling a pack decrements component stock (one `stock_movements` per component, and per batch if it controls batches); the line keeps what each component gave in `sale_item_components` (§4.17b).
+- Pack carries its own `product_codes` entry: the pack's own barcode (a pack of cigarettes has an EAN) or an `INTERNAL` one for a store-printed label.
+- Buying a pack (expanding to its components) is not done yet: receive the loose units (×20) by hand.
 
 ### 7.3 Stock count & merma (friction-free reconciliation)
 1. **Paper capture (offline):** known exits — family consumption, breakage, spoilage — noted as they happen.

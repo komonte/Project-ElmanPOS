@@ -285,8 +285,8 @@ func TestCheckoutRejected(t *testing.T) {
 			ErrNoPrice, service.ErrConflict, f.noPrice, ""},
 		{"inactive", []*model.SaleItem{line(f.inactive, "1")}, cash("100"),
 			ErrProductInactive, service.ErrConflict, f.inactive, ""},
-		{"composite", []*model.SaleItem{line(f.composite, "1")}, cash("100"),
-			ErrCompositeProduct, service.ErrValidation, f.composite, ""},
+		{"combo without components", []*model.SaleItem{line(f.composite, "1")}, cash("100"),
+			ErrComboEmpty, service.ErrConflict, f.composite, ""},
 		{"unknown product", []*model.SaleItem{line(999999999, "1")}, cash("100"),
 			ErrUnknownProduct, service.ErrValidation, 999999999, ""},
 		{"4 decimals", []*model.SaleItem{line(f.queso, "0.0001")}, cash("1"),
@@ -353,8 +353,8 @@ func TestSearch(t *testing.T) {
 	for _, o := range got {
 		byName[o.Name] = o
 	}
-	if _, ok := byName["COMBO TEST SALES"]; ok {
-		t.Error("composite products are not sold")
+	if _, ok := byName["COMBO TEST SALES"]; !ok {
+		t.Error("combos are sold too (0023)")
 	}
 	if _, ok := byName["INACTIVO TEST SALES"]; ok {
 		t.Error("inactive products are not sold")
@@ -366,7 +366,7 @@ func TestSearch(t *testing.T) {
 	if o, ok := byName["SIN PRECIO TEST SALES"]; !ok || o.Price != nil || !o.OnHand.Equal(d("5")) {
 		t.Errorf("no price: got %+v (found %v)", o, ok)
 	}
-	if len(got) != 3 {
-		t.Errorf("got %d options, want 3", len(got))
+	if len(got) != 4 {
+		t.Errorf("got %d options, want 4", len(got))
 	}
 }

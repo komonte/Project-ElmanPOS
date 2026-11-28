@@ -24,6 +24,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport/web"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/adjustments"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/combos"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
@@ -150,7 +151,8 @@ func main() {
 		WithAuth(authSvc, cfg.HTTPS()).
 		WithUsers(users.New(db, postgres.NewTxRunner(db))).
 		WithReports(reports.New(db)).
-		WithSettings(settings.New(db, postgres.NewTxRunner(db)))
+		WithSettings(settings.New(db, postgres.NewTxRunner(db))).
+		WithCombos(combos.New(db))
 
 	// Configurar rutas
 	mux := http.NewServeMux()

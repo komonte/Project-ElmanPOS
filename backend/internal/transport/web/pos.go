@@ -149,6 +149,9 @@ func (h *WebHandler) posErrText(r *http.Request, lang string, err error) string 
 	if errors.Is(line.Err, sales.ErrNotEnoughStock) {
 		msg = fmt.Sprintf(i18n.T(lang, "error.sale_not_enough"), formatQuantity(lang, line.Available))
 	}
+	if line.Component != "" { // en un combo, el componente con el problema
+		msg = line.Component + ": " + msg
+	}
 	if line.ProductName == "" {
 		return msg
 	}

@@ -10,6 +10,8 @@ import "slices"
 //   - Un rol desconocido no tiene ningún permiso.
 //   - El repositor maneja el catálogo (da de alta lo que recibe), pero no
 //     precios, costos ni impuestos.
+//   - La receta de un combo, solo el admin (2026-11-28): una receta mal
+//     cargada descuenta mal el stock en cada venta.
 
 // Permission es algo que un usuario puede hacer.
 type Permission string
@@ -26,10 +28,11 @@ const (
 	PermUsers     Permission = "users"      // crear, editar y desactivar usuarios, y resetear contraseñas
 	PermReports   Permission = "reports"    // reportes de ventas, caja y margen (R-06, R-07)
 	PermSettings  Permission = "settings"   // configuración del negocio (modo arranque)
+	PermCombos    Permission = "combos"     // los componentes de un combo (F-05)
 )
 
 // Permissions son todos los permisos.
-var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings}
+var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings, PermCombos}
 
 // rolePermissions es la matriz de F-13.
 var rolePermissions = map[string][]Permission{

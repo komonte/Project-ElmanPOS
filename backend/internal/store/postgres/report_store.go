@@ -233,12 +233,18 @@ func (s *ReportStore) OpenSessions(ctx context.Context, start, end time.Time) (i
 //     las ventas saldrían miles de productos que nunca se compraron).
 //
 // Con el stock de todos los locales, el proveedor preferido y lo vendido
-// (ventas COMPLETED) desde since. El orden lo pone quien llama.
+// (ventas COMPLETED) desde since; lo que salió en combos cuenta como vendido
+// de cada componente (un atado son 20 sueltos). El orden lo pone quien llama.
 func (s *ReportStore) Restock(ctx context.Context, since time.Time) ([]model.RestockItem, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		WITH sold AS (
 			SELECT si.product_id, SUM(si.quantity) AS q
-			FROM sale_items si JOIN sales s ON s.id = si.sale_id
+			FROM (
+			    SELECT sale_id, product_id, quantity FROM sale_items
+			    UNION ALL
+			    SELECT i.sale_id, c.product_id, c.quantity
+			    FROM sale_item_components c JOIN sale_items i ON i.id = c.sale_item_id
+			) si JOIN sales s ON s.id = si.sale_id
 			WHERE s.status = 'COMPLETED' AND s.created_at >= $1
 			GROUP BY si.product_id
 		), bal AS (
@@ -273,11 +279,18 @@ func (s *ReportStore) Restock(ctx context.Context, since time.Time) ([]model.Res
 // unstockedPending son los renglones vendidos sin stock (modo arranque,
 // 0021) que siguen pendientes: de ventas sin anular y sin un conteo
 // confirmado que haya sacado la foto del producto después de la venta. Esa
-// foto mide lo que de verdad queda, así que el conteo los resuelve.
+// foto mide lo que de verdad queda, así que el conteo los resuelve. Lo que
+// faltó de un componente de combo (0023) cuenta como del componente.
 const unstockedPending = `
 	SELECT si.product_id, si.uncovered_quantity, s.id AS sale_id, s.created_at
-	FROM sale_items si JOIN sales s ON s.id = si.sale_id
-	WHERE si.uncovered_quantity > 0 AND s.status = 'COMPLETED'
+	FROM (
+	    SELECT sale_id, product_id, uncovered_quantity FROM sale_items WHERE uncovered_quantity > 0
+	    UNION ALL
+	    SELECT i.sale_id, c.product_id, c.uncovered_quantity
+	    FROM sale_item_components c JOIN sale_items i ON i.id = c.sale_item_id
+	    WHERE c.uncovered_quantity > 0
+	) si JOIN sales s ON s.id = si.sale_id
+	WHERE s.status = 'COMPLETED'
 	  AND NOT EXISTS (
 	      SELECT 1 FROM stock_count_items ci JOIN stock_counts c ON c.id = ci.count_id
 	      WHERE c.status = 'CONFIRMED' AND ci.product_id = si.product_id

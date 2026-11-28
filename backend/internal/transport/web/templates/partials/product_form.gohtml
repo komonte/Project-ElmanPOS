@@ -253,9 +253,12 @@
           <button type="button" onclick="closeModal()" class="btn-secondary">{{t "common.cancel"}}</button>
         </div>
       </form>
-      {{/* Al editar: el precio, el costo y los códigos de barra, fuera del
-           <form> del producto. */}}
+      {{/* Al editar: los componentes (si es un combo), el precio, el costo y
+           los códigos de barra, fuera del <form> del producto. */}}
       {{if .Product.ID}}
+      {{if eq (printf "%s" .Product.SaleType) "COMPOSITE"}}
+      {{template "product_components.gohtml" (dict "ProductID" .Product.ID "Components" .Components "Can" .Can)}}
+      {{end}}
       {{template "product_prices.gohtml" (dict "ProductID" .Product.ID "Prices" .Prices "Can" .Can "OpenPrice" .Product.OpenPrice "OpenPriceAllowed" .OpenPriceAllowed "VatNote" .VatNote)}}
       {{with .CostData}}{{template "product_costs.gohtml" .}}{{end}}
       {{template "product_codes.gohtml" (dict "ProductID" .Product.ID "Codes" .Codes)}}

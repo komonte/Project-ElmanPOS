@@ -72,7 +72,7 @@ func TestRenderPriceVatLabel(t *testing.T) {
 		return buf.String()
 	}
 	form := func(data map[string]any) string {
-		data["SaleTypes"] = saleTypeOptions("")
+		data["SaleTypes"] = model.SaleTypes
 		data["MeasureUnits"] = model.MeasureUnits
 		return render("product_form.gohtml", data)
 	}

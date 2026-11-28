@@ -16,6 +16,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/adjustments"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/auth"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/combos"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
@@ -41,6 +42,7 @@ type WebHandler struct {
 	// Casos de uso (D-02).
 	createProduct *createproduct.Service
 	productCodes  *productcodes.Service
+	combos        *combos.Service // WithCombos
 	prices        *prices.Service
 	costs         *costs.Service
 	purchases     *purchases.Service
@@ -278,6 +280,17 @@ var errorKeys = []struct {
 	// Cierre (F-12).
 	{store.ErrSessionNotOpen, "error.cash_session_not_open"},
 	{model.ErrInvalidDeclaredAmount, "error.cash_declared_invalid"},
+	// Componentes de un combo (F-05). En la caja, un componente que ya no
+	// sirve dice eso, no el error de la pantalla de componentes: va primero.
+	{sales.ErrComboComponent, "error.sale_combo_component"},
+	{model.ErrComponentProduct, "error.component_product"},
+	{model.ErrComponentSelf, "error.component_self"},
+	{model.ErrInvalidComponentQty, "error.component_quantity"},
+	{model.ErrComponentPackNotCombo, "error.component_pack_not_combo"},
+	{model.ErrComponentIsCombo, "error.component_is_combo"},
+	{model.ErrComponentOpenPrice, "error.component_open_price"},
+	{model.ErrComponentInactive, "error.component_inactive"},
+	{combos.ErrComponentUnknown, "error.product_unknown"},
 	// Anular (F-08).
 	{sales.ErrSaleOtherSession, "error.void_other_session"},
 	{model.ErrSaleAlreadyVoided, "error.void_already_voided"},
@@ -288,7 +301,7 @@ var errorKeys = []struct {
 	{sales.ErrRegisterClosed, "error.sale_register_closed"},
 	{sales.ErrUnknownProduct, "error.product_unknown"},
 	{sales.ErrProductInactive, "error.line_product_inactive"},
-	{sales.ErrCompositeProduct, "error.sale_composite"},
+	{sales.ErrComboEmpty, "error.sale_combo_empty"},
 	{sales.ErrNoPrice, "error.sale_no_price"},
 	{model.ErrSaleNoItems, "error.sale_no_items"},
 	{model.ErrSaleItemProduct, "error.sale_no_items"},

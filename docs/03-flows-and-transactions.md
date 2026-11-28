@@ -147,17 +147,18 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 
 ### F-05: Composite Pack Management
 
-- **Actor / Role:** Admin.
-- **Trigger:** Admin defines a seasonal kit (e.g. candy box) or edits an existing one.
-- **Preconditions:** Component products exist and are `UNIT`/`WEIGHT` (never `COMPOSITE` — nesting is forbidden in v1).
-- **Business flow:** create a product with `sale_type = 'COMPOSITE'` → add components with quantities (`product_components`) → assign an `INTERNAL` barcode for printing.
-- **DB transaction:**
-  1. `INSERT INTO products (... sale_type='COMPOSITE')`
-  2. `INSERT INTO product_components` (one per component)
-  3. `INSERT INTO product_codes (code_type='INTERNAL')`
-- **Invariants:** `pack_id <> component_id` (`CHECK`); components must be active.
-- **Errors / rollback:** component inactive or nested → rejected.
-- **Edge cases:** changing a pack recipe only affects future sales (components are dereferenced at sale time, not stored in the sale line).
+- **Actor / Role:** Admin (permission `combos`, F-13: a wrong recipe moves the wrong stock on every sale). Whoever edits products (`catalog`) sees the recipe without the form; the server answers 403.
+- **Trigger:** A product sold both loose and as a pack: a pack of cigarettes is 20 loose ones, a bag is 10 candies. Only the loose product has stock; each has its own price.
+- **Preconditions:** the pack is a product with `sale_type = 'COMPOSITE'` ("Combo" in the form; created empty like any product). Each component is an active `UNIT`/`WEIGHT` product, never `COMPOSITE` (no nesting in v1) nor an open-price item (no stock).
+- **Business flow** (Products → edit the combo → "Combo components", only for `COMPOSITE`):
+  1. Search the component by name, SKU or barcode (`GET /products/{id}/components/search?q=`: active, not combos, not open-price, not the combo itself). Enter searches, never submits (a scanner sends one after the code).
+  2. Type "Quantity per combo" (by unit, whole: 20; by weight, kg with up to 3 decimals: 0,25) and tap the product in the list (`POST /products/{id}/components`, `component_id` + `quantity`). Saved right away, without the product's Save. A component already in the combo gets the new quantity (UNIQUE `(pack_id, component_id)`).
+  3. "Remove" asks and deletes the row (`DELETE /products/{id}/components/{rowID}`, only from its own combo).
+  4. Without components, the section says the register cannot sell it.
+- **DB transaction:** single statements (`usecase/combos`): read the combo and the component, `model.CheckComponent`, then `INSERT ... ON CONFLICT (pack_id, component_id) DO UPDATE SET quantity`; or `DELETE ... WHERE id = $1 AND pack_id = $2`.
+- **Invariants:** `pack_id <> component_id` (`CHECK`); one row per component; components active, not composite, not open-price, whole quantity if by unit (checked on save and again on every sale).
+- **Errors / rollback:** not a combo, nested combo, open-price item, inactive component, the combo itself, bad quantity → 400 with the message in the section (the typed quantity stays). Missing combo → error.
+- **Edge cases:** changing a recipe only affects future sales (each sale keeps what every component gave, `sale_item_components`). A component deactivated later blocks the combo at the register, naming it, until the recipe is fixed. Buying a pack is not expanded yet (PR13): receive the loose units (×20).
 
 ---
 
@@ -228,10 +229,10 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Trigger:** Barcode scanned or product searched on the sell screen (`/pos`, "Vender", first in the menu).
 - **Preconditions:**
   - There is **exactly one active store**, it has **exactly one active register**, and that register has an `OPEN` session (**BR-02**, F-11). Otherwise the screen says the register is closed and links to `/cash`; with several stores or registers nothing is guessed (409).
-  - Each product is active, is not `COMPOSITE` (combos: §7) and has a current price in `prices`.
-  - There is enough stock in the store for every line.
+  - Each product is active and has a current price in `prices`. A combo (`COMPOSITE`) also needs components (F-05), all of them usable.
+  - There is enough stock in the store for every line (for a combo, of each component), adding up what the whole cart asks of each product.
 - **Business flow** (`/pos`; the cart lives in the page until charging, the server only searches and charges):
-  1. The search box is always focused for the scanner. Scan / search by name, SKU or barcode (`sales.Search`: active, non-combo products, up to 20, each with its price and the store's stock). Enter with exactly one match adds it; scanning it again adds one more. Unknown code or no price → a notice, nothing added; what was typed stays selected so the next scan replaces it.
+  1. The search box is always focused for the scanner. Scan / search by name, SKU or barcode (`sales.Search`: active products, up to 20, each with its price and the store's stock; a combo's stock is how many whole combos its components cover: the minimum of component stock ÷ recipe quantity, 0 without components). Enter with exactly one match adds it; scanning it again adds one more. Unknown code or no price → a notice, nothing added; what was typed stays selected so the next scan replaces it.
   2. `sale_type = 'WEIGHT'` → the cursor goes to the kg field (F-10); else `quantity = 1`. Quantities are editable and lines removable. A line asking for more than the stock says "There is N in stock" and blocks charging.
   3. The total shows large. Payment buttons (cash, debit, credit, transfer, QR) each add a payment for what is still due; they can be combined. Cash has "Pays with" and shows the change; a card cannot go over the total. With an empty search box, Enter jumps to cash, and Enter on the amount charges: scan, scan, Enter, "20.000", Enter.
   4. Charge (`POST /pos/checkout`). On success: "Sale No. X charged" with the change and a "Print receipt" button (below); the cart empties and scanning continues. On error the cart stays as it was, and a line problem names the product ("SODA COLA 1.5L: not enough stock (there is 0).").
@@ -240,20 +241,22 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **DB transaction** (`usecase/sales.Checkout`, one `TxRunner.InTx`). Before it: copy only what the register sends (product, quantity, method, amount, reference: never a price, cost or session) and `Sale.Validate` (at least one line; product set; `quantity > 0` with ≤ 3 decimals; no product twice; at least one payment; valid method; `amount > 0` with 2 decimals; reference ≤ 120 chars; at most one cash payment).
   1. **Session:** `StoreStore.ActiveID` → `CashRegisterStore.Only` → `CashierSessionStore.OpenFor`, then `LockOpen` (`FOR UPDATE`, re-checks `status = 'OPEN'`: it could have closed in between). No register or no open session → `ErrRegisterClosed` (409).
   2. Read `app_settings.max_sale_weight_kg` (missing → 50).
-  3. **Lock, then read:** `StockBalanceStore.LockOnHand` for every product, in **ascending `product_id` order** (§6): the product row (`FOR NO KEY UPDATE`) and its balances (`FOR UPDATE`). A missing product → `LineError` (400).
-  4. For each line: read the product (inactive → 409, `COMPOSITE` → 400); check the quantity by sale type (`ValidateQuantity`: whole for units; ≤ `max_sale_weight_kg` for weight); current price (none → 409); stock in the store (`quantity > on hand` → 409 with how much there is); copy `unit_price` and the category's IVA `tax_rate` (**BR-03**). Every line error is a `*LineError` carrying the product name.
+  3. **Recipes, then lock, then read:** the recipes of the combos in the cart (`ProductComponentStore.ListByPacks`; rows of a product that is no longer `COMPOSITE` are ignored). Then `StockBalanceStore.LockOnHand` for every line product **and every component**, once each, in **ascending `product_id` order** (§6): the product row (`FOR NO KEY UPDATE`) and its balances (`FOR UPDATE`). A missing product → `LineError` (400).
+  4. For each line: read the product (inactive → 409); check the quantity by sale type (`ValidateQuantity`: whole for units and combos; ≤ `max_sale_weight_kg` for weight); a combo without components → `ErrComboEmpty` (409); each component is checked again (`model.CheckComponent`: deactivated or turned into a combo after the recipe was saved → `ErrComboComponent`, 409, naming it); current price (none → 409); copy `unit_price` and the category's IVA `tax_rate` (**BR-03**). Each line becomes one or more **draws**: the product itself, or each component with `line quantity × recipe quantity` (kept in `SaleItem.Components`).
+  4b. **Stock for the whole cart** (`checkStock`): the draws in cart order take from what each product has (`OnHandAt`), so 1 pack of 20 and 3 loose ones ask 23 of the loose product. Short → 409 with how much was left for that line; for a combo the error also names the component ("PACK: LOOSE CIGARETTE: not enough stock (there is 7)."). Startup mode: the rest goes to that draw's uncovered quantity instead. Every line error is a `*LineError` carrying the product name (and `Component` for a combo).
   5. `ComputeTotals` (see "Totals convention"; a line that rounds to $0 → 400) and `SettlePayments` (payments must cover the total; only cash may go over and is reduced to the applied amount, the excess is the change; cash that is entirely surplus → 400).
   6. `sale_number` = `SaleStore.NextNumber(register)`: highest number of the register's sales + 1, read with the session locked.
-  7. **FIFO** for products with `controls_batches`: `BatchStore.TakeFIFO` locks the batches (`FOR UPDATE`) ordered by `(expiry_date NULLS LAST, created_at, id)` and decrements `remaining_quantity`. What the batches do not cover goes out **without a batch** at the current average cost (`product_costs.avg_cost`; the average does not change). `unit_cost` = weighted cost of what went out.
-  8. `SaleStore.Create`: `INSERT INTO sales` (**header first**: the other rows reference it), then per line `sale_items` and its `sale_item_batches`, then `payments` (empty reference → `NULL`).
-  9. `INSERT INTO stock_movements` (`SALE`, negative, `sale_id`, `store_id`): one per batch allocation with its `batch_id` and cost, plus one without batch for the uncovered rest.
-  10. `stock_balances`: subtract each line's quantity.
+  7. **FIFO** per draw, for products with `controls_batches`: `BatchStore.TakeFIFO` locks the batches (`FOR UPDATE`) ordered by `(expiry_date NULLS LAST, created_at, id)` and decrements `remaining_quantity`. What the batches do not cover goes out **without a batch** at the current average cost (`product_costs.avg_cost`; the average does not change). `unit_cost` = weighted cost of what went out; for a combo line, what its components cost per combo (each component keeps its own cost per unit).
+  8. `SaleStore.Create`: `INSERT INTO sales` (**header first**: the other rows reference it), then per line `sale_items`, its `sale_item_batches` (a combo's include its components' batches) and, for a combo, `sale_item_components`; then `payments` (empty reference → `NULL`).
+  9. `INSERT INTO stock_movements` (`SALE`, negative, `sale_id`, `store_id`) per draw: one per batch allocation with its `batch_id` and cost, plus one without batch for the uncovered rest. A combo has no movements of its own: its components do.
+  10. `stock_balances`: subtract each draw's quantity (minus its uncovered part).
   11. `COMMIT`.
 - **Totals convention:** `unit_price` includes IVA. `subtotal = Σ quantity × unit_price` (each line rounded to cents); `tax_amount = Σ line_total × rate/(100+rate)`, summed unrounded and rounded once (the IVA inside, not added); `total = subtotal − discount_amount` (no discounts yet).
 - **Decisions:**
   - **One store, one register.** The sale uses the only register of the only active store; with two, the screen will have to say which (and these checks fail until then, on purpose).
   - **No stock, no sale.** The whole sale is rejected; initial stock is loaded with a count (F-09) first.
-  - **No price, no line**; combos and inactive products are not sold.
+  - **No price, no line**; inactive products are not sold.
+  - **Combos** (2026-11-28, migration `0023`): the line is the combo, with its own price and its category's IVA; the stock comes out of its components. A combo has no stock of its own. Buying a combo is not done yet: receive the loose units by hand.
   - **No discounts** (`discount_amount = 0`).
   - **Change is not stored** (MVP): `payments.amount` for cash is what applies to the sale.
   - **Sale number per register**, continuing across sessions, never repeated.
@@ -263,10 +266,10 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - `SUM(payments.amount) = sales.total`.
   - Ledger equals balance: `Σ stock_movements.quantity(product) = stock_balances.quantity(product)`.
   - Every `sale_item_batches` row has a matching `stock_movements` row with the same `batch_id` — **but not the other way around**: the uncovered rest has a movement without batch and no `sale_item_batches` row.
-  - For each line, `Σ` of its `SALE` movements = `−(quantity − uncovered_quantity)` (`uncovered_quantity` is 0 unless startup mode is on).
+  - For each line, `Σ` of its `SALE` movements = `−(quantity − uncovered_quantity)` (`uncovered_quantity` is 0 unless startup mode is on). For a combo line the same holds per component, with its `sale_item_components` row.
 - **Errors / rollback:** any failure → full rollback (**BR-04**); the cart stays on screen for retry.
-  - Validation (quantities, payments, line rounding to $0, a combo, unknown product) → 400.
-  - Register closed, no / several stores or registers, inactive product, no price, not enough stock → 409. Without a price the message says to ask an administrator (Dashboard → Pending prices).
+  - Validation (quantities, payments, line rounding to $0, unknown product) → 400.
+  - Register closed, no / several stores or registers, inactive product, no price, not enough stock, combo without components or with a component that cannot be used → 409. Without a price the message says to ask an administrator (Dashboard → Pending prices).
   - A line's error names the product (`*LineError`; with not enough stock, also how much there is).
 - **Web routes:** `GET /pos` (page), `GET /pos/search?q=` (results with price and stock), `POST /pos/checkout` (form: `product_id`/`quantity` per line, `pay_method`/`pay_amount`/`pay_ref` per payment, amounts written like money: "10.000" is ten thousand; answers `pos_result` with the sale or the error), `GET /pos/sales/{id}/ticket[?paid=]` (ticket; missing → 404). No JSON API yet.
 - **Edge cases:**
@@ -276,7 +279,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   - `WEIGHT` line (0.300 kg): FIFO allocates fractional quantities from batches.
   - Undoing a completed sale is **only** possible via F-08 (full void).
 - **Unregistered item** (`products.open_price`, migration `0022`): something the register sells that is not in the system yet. The cashier never creates products mid-sale (duplicates, wrong VAT or unit); the admin marks one or more products as open price in the product's price section (Products → edit; only by unit and without batches; audited), for example "Varios 21 %" and "Varios 10,5 %". A scanned code that is not found offers "Charge it as «Varios 21 %» (type the price)" (Enter picks it); searching the item by name also adds it. Each such line has its own typed price (the form sends `unit_price` and `scanned_code` per line, empty for the others), may repeat the product, and moves no stock: no batches, no movements, no balance, cost 0 (the margin report flags it as without cost). The VAT is the item's category. The scanned code (normalized like `product_codes`) is kept in `sale_items.scanned_code`, and **Reports → Unregistered codes** (`/reports/unregistered`, permission `catalog`) lists the ones that are not yet any product's code, most sold first, until someone creates the product with that code. Its "Create" link opens Products with the new-product form already showing that code (`/products?new_code=`; an invalid code just opens the page). The dashboard shows how many there are.
-- **Startup mode** (`app_settings.startup_mode`, migration `0021`; Administration → Settings, admin only, audited): the store loads its stock shelf by shelf, so for a while products are sold before they are counted. While it is on, "not enough stock" does not reject the line: what the store has goes out as usual (batches FIFO, then without batch) and the rest is saved in `sale_items.uncovered_quantity`, with no movement and no change to the balance, which stays at 0, never negative. The line cost still counts the rest at the current average (0 without a cost: the margin report flags it). The cart shows "the system has N: the rest is left to count" instead of blocking. A void gives back only what went out (its movements). The rest stays pending until a confirmed count takes its snapshot of the product after the sale: the count measures what is really left, so nothing else is needed (**Reports → Sold without stock**, R-08). Off, the old rule holds.
+- **Startup mode** (`app_settings.startup_mode`, migration `0021`; Administration → Settings, admin only, audited): the store loads its stock shelf by shelf, so for a while products are sold before they are counted. While it is on, "not enough stock" does not reject the line: what the store has goes out as usual (batches FIFO, then without batch) and the rest is saved in `sale_items.uncovered_quantity` (for a combo, per component in `sale_item_components.uncovered_quantity`: it is the component that has to be counted), with no movement and no change to the balance, which stays at 0, never negative. The line cost still counts the rest at the current average (0 without a cost: the margin report flags it). The cart shows "the system has N: the rest is left to count" instead of blocking. A void gives back only what went out (its movements). The rest stays pending until a confirmed count takes its snapshot of the product after the sale: the count measures what is really left, so nothing else is needed (**Reports → Sold without stock**, R-08). Off, the old rule holds.
 
 ### F-08: Full Void
 
@@ -508,13 +511,14 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Stock count / known exits (F-09, F-09b) | ✓ | ✗ | ✓ |
   | Catalog: products, codes, categories, brands, suppliers (F-01, F-02) | ✓ | ✗ | ✓ |
   | Price/cost changes, taxes (F-03, F-04) | ✓ | ✗ | ✗ |
+  | Combo components (F-05) | ✓ | ✗ | ✗ (sees them) |
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
   | Sales and cash & margin reports (R-06, R-07) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
   | Restock and expiring reports (R-01, R-02) | ✓ | ✗ | ✓ |
   | Other stock reports (R-03, R-04, R-05; pending) | ✓ | ✗ | ? |
   | User management | ✓ | ✗ | ✗ |
-- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports` (admin only). An unknown role or an inactive user has none.
+- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports`, `settings`, `combos` (admin only). An unknown role or an inactive user has none.
 - **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
 - **Without the permission** (`transport.Guard.Require`, after `AuthMiddleware`): a page → 403 "No permission" with the role's menu, "Your user is Cashier and cannot open this page." and "Back" to the role's start; htmx → 403 with the message as text (the toast shows it); API → 403 `{"error": "forbidden"}`. The server log records who, which permission and which path; `audit_log` does not (noise).
 - **Menu and buttons by role:** the menu, the start page and the buttons show only what the role can use: a cashier sees Sell, Start and Cash, without "Void"; a stock clerk sees the catalog (without taxes) and inventory, and the product's price and cost without their forms. Hiding is comfort: the server rejects anyway.
@@ -534,7 +538,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 ### R-01: Replenishment (reorder list)
 - **Semantics** (`/reports/restock`, `ReportStore.Restock`): active products that are not `COMPOSITE`, with the stock of all stores, in two sections:
   1. **Below the reorder point:** `reorder_point > 0` and `quantity <= reorder_point` (a product that never had stock counts as 0).
-  2. **Ran out:** `reorder_point = 0`, no stock, and sold (`COMPLETED`) in the last 30 days, with a hint to set a reorder point. The imported catalog comes with `reorder_point = 0`: with the plain rule, thousands of products never bought would show as "0 ≤ 0".
+  2. **Ran out:** `reorder_point = 0`, no stock, and sold (`COMPLETED`) in the last 30 days, with a hint to set a reorder point. What went out inside combos counts as sold of each component (`sale_item_components`: a pack sold is 20 loose ones sold). The imported catalog comes with `reorder_point = 0`: with the plain rule, thousands of products never bought would show as "0 ≤ 0".
 - **Output:** product (name and SKU), stock, reorder point, max, sold in the last 30 days and the **suggested order** (`RestockItem.Suggested`): up to `max_stock` (`max − stock`) when it is set; otherwise a month of sales (`sold in 30 days − stock`). Rounded up for unit products, to grams for weight ones; 0 or less → "—" (the person decides).
 - **Ordering:** grouped by preferred supplier (by name; "No supplier" last); inside each group the most critical first (`quantity / reorder_point` ascending), then by name. "Ran out" by name.
 - **Print:** a "Print" button (`window.print()`); the menu and the buttons are `print:hidden`, the date it was made is printed.

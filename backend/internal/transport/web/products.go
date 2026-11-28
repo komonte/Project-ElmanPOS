@@ -187,20 +187,6 @@ func newCategoryFromForm(r *http.Request) *model.Category {
 	}
 }
 
-// saleTypeOptions son los tipos de venta que ofrece el formulario. COMPOSITE
-// (combo) solo aparece si el producto ya lo es: hasta que se puedan cargar
-// sus componentes (F-05), un combo nuevo quedaría vacío.
-func saleTypeOptions(current model.SaleType) []model.SaleType {
-	opts := make([]model.SaleType, 0, len(model.SaleTypes))
-	for _, st := range model.SaleTypes {
-		if st == model.SaleTypeComposite && current != model.SaleTypeComposite {
-			continue
-		}
-		opts = append(opts, st)
-	}
-	return opts
-}
-
 // parseFormDecimal lee un número del formulario. Acepta coma decimal
 // ("2,5"), que es como se escribe acá. Vacío es cero.
 func parseFormDecimal(s string) (decimal.Decimal, bool) {
@@ -308,6 +294,14 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 			return data
 		}
 		data["Codes"] = codes
+		if p.SaleType == model.SaleTypeComposite && h.combos != nil {
+			comps, err := h.combos.List(ctx, p.ID)
+			if err != nil {
+				data["Error"] = h.errMsg(r, err)
+				return data
+			}
+			data["Components"] = comps
+		}
 		history, err := h.prices.History(ctx, p.ID)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
@@ -375,7 +369,9 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 		data["VatNote"] = initialVatNote(data)
 	}
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
-	data["SaleTypes"] = saleTypeOptions(p.SaleType)
+	// Todos, también combo: se crea vacío y sus componentes se cargan al
+	// editarlo (F-05); hasta entonces la caja no lo vende.
+	data["SaleTypes"] = model.SaleTypes
 	data["MeasureUnits"] = model.MeasureUnits
 	return data
 }

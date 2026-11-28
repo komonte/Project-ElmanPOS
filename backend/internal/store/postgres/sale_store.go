@@ -38,8 +38,8 @@ func (s *SaleStore) NextNumber(ctx context.Context, registerID int64) (int, erro
 }
 
 // Create guarda la venta entera: cabecera (estado COMPLETED), renglones con
-// sus lotes y pagos. Llena los ids y fechas en sale (y en sus renglones,
-// lotes y pagos). Totales, precios y costos tienen que venir calculados.
+// sus lotes y sus componentes (combos), y pagos. Llena los ids y fechas en
+// sale (y en sus renglones, lotes, componentes y pagos). Totales, precios y costos tienen que venir calculados.
 // Referencia de pago vacía se guarda NULL.
 //   - ErrInvalidReference: la sesión, un producto o un lote no existen.
 //
@@ -87,6 +87,15 @@ func (s *SaleStore) create(ctx context.Context, sale *model.Sale) error {
 				INSERT INTO sale_item_batches (sale_item_id, batch_id, quantity, unit_cost)
 				VALUES ($1, $2, $3, $4) RETURNING id;`,
 				b.SaleItemID, b.BatchID, b.Quantity, b.UnitCost).Scan(&b.ID); err != nil {
+				return err
+			}
+		}
+		for _, c := range it.Components {
+			c.SaleItemID = it.ID
+			if err := s.db.QueryRowContext(ctx, `
+				INSERT INTO sale_item_components (sale_item_id, product_id, quantity, unit_cost, uncovered_quantity)
+				VALUES ($1, $2, $3, $4, $5) RETURNING id;`,
+				c.SaleItemID, c.ProductID, c.Quantity, c.UnitCost, c.Uncovered).Scan(&c.ID); err != nil {
 				return err
 			}
 		}

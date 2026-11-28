@@ -1,4 +1,6 @@
-{{/* Menú lateral oscuro (tinta). En celular pasa a ser una barra arriba con
+{{/* Menú lateral oscuro (tinta). Los títulos de grupo (.nav-group, en
+     input.css) son amarillos, chicos y en mayúsculas, con una línea arriba:
+     no se confunden con los links, que son blancos. En celular pasa a ser una barra arriba con
      los links en una fila que se desliza de costado. Los grupos (Catálogo,
      Inventario, Caja, Reportes y Administración) ordenan el menú a medida que crece. "Vender" va
      primero y destacado. */}}
@@ -7,6 +9,23 @@
     <a href="/" class="font-display font-bold text-3xl leading-none tracking-wide">Elman<span class="text-tag">POS</span></a>
     <div class="md:hidden">{{template "lang-select" .}}</div>
   </div>
+
+  {{/* Quién entró, con qué rol, y "Salir" (F-13). Arriba de todo, para que
+       siempre se vea con qué usuario se está trabajando: el rol va en una
+       etiqueta de color (cada rol el suyo). */}}
+  {{with .CurrentUser}}
+  <div id="nav-user" class="mx-2 mb-3 md:mx-3 md:mb-4 px-3 py-2 rounded-md bg-white/10 border border-white/15">
+    <p class="text-xs text-white/60">{{t "nav.signed_in_as"}}</p>
+    <p class="font-bold truncate">{{.Name}}</p>
+    <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
+      <span id="nav-role" data-role="{{.Role}}"
+            class="px-2 py-0.5 rounded-sm text-sm font-bold {{if eq .Role "ADMIN"}}bg-danger text-white{{else if eq .Role "CASHIER"}}bg-stock text-white{{else}}bg-sky-700 text-white{{end}}">{{t (printf "role.%s" .Role)}}</span>
+      <form method="post" action="/logout" class="shrink-0">
+        <button type="submit" id="logout" class="px-3 py-1 rounded-md border-2 border-white/30 text-white hover:border-white">{{t "nav.logout"}}</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
 
   <div class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
       {{/* Vender es lo que más se usa: va primero y se ve distinto, como
@@ -18,7 +37,7 @@
       <a href="/" {{if eq .Section "dashboard"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "dashboard"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.dashboard"}}</a>
       {{if can .Can "catalog"}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_catalog"}}</p>
+    <p class="nav-group hidden md:block">{{t "nav.group_catalog"}}</p>
       <a href="/products" {{if eq .Section "products"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "products"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.products"}}</a>
       <a href="/categories" {{if eq .Section "categories"}}aria-current="page"{{end}}
@@ -35,7 +54,7 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "suppliers"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.suppliers"}}</a>
       {{end}}
       {{if can .Can "stock"}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_inventory"}}</p>
+    <p class="nav-group hidden md:block">{{t "nav.group_inventory"}}</p>
       <a href="/purchases" {{if eq .Section "purchases"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "purchases"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.purchases"}}</a>
       <a href="/purchases/history" {{if eq .Section "purchase_history"}}aria-current="page"{{end}}
@@ -46,12 +65,12 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "adjustments"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.adjustments"}}</a>
       {{end}}
       {{if can .Can "cash"}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_cash"}}</p>
+    <p class="nav-group hidden md:block">{{t "nav.group_cash"}}</p>
       <a href="/cash" {{if eq .Section "cash"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "cash"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.cash"}}</a>
       {{end}}
       {{if or (can .Can "reports") (can .Can "stock") (can .Can "catalog")}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_reports"}}</p>
+    <p class="nav-group hidden md:block">{{t "nav.group_reports"}}</p>
       {{end}}
       {{if can .Can "reports"}}
       <a href="/reports/sales" {{if eq .Section "reports_sales"}}aria-current="page"{{end}}
@@ -72,7 +91,7 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_unregistered"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_unregistered"}}</a>
       {{end}}
       {{if or (can .Can "users") (can .Can "settings")}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_admin"}}</p>
+    <p class="nav-group hidden md:block">{{t "nav.group_admin"}}</p>
       {{end}}
       {{if can .Can "users"}}
       <a href="/users" {{if eq .Section "users"}}aria-current="page"{{end}}
@@ -84,18 +103,7 @@
       {{end}}
   </div>
 
-  {{/* Quién entró y "Salir" (F-13), en una sola fila para no quitarle
-       lugar a los links. En celular, debajo de ellos. */}}
-  {{with .CurrentUser}}
-  <div id="nav-user" class="flex items-center justify-between gap-3 px-4 pb-3 md:px-5 md:pt-4 md:pb-0 md:border-t md:border-white/15">
-    <p class="min-w-0"><span class="block font-bold truncate">{{.Name}}</span>
-      <span class="block text-sm text-white/55">{{t (printf "role.%s" .Role)}}</span></p>
-    <form method="post" action="/logout" class="shrink-0">
-      <button type="submit" id="logout" class="px-3 py-1 rounded-md border-2 border-white/30 text-white hover:border-white">{{t "nav.logout"}}</button>
-    </form>
-  </div>
-  {{end}}
-  <div class="hidden md:block px-5 {{if .CurrentUser}}py-4{{else}}py-5 border-t border-white/15{{end}}">{{template "lang-select" .}}</div>
+  <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>
 </nav>
 
 {{define "lang-select"}}

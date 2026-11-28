@@ -864,5 +864,6 @@
   "report.col_sold_as": "Charged as",
   "report.unregistered_create": "Create",
   "dashboard.unregistered_one": "1 code charged unregistered to create",
-  "dashboard.unregistered": "%d codes charged unregistered to create"
+  "dashboard.unregistered": "%d codes charged unregistered to create",
+  "nav.signed_in_as": "Signed in as"
 }

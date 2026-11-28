@@ -103,6 +103,13 @@
   .field-hint {
     @apply block text-sm text-muted mt-1;
   }
+  /* Título de grupo del menú (Catálogo, Inventario...): no es un link.
+     Amarillo, chico, en mayúsculas y con una línea arriba, para que no se
+     confunda con los links (blancos, letra normal). */
+  .nav-group {
+    @apply mt-4 mb-1 mx-3 pt-3 border-t border-white/20 text-xs font-bold uppercase
+           tracking-[0.16em] text-tag;
+  }
   /* Título de sección: un cartel amarillo de góndola. */
   .shelf-title {
     @apply inline-block bg-tag text-ink font-display font-bold uppercase

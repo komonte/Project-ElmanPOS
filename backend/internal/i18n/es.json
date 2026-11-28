@@ -864,5 +864,6 @@
   "report.col_sold_as": "Cobrado como",
   "report.unregistered_create": "Dar de alta",
   "dashboard.unregistered_one": "1 código cobrado sin registrar para dar de alta",
-  "dashboard.unregistered": "%d códigos cobrados sin registrar para dar de alta"
+  "dashboard.unregistered": "%d códigos cobrados sin registrar para dar de alta",
+  "nav.signed_in_as": "Entraste como"
 }

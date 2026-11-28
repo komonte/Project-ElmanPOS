@@ -64,7 +64,7 @@ func TestNavByRole(t *testing.T) {
 				in = in || s == l
 			}
 			// El inicio también tiene links al catálogo: se cuenta el menú.
-			nav := html[:strings.Index(html, `id="nav-user"`)]
+			nav := html[:strings.Index(html, `</nav>`)]
 			if strings.Contains(nav, l) != in {
 				t.Errorf("%s: link %s shown = %v, want %v", u.Role, l, !in, in)
 			}
@@ -110,5 +110,33 @@ func TestForbiddenPage(t *testing.T) {
 	}
 	if w.Code != http.StatusForbidden {
 		t.Errorf("got %d", w.Code)
+	}
+}
+
+// El rol se ve arriba del menú, en una etiqueta de color propia, antes de
+// los links; y los títulos de grupo no parecen links.
+func TestNavShowsRoleOnTop(t *testing.T) {
+	e := NewTemplateEngine()
+	for u, class := range map[*model.User]string{adminUser: "bg-danger", cashierUser: "bg-stock", stockUser: "bg-sky-700"} {
+		var buf bytes.Buffer
+		data := map[string]any{"Lang": "es", "Section": "", "TitleKey": "", "CurrentUser": u, "Can": canMap(u)}
+		if err := e.Render(&buf, "es", "index.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		role := strings.Index(html, `id="nav-role" data-role="`+u.Role+`"`)
+		firstLink := strings.Index(html, ">Panel</a>")
+		if role < 0 || firstLink < 0 || role > firstLink {
+			t.Errorf("%s: role badge missing or below the links (%d, %d)", u.Role, role, firstLink)
+		}
+		if !strings.Contains(html[role:], class) {
+			t.Errorf("%s: badge without %s", u.Role, class)
+		}
+		if !strings.Contains(html, "Entraste como") {
+			t.Errorf("%s: missing the signed-in label", u.Role)
+		}
+		if strings.Contains(html, "text-sm text-white/55") {
+			t.Errorf("%s: group titles still look like links", u.Role)
+		}
 	}
 }

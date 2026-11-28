@@ -41,6 +41,19 @@
   </form>
   {{end}}
 
+  {{/* Artículo sin registrar (0022): la caja escribe el precio en cada
+       venta y no mueve stock. Solo el admin, solo por unidad y sin lotes. */}}
+  {{if can .Can "prices"}}{{if or .OpenPrice .OpenPriceAllowed}}
+  <div id="product-open-price" class="p-4 bg-paper border-l-8 {{if .OpenPrice}}border-tag-deep{{else}}border-line{{end}} rounded-sm">
+    <p class="font-bold">{{if .OpenPrice}}{{t "product.open_price_on"}}{{else}}{{t "product.open_price_off"}}{{end}}</p>
+    <p class="text-sm text-muted">{{t "product.open_price_hint"}}</p>
+    <form hx-post="/products/{{.ProductID}}/open-price" hx-target="#product-prices" hx-swap="outerHTML" class="mt-3">
+      {{if not .OpenPrice}}<input type="hidden" name="open_price" value="on">{{end}}
+      <button type="submit" id="product-open-price-toggle" class="btn-secondary">{{if .OpenPrice}}{{t "product.open_price_turn_off"}}{{else}}{{t "product.open_price_turn_on"}}{{end}}</button>
+    </form>
+  </div>
+  {{end}}{{end}}
+
   {{/* with primero: sin datos (.Prices nil), len fallaría. */}}
   {{with .Prices}}{{if gt (len .) 1}}
   <details>

@@ -53,6 +53,12 @@ func (h *WebHandler) PosSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data["Options"] = options
+		// No está: se ofrece cobrarlo como artículo sin registrar.
+		if len(options) == 0 {
+			if open, err := h.sales.OpenItems(r.Context()); err == nil {
+				data["OpenItems"] = open
+			}
+		}
 	}
 	h.renderPartial(w, r, "pos_options.gohtml", data)
 }
@@ -83,6 +89,12 @@ func saleFromForm(r *http.Request) (*model.Sale, error) {
 	if len(ids) != len(qtys) {
 		return nil, model.ErrInvalidSaleQuantity
 	}
+	// unit_price y scanned_code van en cada renglón (vacíos si no es un
+	// artículo sin registrar); si no vienen, ningún renglón los usa.
+	prices, codes := r.PostForm["unit_price"], r.PostForm["scanned_code"]
+	if (len(prices) > 0 && len(prices) != len(ids)) || (len(codes) > 0 && len(codes) != len(ids)) {
+		return nil, model.ErrInvalidSaleQuantity
+	}
 	sale := &model.Sale{}
 	for i := range ids {
 		id, err := strconv.ParseInt(ids[i], 10, 64)
@@ -93,7 +105,18 @@ func saleFromForm(r *http.Request) (*model.Sale, error) {
 		if !ok || strings.TrimSpace(qtys[i]) == "" {
 			return nil, model.ErrInvalidSaleQuantity
 		}
-		sale.Items = append(sale.Items, &model.SaleItem{ProductID: id, Quantity: qty})
+		item := &model.SaleItem{ProductID: id, Quantity: qty}
+		if len(prices) > 0 && strings.TrimSpace(prices[i]) != "" {
+			price, ok := parseFormMoney(prices[i])
+			if !ok {
+				return nil, sales.ErrOpenPriceMissing
+			}
+			item.UnitPrice = price
+		}
+		if len(codes) > 0 {
+			item.ScannedCode = codes[i]
+		}
+		sale.Items = append(sale.Items, item)
 	}
 
 	methods, amounts, refs := r.PostForm["pay_method"], r.PostForm["pay_amount"], r.PostForm["pay_ref"]

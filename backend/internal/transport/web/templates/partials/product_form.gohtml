@@ -253,7 +253,7 @@
       {{/* Al editar: el precio, el costo y los códigos de barra, fuera del
            <form> del producto. */}}
       {{if .Product.ID}}
-      {{template "product_prices.gohtml" (dict "ProductID" .Product.ID "Prices" .Prices "Can" .Can)}}
+      {{template "product_prices.gohtml" (dict "ProductID" .Product.ID "Prices" .Prices "Can" .Can "OpenPrice" .Product.OpenPrice "OpenPriceAllowed" .OpenPriceAllowed)}}
       {{with .CostData}}{{template "product_costs.gohtml" .}}{{end}}
       {{template "product_codes.gohtml" (dict "ProductID" .Product.ID "Codes" .Codes)}}
       {{end}}

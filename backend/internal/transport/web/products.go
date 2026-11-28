@@ -13,6 +13,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/shopspring/decimal"
 )
@@ -228,6 +229,7 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 			return data
 		}
 		data["Prices"] = recentPrices(history)
+		data["OpenPriceAllowed"] = prices.OpenPriceAllowed(p)
 		costData, err := h.productCostsData(ctx, p.ID)
 		if err != nil {
 			data["Error"] = h.errMsg(r, err)
@@ -611,6 +613,9 @@ func (h *WebHandler) renderProductPrices(w http.ResponseWriter, r *http.Request,
 	}
 	data := map[string]any{"ProductID": productID, "Prices": recentPrices(history),
 		"PriceError": errMsg, "PriceValue": value}
+	if p, err := h.productSvc.GetByID(r.Context(), productID); err == nil {
+		data["OpenPrice"], data["OpenPriceAllowed"] = p.OpenPrice, prices.OpenPriceAllowed(p)
+	}
 	h.renderPartial(w, r, "product_prices.gohtml", data)
 }
 
@@ -713,4 +718,25 @@ func (h *WebHandler) ProductCostsSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderProductCosts(w, r, productID, "", "")
+}
+
+// ProductOpenPriceSet handles POST /products/{id}/open-price: open_price=on
+// lo marca como artículo sin registrar; sin eso, lo desmarca. Solo el admin
+// (permiso prices). Devuelve la sección de precio.
+func (h *WebHandler) ProductOpenPriceSet(w http.ResponseWriter, r *http.Request) {
+	productID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	on := r.FormValue("open_price") == "on"
+	if err := h.prices.SetOpenPrice(r.Context(), transport.UserID(r.Context()), productID, on); err != nil {
+		if errors.Is(err, service.ErrNotFound) || errors.Is(err, service.ErrInvalidID) {
+			h.actionError(w, r, err)
+			return
+		}
+		h.renderProductPrices(w, r, productID, h.errMsg(r, err), "")
+		return
+	}
+	h.renderProductPrices(w, r, productID, "", "")
 }

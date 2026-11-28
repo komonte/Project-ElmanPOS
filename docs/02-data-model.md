@@ -154,6 +154,7 @@ Index: `(parent_id)`.
 | margin_percent | NUMERIC(5,2) | NOT NULL DEFAULT 0, CHECK (margin_percent >= 0) | Target gross margin (%). Over the price without IVA. PVP suggestion when unit cost changes: `pvp_suggested = unit_cost × (1 + tax_rate/100) / (1 - margin_percent/100)`, with the category's IVA rate (costs are net, prices include IVA; F-04). `0` = no automatic suggestion. The app also requires `margin_percent < 100` (at 100 the formula divides by zero). |
 | preferred_supplier_id | BIGINT | FK → suppliers.id, NULL | Preferred supplier; the replenishment report shows who to contact. |
 | shelf_life_days | INTEGER | NULL, CHECK (BETWEEN 1 AND 3650) | How many days it usually lasts from reception (migration `0014`). Purchase reception prefills a batch's expiry with today + these days (F-06). `NULL` = unknown, no prefill. Per product, not per category: one category mixes things that last 7 and 30 days. |
+| open_price | BOOLEAN | NOT NULL DEFAULT FALSE | Unregistered item (migration `0022`): the register types the price on each line and the sale moves no stock. Set by the admin, only on products by unit without batches (F-07). |
 | is_consignment | BOOLEAN | NOT NULL DEFAULT FALSE | Consigned product (owned by supplier until sold). |
 | is_active | BOOLEAN | NOT NULL DEFAULT TRUE | Soft delete / disable. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
@@ -437,6 +438,7 @@ UNIQUE `(cashier_session_id, sale_number)`. The DB only guards per session; "nev
 | unit_cost | NUMERIC(12,2) | NOT NULL | **Snapshot** cost for margin. |
 | tax_rate | NUMERIC(5,2) | NOT NULL | Applied IVA rate snapshot. |
 | uncovered_quantity | NUMERIC(12,3) | NOT NULL DEFAULT 0, CHECK (>= 0 AND <= quantity) | Startup mode (migration `0021`): how much of the line the system did not have. It has no `stock_movements` row and does not touch `stock_balances` (which never goes negative). Partial index on `product_id` where `> 0`. |
+| scanned_code | VARCHAR(40) | NULL, CHECK (not blank) | Unregistered item (migration `0022`): the code scanned that was not found, to create the product later. NULL when nothing was scanned. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 
 > A line with `uncovered_quantity > 0` is **pending** while its sale is `COMPLETED` and no `CONFIRMED` count has a `stock_count_items` row for the product created (snapshot taken) after the sale. That is derived in the query (`ReportStore.Unstocked`): nothing is written to resolve it, and voiding the sale drops it.

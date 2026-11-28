@@ -94,7 +94,9 @@
   <tr class="border-t border-line align-top">
     <td class="px-3 py-2">
       <input type="hidden" name="product_id">
+      <input type="hidden" name="scanned_code">
       <span data-name class="font-bold"></span>
+      <span data-code class="block text-sm text-muted"></span>
       <p data-warn class="text-sm font-bold text-danger" hidden></p>
     </td>
     <td class="px-3 py-2">
@@ -104,7 +106,14 @@
         <span data-unit class="text-sm text-muted"></span>
       </div>
     </td>
-    <td class="px-3 py-2 text-right tabular whitespace-nowrap" data-price-text></td>
+    <td class="px-3 py-2 text-right tabular whitespace-nowrap">
+      <span data-price-text></span>
+      {{/* Solo un artículo sin registrar escribe el precio; los demás lo
+           mandan vacío (el servidor pone el vigente). */}}
+      <input type="hidden" name="unit_price" inputmode="decimal" autocomplete="off"
+             placeholder="$" class="field py-1 tabular text-right w-28"
+             oninput="posRecalc()" onkeydown="posQtyKey(event)">
+    </td>
     <td class="px-3 py-2 text-right tabular font-bold whitespace-nowrap" data-total></td>
     <td class="px-3 py-2 text-right">
       <button type="button" onclick="posRemove(this)" aria-label="{{t "pos.remove"}}"
@@ -135,6 +144,7 @@
      data-tendered="{{t "pos.tendered"}}" data-amount="{{t "pos.amount"}}"
      data-not-found="{{t "pos.scan_not_found"}}" data-no-price="{{t "pos.scan_no_price"}}"
      data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
+     data-open-price="{{t "pos.open_price_missing"}}" data-code-label="{{t "pos.scanned_code"}}"
      data-startup-warn="{{t "pos.startup_warn"}}" data-startup="{{if $.StartupMode}}1{{end}}"
      data-ticket="{{t "ticket.title"}}"></div>
 
@@ -203,7 +213,9 @@
       return;
     }
     htmx.ajax('GET', '/pos/search', { target: posOptions, swap: 'innerHTML', values: { q: q } }).then(function () {
-      const options = posOptions.querySelectorAll('button[data-id]');
+      // Las ofertas de artículo sin registrar no se eligen solas: primero
+      // se avisa que el código no está.
+      const options = posOptions.querySelectorAll('button[data-id]:not([data-open-offer])');
       if (options.length === 1) {
         if (options[0].disabled) {
           posScanMsg.textContent = posText.noPrice.replace('%s', options[0].dataset.name);
@@ -213,9 +225,17 @@
         posAdd(options[0]);
         return;
       }
-      if (options.length === 0) {
+      if (options.length === 0 && !posOptions.querySelector('[data-open-offer]')) {
         posScanMsg.textContent = posText.notFound.replace('%s', q);
         input.select();
+        return;
+      }
+      // No está, pero se puede cobrar como artículo sin registrar: el
+      // cursor va a esa opción (Enter la elige).
+      const offer = posOptions.querySelector('[data-open-offer]');
+      if (offer) {
+        posScanMsg.textContent = posText.notFound.replace('%s', q);
+        offer.focus();
       }
     });
   }
@@ -229,6 +249,12 @@
     posScanMsg.textContent = '';
     document.getElementById('pos-result').replaceChildren();
 
+    // Artículo sin registrar: siempre un renglón nuevo (cada uno con su
+    // precio y su código), y el cursor va al precio.
+    if (p.open) {
+      posAddOpen(p);
+      return;
+    }
     let row = posLines.querySelector('tr[data-id="' + p.id + '"]');
     if (row) {
       const qty = row.querySelector('[name=quantity]');
@@ -265,6 +291,25 @@
     posRecalc();
     if (p.type === 'WEIGHT') qty.focus();
     else posScan.focus();
+  }
+
+  function posAddOpen(p) {
+    const row = document.getElementById('pos-line-tpl').content.firstElementChild.cloneNode(true);
+    row.dataset.id = p.id;
+    row.dataset.type = 'UNIT';
+    row.dataset.open = '1';
+    row.querySelector('[name=product_id]').value = p.id;
+    row.querySelector('[name=scanned_code]').value = p.code || '';
+    row.querySelector('[data-name]').textContent = p.name;
+    if (p.code) row.querySelector('[data-code]').textContent = posText.codeLabel.replace('%s', p.code);
+    const qty = row.querySelector('[name=quantity]');
+    qty.inputMode = 'numeric';
+    qty.value = '1';
+    const price = row.querySelector('[name=unit_price]');
+    price.type = 'text';
+    posLines.appendChild(row);
+    posRecalc();
+    price.focus();
   }
 
   // Enter en una cantidad vuelve al buscador (no cobra).
@@ -327,10 +372,17 @@
     let total = 0, linesOk = true;
     posLines.querySelectorAll('tr').forEach(function (row) {
       const milli = posParseQty(row.querySelector('[name=quantity]').value);
-      const price = Number(row.dataset.price);
+      let price = Number(row.dataset.price);
       let lineTotal = 0;
       const warn = row.querySelector('[data-warn]');
-      if (milli === null || milli === 0 || (row.dataset.type !== 'WEIGHT' && milli % 1000 !== 0)) {
+      if (row.dataset.open) {
+        // Artículo sin registrar: el precio escrito, sin stock que mirar.
+        price = posParseMoney(row.querySelector('[name=unit_price]').value) || 0;
+        warn.hidden = price > 0;
+        warn.textContent = posText.openPrice;
+        if (price <= 0 || milli === null || milli === 0 || milli % 1000 !== 0) linesOk = false;
+        else lineTotal = Math.round(milli * price / 1000);
+      } else if (milli === null || milli === 0 || (row.dataset.type !== 'WEIGHT' && milli % 1000 !== 0)) {
         linesOk = false;
         warn.hidden = true;
       } else {

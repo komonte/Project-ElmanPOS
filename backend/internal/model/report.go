@@ -283,3 +283,15 @@ type UnstockedItem struct {
 	LastSold  string          `json:"last_sold"`
 	OnHand    decimal.Decimal `json:"on_hand"` // el stock de hoy en el sistema
 }
+
+// UnregisteredCode es un código que la caja escaneó, no estaba y se cobró
+// como artículo sin registrar (migración 0022), y que todavía no es de ningún
+// producto: hay que darlo de alta.
+type UnregisteredCode struct {
+	Code      string          `json:"code"`
+	Sales     int             `json:"sales"`    // en cuántas ventas sin anular
+	Quantity  decimal.Decimal `json:"quantity"` // unidades vendidas en total
+	LastPrice decimal.Decimal `json:"last_price"`
+	LastSold  string          `json:"last_sold"`
+	SoldAs    string          `json:"sold_as"` // el artículo sin registrar de la última venta
+}

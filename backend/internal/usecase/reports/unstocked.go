@@ -26,3 +26,10 @@ func (s *Service) Unstocked(ctx context.Context) ([]model.UnstockedItem, error) 
 func (s *Service) UnstockedFor(ctx context.Context, ids []int64) (map[int64]decimal.Decimal, error) {
 	return postgres.NewReportStore(s.db).UnstockedFor(ctx, ids)
 }
+
+// UnregisteredCodes son los códigos cobrados como artículo sin registrar que
+// todavía no son de ningún producto (migración 0022): la lista de qué dar de
+// alta. Lo ven el admin y el repositor (permiso catalog).
+func (s *Service) UnregisteredCodes(ctx context.Context) ([]model.UnregisteredCode, error) {
+	return postgres.NewReportStore(s.db).UnregisteredCodes(ctx)
+}

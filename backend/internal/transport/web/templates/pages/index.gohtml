@@ -18,6 +18,13 @@
 </section>
 {{end}}
 
+{{/* Códigos cobrados como artículo sin registrar: hay que darlos de alta. */}}
+{{with .UnregisteredCount}}
+<section id="unregistered-banner" class="max-w-2xl mb-8 p-4 bg-surface border-l-8 border-tag-deep rounded-sm">
+  <p class="text-lg"><a href="/reports/unregistered" data-pending="unregistered" class="font-bold underline underline-offset-4">{{if eq . 1}}{{t "dashboard.unregistered_one"}}{{else}}{{printf (t "dashboard.unregistered") .}}{{end}}</a></p>
+</section>
+{{end}}
+
 {{/* Precios pendientes (F-06): solo para quien pone precios y si hay algo. */}}
 {{with .Pending}}{{if or .MissingPrices .UnpricedPurchases}}
 <section id="pending-prices" aria-labelledby="pending-heading" class="max-w-2xl mb-8 p-4 bg-danger-soft border-l-8 border-danger rounded-sm">

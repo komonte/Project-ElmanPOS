@@ -93,6 +93,7 @@ func webRoutes(h *web.WebHandler) []route {
 		// Precios, costos e impuestos: solo el admin.
 		{"POST /products/{id}/prices", prices, h.ProductPricesSet},
 		{"POST /products/{id}/costs", prices, h.ProductCostsSet},
+		{"POST /products/{id}/open-price", prices, h.ProductOpenPriceSet},
 		{"POST /purchases/{id}/prices", prices, h.PurchasesSetPrices},
 		{"GET /prices/missing", prices, h.PricesMissing},
 		{"POST /prices/missing", prices, h.PricesMissingSet},
@@ -163,6 +164,8 @@ func webRoutes(h *web.WebHandler) []route {
 		{"GET /reports/restock", stock, h.ReportsRestock},
 		{"GET /reports/expiring", stock, h.ReportsExpiring},
 		{"GET /reports/unstocked", stock, h.ReportsUnstocked},
+		// Códigos cobrados como artículo sin registrar: quien da de alta.
+		{"GET /reports/unregistered", catalog, h.ReportsUnregistered},
 
 		// Configuración del negocio (modo arranque): solo el admin.
 		{"GET /settings", settings, h.SettingsPage},

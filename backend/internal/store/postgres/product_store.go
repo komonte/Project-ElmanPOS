@@ -37,7 +37,7 @@ const productSelect = `
 	       p.brand_id, p.category_id, p.measure_unit, p.sale_type,
 	       p.controls_batches, p.reorder_point, p.max_stock, p.margin_percent,
 	       p.preferred_supplier_id, p.is_consignment, p.is_active,
-	       p.shelf_life_days, p.created_at, p.updated_at,
+	       p.shelf_life_days, p.created_at, p.updated_at, p.open_price,
 	       COALESCE(b.name, ''), c.name, COALESCE(s.name, ''),
 	       cp.unit_price
 	FROM products p
@@ -60,7 +60,7 @@ func scanProduct(row rowScanner) (*model.Product, error) {
 		&p.BrandID, &p.CategoryID, &p.MeasureUnit, &p.SaleType,
 		&p.ControlsBatches, &p.ReorderPoint, &p.MaxStock, &p.MarginPercent,
 		&p.PreferredSupplierID, &p.IsConsignment, &p.IsActive,
-		&p.ShelfLifeDays, &p.CreatedAt, &p.UpdatedAt,
+		&p.ShelfLifeDays, &p.CreatedAt, &p.UpdatedAt, &p.OpenPrice,
 		&p.BrandName, &p.CategoryName, &p.SupplierName,
 		&p.CurrentPrice)
 	if err != nil {
@@ -354,4 +354,30 @@ func productWriteError(err error) error {
 	default:
 		return err
 	}
+}
+
+// SetOpenPrice marca o desmarca un producto como artículo sin registrar
+// (precio escrito en la caja, sin stock; migración 0022). ErrNotFound si no
+// existe. Quién puede y para qué productos lo decide el caso de uso.
+func (s *ProductStore) SetOpenPrice(ctx context.Context, id int64, on bool) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE products SET open_price = $2 WHERE id = $1;`, id, on)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// OpenPriceProducts son los artículos sin registrar activos (open_price), por
+// nombre: lo que la caja ofrece cuando un código no está.
+func (s *ProductStore) OpenPriceProducts(ctx context.Context) ([]*model.Product, error) {
+	return s.queryProducts(ctx, productSelect+`
+		WHERE p.open_price AND p.is_active
+		ORDER BY p.name, p.sku;`)
 }

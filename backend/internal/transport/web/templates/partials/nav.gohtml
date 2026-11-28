@@ -50,7 +50,7 @@
       <a href="/cash" {{if eq .Section "cash"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "cash"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.cash"}}</a>
       {{end}}
-      {{if or (can .Can "reports") (can .Can "stock")}}
+      {{if or (can .Can "reports") (can .Can "stock") (can .Can "catalog")}}
     <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_reports"}}</p>
       {{end}}
       {{if can .Can "reports"}}
@@ -66,6 +66,10 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_expiring"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_expiring"}}</a>
       <a href="/reports/unstocked" {{if eq .Section "reports_unstocked"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_unstocked"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_unstocked"}}</a>
+      {{end}}
+      {{if can .Can "catalog"}}
+      <a href="/reports/unregistered" {{if eq .Section "reports_unregistered"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_unregistered"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_unregistered"}}</a>
       {{end}}
       {{if or (can .Can "users") (can .Can "settings")}}
     <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_admin"}}</p>

@@ -63,6 +63,8 @@ If only the store's PC uses the app, `LISTEN_HOST=127.0.0.1` keeps it off the ne
 
 On the store's PC, `.env` gets a new database name (not `elman_u`, not `elman_demo`) and a long password of its own: `elman_u_dev` is the development one. Postgres reads `DB_PASSWORD` only when the volume is created; to change it later, also run `ALTER USER <user> PASSWORD '...'` inside the database.
 
+Also set `ELMAN_ENV=store` in the root `.env`. Some make targets delete the database (`db-down` and `db-reset` remove the Docker volume) or write test rows into the `.env` database (`test`, `check`), and sales and stock movements can never be deleted. With `ELMAN_ENV=store` those targets refuse to run. To stop Postgres without losing anything: `make db-stop`.
+
 ### First login
 
 Every page asks for a username and password. The seed users (`admin`, `cajero`, `stock`) have no real password yet: set one from the store's PC, then log in with it.

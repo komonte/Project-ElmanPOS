@@ -113,8 +113,8 @@ func TestForbiddenPage(t *testing.T) {
 	}
 }
 
-// El rol se ve arriba del menú, en una etiqueta de color propia, antes de
-// los links; y los títulos de grupo no parecen links.
+// El rol se ve abajo de los links, fijo (fuera de su barra), en una
+// etiqueta de color propia; y los títulos de grupo no parecen links.
 func TestNavShowsRoleOnTop(t *testing.T) {
 	e := NewTemplateEngine()
 	for u, class := range map[*model.User]string{adminUser: "bg-danger", cashierUser: "bg-stock", stockUser: "bg-sky-700"} {
@@ -125,9 +125,10 @@ func TestNavShowsRoleOnTop(t *testing.T) {
 		}
 		html := buf.String()
 		role := strings.Index(html, `id="nav-role" data-role="`+u.Role+`"`)
-		firstLink := strings.Index(html, ">Panel</a>")
-		if role < 0 || firstLink < 0 || role > firstLink {
-			t.Errorf("%s: role badge missing or below the links (%d, %d)", u.Role, role, firstLink)
+		lastLink := strings.LastIndex(html[:strings.Index(html, `id="nav-user"`)+1], `class="shrink-0 flex items-center`)
+		end := strings.Index(html, "</nav>")
+		if role < 0 || lastLink < 0 || role < lastLink || role > end {
+			t.Errorf("%s: role badge missing or not below the links (%d, %d, %d)", u.Role, role, lastLink, end)
 		}
 		if !strings.Contains(html[role:], class) {
 			t.Errorf("%s: badge without %s", u.Role, class)

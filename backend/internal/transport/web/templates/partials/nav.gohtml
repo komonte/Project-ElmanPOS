@@ -10,22 +10,6 @@
     <div class="md:hidden">{{template "lang-select" .}}</div>
   </div>
 
-  {{/* Quién entró, con qué rol, y "Salir" (F-13). Arriba de todo, para que
-       siempre se vea con qué usuario se está trabajando: el rol va en una
-       etiqueta de color (cada rol el suyo). */}}
-  {{with .CurrentUser}}
-  <div id="nav-user" class="mx-2 mb-3 md:mx-3 md:mb-4 px-3 py-2 rounded-md bg-white/10 border border-white/15">
-    <p class="text-xs text-white/60">{{t "nav.signed_in_as"}}</p>
-    <p class="font-bold truncate">{{.Name}}</p>
-    <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
-      <span id="nav-role" data-role="{{.Role}}"
-            class="px-2 py-0.5 rounded-sm text-sm font-bold {{if eq .Role "ADMIN"}}bg-danger text-white{{else if eq .Role "CASHIER"}}bg-stock text-white{{else}}bg-sky-700 text-white{{end}}">{{t (printf "role.%s" .Role)}}</span>
-      <form method="post" action="/logout" class="shrink-0">
-        <button type="submit" id="logout" class="px-3 py-1 rounded-md border-2 border-white/30 text-white hover:border-white">{{t "nav.logout"}}</button>
-      </form>
-    </div>
-  </div>
-  {{end}}
 
   <div id="nav-links" class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
       {{/* Vender es lo que más se usa: va primero y se ve distinto, como
@@ -103,6 +87,23 @@
       {{end}}
   </div>
 
+  {{/* Quién entró, con qué rol, y "Salir" (F-13). Abajo de los links y
+       fuera de su barra de desplazamiento: queda siempre en el mismo lugar
+       y siempre se ve con qué usuario se está trabajando. El rol va en una
+       etiqueta de color (cada rol el suyo). */}}
+  {{with .CurrentUser}}
+  <div id="nav-user" class="mx-2 mb-2 md:mx-3 md:my-3 px-3 py-2 rounded-md bg-white/10 border border-white/15">
+    <p class="text-xs text-white/60">{{t "nav.signed_in_as"}}</p>
+    <p class="font-bold truncate">{{.Name}}</p>
+    <div class="mt-1 flex flex-wrap items-center justify-between gap-2">
+      <span id="nav-role" data-role="{{.Role}}"
+            class="px-2 py-0.5 rounded-sm text-sm font-bold {{if eq .Role "ADMIN"}}bg-danger text-white{{else if eq .Role "CASHIER"}}bg-stock text-white{{else}}bg-sky-700 text-white{{end}}">{{t (printf "role.%s" .Role)}}</span>
+      <form method="post" action="/logout" class="shrink-0">
+        <button type="submit" id="logout" class="px-3 py-1 rounded-md border-2 border-white/30 text-white hover:border-white">{{t "nav.logout"}}</button>
+      </form>
+    </div>
+  </div>
+  {{end}}
   <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>
   {{/* Los links tienen su propia barra de desplazamiento (en celular, de
        costado). Cada link carga una página nueva, y sin esto el menú vuelve

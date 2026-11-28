@@ -62,6 +62,8 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f.exec(t, `UPDATE stores SET is_active = FALSE;`)
+	// Sin redondeo en efectivo (0024): cada test que lo quiera lo prende.
+	f.exec(t, `UPDATE app_settings SET value = '0'::jsonb WHERE key = 'cash_rounding_multiple';`)
 	f.scan(t, &f.storeID, `INSERT INTO stores (name) VALUES ('Local test sales') RETURNING id;`)
 	var taxID int64
 	f.scan(t, &taxID, `INSERT INTO taxes (name, rate) VALUES ('IVA test sales', 21) RETURNING id;`)

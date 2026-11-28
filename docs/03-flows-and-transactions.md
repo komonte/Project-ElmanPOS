@@ -240,7 +240,7 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
 - **Ticket** (`GET /pos/sales/{id}/ticket`, non-fiscal): a standalone 80 mm page without the menu, printed with the browser. "Print receipt" loads it in a hidden iframe and prints it without leaving `/pos`; the same URL reprints. It shows the store's name and address, the register, sale number, date, lines (`0,35 kg × $ 7.000,00/kg` for weight), total, IVA included, payments, "Not a valid invoice", and `VOIDED` when voided (F-08). "Pays with" and the change are not stored: the button passes the cash handed over (`?paid=20000`) and the ticket computes the change against the stored cash payment; a reprint without it shows neither. The page height is measured on load (`size: 80mm auto` is not valid CSS and the browser would fall back to A4/Letter).
 - **DB transaction** (`usecase/sales.Checkout`, one `TxRunner.InTx`). Before it: copy only what the register sends (product, quantity, method, amount, reference: never a price, cost or session) and `Sale.Validate` (at least one line; product set; `quantity > 0` with ≤ 3 decimals; no product twice; at least one payment; valid method; `amount > 0` with 2 decimals; reference ≤ 120 chars; at most one cash payment).
   1. **Session:** `StoreStore.ActiveID` → `CashRegisterStore.Only` → `CashierSessionStore.OpenFor`, then `LockOpen` (`FOR UPDATE`, re-checks `status = 'OPEN'`: it could have closed in between). No register or no open session → `ErrRegisterClosed` (409).
-  2. Read `app_settings.max_sale_weight_kg` (missing → 50).
+  2. Read `app_settings.max_sale_weight_kg` (missing → 50), `startup_mode` and `cash_rounding_multiple` (missing → off).
   3. **Recipes, then lock, then read:** the recipes of the combos in the cart (`ProductComponentStore.ListByPacks`; rows of a product that is no longer `COMPOSITE` are ignored). Then `StockBalanceStore.LockOnHand` for every line product **and every component**, once each, in **ascending `product_id` order** (§6): the product row (`FOR NO KEY UPDATE`) and its balances (`FOR UPDATE`). A missing product → `LineError` (400).
   4. For each line: read the product (inactive → 409); check the quantity by sale type (`ValidateQuantity`: whole for units and combos; ≤ `max_sale_weight_kg` for weight); a combo without components → `ErrComboEmpty` (409); each component is checked again (`model.CheckComponent`: deactivated or turned into a combo after the recipe was saved → `ErrComboComponent`, 409, naming it); current price (none → 409); copy `unit_price` and the category's IVA `tax_rate` (**BR-03**). Each line becomes one or more **draws**: the product itself, or each component with `line quantity × recipe quantity` (kept in `SaleItem.Components`).
   4b. **Stock for the whole cart** (`checkStock`): the draws in cart order take from what each product has (`OnHandAt`), so 1 pack of 20 and 3 loose ones ask 23 of the loose product. Short → 409 with how much was left for that line; for a combo the error also names the component ("PACK: LOOSE CIGARETTE: not enough stock (there is 7)."). Startup mode: the rest goes to that draw's uncovered quantity instead. Every line error is a `*LineError` carrying the product name (and `Component` for a combo).
@@ -251,13 +251,13 @@ Reports (R-XX) are **computed by queries** — nothing is stored. Conventions re
   9. `INSERT INTO stock_movements` (`SALE`, negative, `sale_id`, `store_id`) per draw: one per batch allocation with its `batch_id` and cost, plus one without batch for the uncovered rest. A combo has no movements of its own: its components do.
   10. `stock_balances`: subtract each draw's quantity (minus its uncovered part).
   11. `COMMIT`.
-- **Totals convention:** `unit_price` includes IVA. `subtotal = Σ quantity × unit_price` (each line rounded to cents); `tax_amount = Σ line_total × rate/(100+rate)`, summed unrounded and rounded once (the IVA inside, not added); `total = subtotal − discount_amount` (no discounts yet).
+- **Totals convention:** `unit_price` includes IVA. `subtotal = Σ quantity × unit_price` (each line rounded to cents); `tax_amount = Σ line_total × rate/(100+rate)`, summed unrounded and rounded once (the IVA inside, not added); `total = subtotal − discount_amount`, where the only discount is the cash rounding (below).
 - **Decisions:**
   - **One store, one register.** The sale uses the only register of the only active store; with two, the screen will have to say which (and these checks fail until then, on purpose).
   - **No stock, no sale.** The whole sale is rejected; initial stock is loaded with a count (F-09) first.
   - **No price, no line**; inactive products are not sold.
   - **Combos** (2026-11-28, migration `0023`): the line is the combo, with its own price and its category's IVA; the stock comes out of its components. A combo has no stock of its own. Buying a combo is not done yet: receive the loose units by hand.
-  - **No discounts** (`discount_amount = 0`).
+  - **No discounts** except the **cash rounding** (2026-11-28, migration `0024`, `model.Sale.SettlePayments`): the non-cash payments apply first; what is left for cash is rounded **down** to `cash_rounding_multiple` (100: $12,345 → $12,300; with a $5,000 debit, the cash $7,345 → $7,300). The difference is `discount_amount`, the total drops by it, and the IVA inside (`tax_amount`) is prorated on the total. Card, transfer and QR are never rounded; without a cash payment nothing is rounded; a cash part smaller than the multiple is charged exactly (an $80 candy is not free). The expected cash of the close (F-12) needs nothing new: the cash payment is already the rounded amount. On screen, the total box adds "In cash: $12,300" when it differs, the Cash button prefills the rounded amount, the payment box shows "Rounding −$45" and the change is against the rounded total; the ticket shows the subtotal and "Cash rounding −$45". The margin report (R-07) still works per line, so it does not subtract the rounding: R-09 shows it.
   - **Change is not stored** (MVP): `payments.amount` for cash is what applies to the sale.
   - **Sale number per register**, continuing across sessions, never repeated.
   - Ticket is **non-fiscal** (no AFIP, §7).
@@ -514,7 +514,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Combo components (F-05) | ✓ | ✗ | ✗ (sees them) |
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
-  | Sales and cash & margin reports (R-06, R-07) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
+  | Sales, cash & margin and cash rounding reports (R-06, R-07, R-09) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
   | Restock and expiring reports (R-01, R-02) | ✓ | ✗ | ✓ |
   | Other stock reports (R-03, R-04, R-05; pending) | ✓ | ✗ | ? |
   | User management | ✓ | ✗ | ✗ |
@@ -552,6 +552,10 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Semantics** (`/reports/unstocked`, `ReportStore.Unstocked`, permission `stock`): products with pending `sale_items.uncovered_quantity` (see F-07, startup mode): sale `COMPLETED` and no `CONFIRMED` count whose `stock_count_items` row for the product was created after the sale.
 - **Output:** product, total sold without stock, in how many sales, last sale and today's stock; the ones with more sales first (they move the most: count them first). "Go count" opens the stock count; "Print" for counting with the list in hand. The dashboard shows the startup mode and how many products are pending.
 - **Purchases (F-06):** a purchase never covers what was sold without stock: it goes in whole, with its batch, cost and expiry. What is unknown is how much of the old goods is left, so a received purchase with such products shows "Before shelving: count what was already there" with each product and how much was sold without stock, and the line search marks them ("Sold without stock: 3"). Counting the old goods first keeps them apart from the new ones; counting later also works (the count measures the total), but the shelf is harder to tell apart.
+
+### R-09: Cash rounding (monthly)
+- **Semantics** (`/reports/rounding`, `ReportStore.CashRoundingByBucket`, permission `reports`): for the current month and the 11 before it (store time zone, every month even if empty), the `COMPLETED` sales with `discount_amount > 0`, the sum of `discount_amount`, and the sales with a cash payment. Voided sales do not count.
+- **Output:** the total rounded and the number of rounded sales in the 12 months, then one row per month (newest first) with sales with cash, rounded and amount; and today's multiple (or "not rounded"), which is changed in Settings.
 
 ### R-03: Top Products / ABC
 - **Semantics:** aggregate `sale_items` by `product_id` for a period: units, revenue, margin (via `unit_cost` snapshots).

@@ -412,3 +412,32 @@ func (s *ReportStore) Expiring(ctx context.Context, until string) ([]model.Expir
 	}
 	return out, rows.Err()
 }
+
+// CashRoundingByBucket devuelve, de las ventas COMPLETED, lo redondeado en
+// efectivo en cada tramo que tuvo ventas en efectivo o redondeos, en orden.
+// El redondeo es discount_amount (0024): el único descuento.
+func (s *ReportStore) CashRoundingByBucket(ctx context.Context, buckets []time.Time, end time.Time) ([]model.RoundingTally, error) {
+	if len(buckets) == 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT width_bucket(s.created_at, $3::timestamptz[]) - 1 AS bucket,
+		       count(*) FILTER (WHERE s.discount_amount > 0), COALESCE(SUM(s.discount_amount), 0),
+		       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM payments p WHERE p.sale_id = s.id AND p.method = 'CASH'))
+		FROM sales s
+		WHERE s.status = 'COMPLETED' AND s.created_at >= $1 AND s.created_at < $2
+		GROUP BY bucket ORDER BY bucket;`, buckets[0], end, thresholds(buckets))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.RoundingTally
+	for rows.Next() {
+		var t model.RoundingTally
+		if err := rows.Scan(&t.Bucket, &t.Rounded, &t.Amount, &t.CashSales); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}

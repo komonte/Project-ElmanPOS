@@ -1,7 +1,8 @@
 {{define "content"}}
 {{/* Configuración del negocio (solo el admin). Datos: .Settings
-     (settings.Settings), .Saved, .Error y .UnstockedCount (vendidos sin
-     stock que faltan contar). */}}
+     (settings.Settings), .Saved, .Error, .UnstockedCount (vendidos sin
+     stock que faltan contar) y .RoundingOptions (los múltiplos que se
+     pueden elegir). */}}
 <header class="mb-8">
   <h1 class="shelf-title">{{t "settings.title"}}</h1>
   <p class="mt-4 text-lg text-muted max-w-2xl">{{t "settings.hint"}}</p>
@@ -32,6 +33,25 @@
     <input type="hidden" name="startup_mode" value="on">
     <button type="submit" id="startup-toggle" class="btn-primary">{{t "settings.startup_turn_on"}}</button>
     {{end}}
+  </form>
+</section>
+
+{{/* Redondeo en efectivo (0024): el múltiplo, de una lista fija. */}}
+<section id="settings-rounding" aria-labelledby="rounding-heading"
+         class="mt-6 max-w-3xl p-5 bg-surface border-2 border-line rounded-md">
+  <h2 id="rounding-heading" class="font-display font-bold text-3xl leading-none">{{t "settings.rounding_title"}}</h2>
+  <p class="mt-3 text-muted">{{t "settings.rounding_hint"}}</p>
+  <form method="post" action="/settings/cash-rounding" class="mt-5 flex flex-wrap items-end gap-3">
+    <div>
+      <label for="rounding-multiple" class="field-label">{{t "settings.rounding_multiple"}}</label>
+      <select id="rounding-multiple" name="multiple" class="field">
+        {{$current := .CashRounding}}
+        {{range $.RoundingOptions}}
+        <option value="{{.Value}}" {{if eq .Value $current}}selected{{end}}>{{if eq .Value 0}}{{t "settings.rounding_off"}}{{else}}{{printf (t "settings.rounding_to") (money .Amount)}}{{end}}</option>
+        {{end}}
+      </select>
+    </div>
+    <button type="submit" id="rounding-save" class="btn-primary">{{t "common.save"}}</button>
   </form>
 </section>
 {{end}}

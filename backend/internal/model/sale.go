@@ -63,8 +63,8 @@ var (
 // entera en una transacción o no se guarda (BR-04).
 //
 // Los precios incluyen IVA: Subtotal es la suma de los renglones, TaxAmount
-// es el IVA que ya está adentro y Total = Subtotal − DiscountAmount (por
-// ahora sin descuentos).
+// es el IVA que ya está adentro y Total = Subtotal − DiscountAmount. El
+// único descuento es el redondeo en efectivo (SettlePayments).
 type Sale struct {
 	ID               int64           `json:"id" db:"id"`
 	CashierSessionID int64           `json:"cashier_session_id" db:"cashier_session_id"`
@@ -259,7 +259,8 @@ func (it *SaleItem) lineTax() decimal.Decimal {
 }
 
 // ComputeTotals llena Subtotal, TaxAmount, DiscountAmount (0) y Total con
-// los precios y tasas de los renglones. El IVA se suma sin redondear y se
+// los precios y tasas de los renglones (el redondeo en efectivo lo aplica
+// después SettlePayments). El IVA se suma sin redondear y se
 // redondea una vez. Un renglón que redondea a $0 no se vende (la DB pide
 // total > 0 y no tiene sentido cobrarlo).
 func (s *Sale) ComputeTotals() error {
@@ -291,12 +292,67 @@ func (s *Sale) PaymentsTotal() decimal.Decimal {
 	return sum
 }
 
-// SettlePayments ajusta los pagos al total (después de ComputeTotals). Los
-// pagos tienen que cubrir el total. Solo el efectivo puede pasarse: lo que
-// sobra es el vuelto, y el pago en efectivo queda en lo que se aplica a la
-// venta (Tendered guarda lo entregado). Si sin el efectivo ya se cubre el
-// total, el efectivo sobra entero y se rechaza.
-func (s *Sale) SettlePayments() error {
+// CashRoundingMultiples son los múltiplos que se pueden elegir para el
+// redondeo en efectivo (app_settings cash_rounding_multiple, migración
+// 0024). 0 es sin redondeo. Una lista fija: un valor raro no entra por
+// error.
+var CashRoundingMultiples = []int64{0, 10, 50, 100, 500, 1000}
+
+// ErrInvalidCashRounding: un múltiplo de redondeo que no está en la lista.
+var ErrInvalidCashRounding = errors.New("cash rounding must be 0, 10, 50, 100, 500 or 1000")
+
+// ValidateCashRounding revisa que el múltiplo esté en la lista.
+func ValidateCashRounding(m int64) error {
+	if !slices.Contains(CashRoundingMultiples, m) {
+		return ErrInvalidCashRounding
+	}
+	return nil
+}
+
+// roundCash redondea para abajo la parte en efectivo al múltiplo roundTo
+// (2026-11-28): lo que no es efectivo se aplica primero y lo que queda para
+// el efectivo baja al múltiplo ($12.345 → $12.300 con 100). La diferencia es
+// DiscountAmount y el total baja con ella; el IVA de adentro se prorratea
+// sobre lo cobrado. No redondea si no hay efectivo, si roundTo no es
+// positivo, si no queda nada para el efectivo o si el efectivo no llega al
+// múltiplo (un caramelo de $80 se cobra $80, no sale gratis). Empieza
+// siempre del Subtotal: llamarla dos veces da lo mismo.
+func (s *Sale) roundCash(roundTo decimal.Decimal) {
+	s.DiscountAmount, s.Total = decimal.Zero, s.Subtotal
+	var cash *Payment
+	nonCash := decimal.Zero
+	for _, p := range s.Payments {
+		if p.Method == PaymentCash {
+			cash = p
+		} else {
+			nonCash = nonCash.Add(p.Amount)
+		}
+	}
+	if cash == nil || !roundTo.IsPositive() {
+		return
+	}
+	due := s.Subtotal.Sub(nonCash)
+	rounded := due.Div(roundTo).Floor().Mul(roundTo)
+	if !due.IsPositive() || !rounded.IsPositive() || rounded.Equal(due) {
+		return
+	}
+	s.DiscountAmount = due.Sub(rounded)
+	s.Total = s.Subtotal.Sub(s.DiscountAmount)
+	tax := decimal.Zero
+	for _, it := range s.Items {
+		tax = tax.Add(it.lineTax())
+	}
+	s.TaxAmount = tax.Mul(s.Total).Div(s.Subtotal).Round(2)
+}
+
+// SettlePayments ajusta los pagos al total (después de ComputeTotals). Con
+// roundTo positivo, primero redondea para abajo la parte en efectivo
+// (roundCash). Los pagos tienen que cubrir el total. Solo el efectivo puede
+// pasarse: lo que sobra es el vuelto, y el pago en efectivo queda en lo que
+// se aplica a la venta (Tendered guarda lo entregado). Si sin el efectivo ya
+// se cubre el total, el efectivo sobra entero y se rechaza.
+func (s *Sale) SettlePayments(roundTo decimal.Decimal) error {
+	s.roundCash(roundTo)
 	paid := s.PaymentsTotal()
 	if paid.LessThan(s.Total) {
 		return ErrPaymentsShort

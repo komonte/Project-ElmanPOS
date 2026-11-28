@@ -418,8 +418,8 @@ Index `(item_id)`. Removing an item's last entry deletes the item (the product i
 | status | sale_status | NOT NULL DEFAULT 'COMPLETED' | |
 | subtotal | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | `Σ quantity × unit_price`, each line rounded to cents. **IVA included.** |
 | tax_amount | NUMERIC(12,2) | NOT NULL, CHECK (>= 0) | The IVA already **inside** `subtotal` (`Σ line_total × rate / (100 + rate)`, summed unrounded and rounded once). Informative: it is not added to the total. |
-| discount_amount | NUMERIC(12,2) | NOT NULL DEFAULT 0, CHECK (>= 0) | |
-| total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal − discount_amount` (prices include IVA; no discounts yet, so `total = subtotal`). |
+| discount_amount | NUMERIC(12,2) | NOT NULL DEFAULT 0, CHECK (>= 0) | The cash rounding (migration `0024`): what the cash part lost by rounding down to `cash_rounding_multiple`. The only discount. |
+| total | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | `subtotal − discount_amount` (prices include IVA). What was charged: payments add up to it. |
 | created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | updated_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
 | voided_at | TIMESTAMPTZ | NULL | When the sale was voided (F-08, migration `0018`). |
@@ -592,6 +592,7 @@ Keys in use:
 | `expiry_warning_days` | days, e.g. `30` | seed | R-02: how far ahead the expiring report looks by default. Missing or not a whole number from 1 to 366 → 30. |
 | `currency` | `"ARS"` | seed | nothing yet |
 | `startup_mode` | boolean, `false` | migration `0021` | Startup mode: a sale may sell more than the system stock; the rest goes to `sale_items.uncovered_quantity` and the "Sold without stock" list. Changed by the admin in Administration → Settings (audited). Missing key → off. |
+| `cash_rounding_multiple` | number, `100` | migration `0024` | Cash rounding: the cash part of a sale is rounded **down** to this multiple ($12,345 → $12,300) and the difference goes to `sales.discount_amount`. One of 0 (off), 10, 50, 100, 500, 1000 (`model.CashRoundingMultiples`). A cash part smaller than the multiple is not rounded. Changed by the admin in Administration → Settings (audited). Missing key → off. |
 | `max_sale_weight_kg` | kg, `50` | migration `0017` (not the seed: a database with the real catalog needs it too) | F-10: a heavier sale line is rejected as a typing mistake. Missing key → 50. |
 
 ### 4.26 `stock_adjustments` — known exits

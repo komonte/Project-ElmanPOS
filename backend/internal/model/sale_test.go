@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 )
 
@@ -164,18 +166,18 @@ func TestSaleComputeTotals(t *testing.T) {
 
 func TestSaleSettlePayments(t *testing.T) {
 	sale := func(payments ...*model.Payment) *model.Sale {
-		return &model.Sale{Total: dec("8500"), Payments: payments}
+		return &model.Sale{Subtotal: dec("8500"), Total: dec("8500"), Payments: payments}
 	}
 
 	t.Run("exact", func(t *testing.T) {
 		s := sale(pay(model.PaymentDebit, "8500"))
-		if err := s.SettlePayments(); err != nil || !s.Change.IsZero() {
+		if err := s.SettlePayments(decimal.Zero); err != nil || !s.Change.IsZero() {
 			t.Errorf("err %v, change %s", err, s.Change)
 		}
 	})
 	t.Run("cash with change", func(t *testing.T) {
 		s := sale(pay(model.PaymentCash, "10000"))
-		if err := s.SettlePayments(); err != nil {
+		if err := s.SettlePayments(decimal.Zero); err != nil {
 			t.Fatal(err)
 		}
 		c := s.Payments[0]
@@ -188,7 +190,7 @@ func TestSaleSettlePayments(t *testing.T) {
 	})
 	t.Run("split with cash change", func(t *testing.T) {
 		s := sale(pay(model.PaymentTransfer, "3000"), pay(model.PaymentCash, "6000"))
-		if err := s.SettlePayments(); err != nil {
+		if err := s.SettlePayments(decimal.Zero); err != nil {
 			t.Fatal(err)
 		}
 		if !s.Change.Equal(dec("500")) || !s.Payments[1].Amount.Equal(dec("5500")) {
@@ -197,26 +199,107 @@ func TestSaleSettlePayments(t *testing.T) {
 	})
 	t.Run("exact cash keeps tendered", func(t *testing.T) {
 		s := sale(pay(model.PaymentCash, "8500"))
-		if err := s.SettlePayments(); err != nil || !s.Payments[0].Tendered.Equal(dec("8500")) {
+		if err := s.SettlePayments(decimal.Zero); err != nil || !s.Payments[0].Tendered.Equal(dec("8500")) {
 			t.Errorf("err %v, tendered %s", err, s.Payments[0].Tendered)
 		}
 	})
 	t.Run("short", func(t *testing.T) {
 		s := sale(pay(model.PaymentCash, "8000"))
-		if err := s.SettlePayments(); !errors.Is(err, model.ErrPaymentsShort) {
+		if err := s.SettlePayments(decimal.Zero); !errors.Is(err, model.ErrPaymentsShort) {
 			t.Errorf("err %v", err)
 		}
 	})
 	t.Run("card over the total", func(t *testing.T) {
 		s := sale(pay(model.PaymentCredit, "9000"))
-		if err := s.SettlePayments(); !errors.Is(err, model.ErrPaymentsOverTotal) {
+		if err := s.SettlePayments(decimal.Zero); !errors.Is(err, model.ErrPaymentsOverTotal) {
 			t.Errorf("err %v", err)
 		}
 	})
 	t.Run("cash not needed", func(t *testing.T) {
 		s := sale(pay(model.PaymentDebit, "8500"), pay(model.PaymentCash, "1000"))
-		if err := s.SettlePayments(); !errors.Is(err, model.ErrPaymentsOverTotal) {
+		if err := s.SettlePayments(decimal.Zero); !errors.Is(err, model.ErrPaymentsOverTotal) {
 			t.Errorf("err %v", err)
 		}
 	})
+}
+
+// Redondeo en efectivo (0024): solo la parte en efectivo baja al múltiplo.
+func TestSaleSettlePaymentsCashRounding(t *testing.T) {
+	hundred := dec("100")
+	sale := func(subtotal string, payments ...*model.Payment) *model.Sale {
+		// Un renglón con IVA 21 %: el IVA de adentro se prorratea.
+		return &model.Sale{Subtotal: dec(subtotal), Total: dec(subtotal),
+			Items: []*model.SaleItem{pricedLine("1", subtotal, "21")}, Payments: payments}
+	}
+	tests := []struct {
+		name                    string
+		s                       *model.Sale
+		roundTo                 decimal.Decimal
+		discount, total, change string
+		cash                    string // lo que se aplica en efectivo
+	}{
+		{"all cash, exact", sale("12345", pay(model.PaymentCash, "12300")), hundred, "45", "12300", "0", "12300"},
+		{"all cash, with change", sale("12345", pay(model.PaymentCash, "20000")), hundred, "45", "12300", "7700", "12300"},
+		{"tendered the unrounded amount", sale("12345", pay(model.PaymentCash, "12345")), hundred, "45", "12300", "45", "12300"},
+		{"card first, cash the rest", sale("12345", pay(model.PaymentDebit, "5000"), pay(model.PaymentCash, "7300")),
+			hundred, "45", "12300", "0", "7300"},
+		{"card part is never rounded", sale("12345", pay(model.PaymentDebit, "12345")), hundred, "0", "12345", "0", ""},
+		{"already a multiple", sale("12300", pay(model.PaymentCash, "12300")), hundred, "0", "12300", "0", "12300"},
+		{"cash below the multiple is not rounded", sale("80", pay(model.PaymentCash, "100")), hundred, "0", "80", "20", "80"},
+		{"card leaves less than the multiple", sale("12345", pay(model.PaymentDebit, "12300"), pay(model.PaymentCash, "45")),
+			hundred, "0", "12345", "0", "45"},
+		{"off", sale("12345", pay(model.PaymentCash, "12345")), decimal.Zero, "0", "12345", "0", "12345"},
+		{"multiple of 10", sale("12345", pay(model.PaymentCash, "12340")), dec("10"), "5", "12340", "0", "12340"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.s.SettlePayments(tt.roundTo); err != nil {
+				t.Fatal(err)
+			}
+			if !tt.s.DiscountAmount.Equal(dec(tt.discount)) || !tt.s.Total.Equal(dec(tt.total)) ||
+				!tt.s.Change.Equal(dec(tt.change)) {
+				t.Errorf("discount %s total %s change %s, want %s %s %s",
+					tt.s.DiscountAmount, tt.s.Total, tt.s.Change, tt.discount, tt.total, tt.change)
+			}
+			if !tt.s.Total.Equal(tt.s.Subtotal.Sub(tt.s.DiscountAmount)) || !tt.s.PaymentsTotal().Equal(tt.s.Total) {
+				t.Errorf("total %s, subtotal %s, payments %s", tt.s.Total, tt.s.Subtotal, tt.s.PaymentsTotal())
+			}
+			for _, p := range tt.s.Payments {
+				if p.Method == model.PaymentCash && !p.Amount.Equal(dec(tt.cash)) {
+					t.Errorf("cash applied %s, want %s", p.Amount, tt.cash)
+				}
+			}
+		})
+	}
+
+	// El IVA de adentro baja con el total: 12.300 × 21 / 121 = 2.134,71.
+	s := sale("12345", pay(model.PaymentCash, "12300"))
+	if err := s.SettlePayments(hundred); err != nil {
+		t.Fatal(err)
+	}
+	if !s.TaxAmount.Equal(dec("2134.71")) {
+		t.Errorf("tax %s, want 2134.71", s.TaxAmount)
+	}
+	// Llamarla dos veces da lo mismo.
+	if err := s.SettlePayments(hundred); err != nil || !s.Total.Equal(dec("12300")) {
+		t.Errorf("second call: err %v, total %s", err, s.Total)
+	}
+	// Con el efectivo redondeado, entregar menos que eso no alcanza.
+	short := sale("12345", pay(model.PaymentCash, "12299"))
+	if err := short.SettlePayments(hundred); !errors.Is(err, model.ErrPaymentsShort) {
+		t.Errorf("short: err %v", err)
+	}
+}
+
+func TestValidateCashRounding(t *testing.T) {
+	for _, m := range model.CashRoundingMultiples {
+		if err := model.ValidateCashRounding(m); err != nil {
+			t.Errorf("%d: %v", m, err)
+		}
+	}
+	for _, m := range []int64{-100, 1, 99, 200, 5000} {
+		if err := model.ValidateCashRounding(m); !errors.Is(err, model.ErrInvalidCashRounding) {
+			t.Errorf("%d: err %v", m, err)
+		}
+	}
 }

@@ -24,8 +24,11 @@
 //   - De un producto con lotes, sale de los lotes en orden FIFO; lo que los
 //     lotes no cubren sale sin lote. Cada lote a su costo y sin lote al costo
 //     promedio vigente. El promedio no cambia.
-//   - Sin descuentos. Los pagos tienen que cubrir el total; solo el efectivo
-//     puede pasarse (el vuelto no se guarda).
+//   - El único descuento es el redondeo en efectivo (2026-11-28, migración
+//     0024): la parte en efectivo baja al múltiplo de cash_rounding_multiple
+//     y la diferencia queda en discount_amount (model.Sale.SettlePayments).
+//     Los pagos tienen que cubrir el total; solo el efectivo puede pasarse
+//     (el vuelto no se guarda).
 //   - Número de venta por caja, sin repetirse entre sesiones.
 //   - Combos (2026-11-28, migración 0023): el renglón es el combo, con su
 //     precio y el IVA de su categoría; el stock sale de sus componentes (la
@@ -63,6 +66,10 @@ const MaxWeightKey = "max_sale_weight_kg"
 // StartupModeKey es el ajuste del modo arranque (migración 0021). Si no
 // está, es como si estuviera apagado.
 const StartupModeKey = "startup_mode"
+
+// CashRoundingKey es el múltiplo del redondeo en efectivo (migración 0024).
+// Si no está, no se redondea.
+const CashRoundingKey = "cash_rounding_multiple"
 
 // defaultMaxWeight se usa si el ajuste no está (alguien lo borró).
 var defaultMaxWeight = decimal.NewFromInt(50)
@@ -167,6 +174,10 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		if err != nil {
 			return err
 		}
+		roundTo, err := CashRounding(ctx, tx)
+		if err != nil {
+			return err
+		}
 
 		// Las recetas de los combos se leen antes de trabar: dicen qué stock
 		// hay que trabar. Cambiar una receta solo afecta las ventas que vienen.
@@ -217,7 +228,7 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 		if err := sale.ComputeTotals(); err != nil {
 			return lineOrValidation(sale, err)
 		}
-		if err := sale.SettlePayments(); err != nil {
+		if err := sale.SettlePayments(roundTo); err != nil {
 			return fmt.Errorf("%w: %w", service.ErrValidation, err)
 		}
 
@@ -346,6 +357,16 @@ func StartupMode(ctx context.Context, db postgres.DBTX) (bool, error) {
 		return false, nil
 	}
 	return on, err
+}
+
+// CashRounding es el múltiplo al que se redondea para abajo la parte en
+// efectivo (0: no se redondea). Sin el ajuste, 0.
+func CashRounding(ctx context.Context, db postgres.DBTX) (decimal.Decimal, error) {
+	m, err := postgres.NewSettingStore(db).Decimal(ctx, CashRoundingKey)
+	if errors.Is(err, store.ErrNotFound) {
+		return decimal.Zero, nil
+	}
+	return m, err
 }
 
 // priceLine revisa un renglón (producto vendible, cantidad) y le pone

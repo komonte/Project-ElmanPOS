@@ -1,0 +1,56 @@
+{{define "content"}}
+{{/* Redondeo en efectivo por mes (0024). Datos: .Rows (roundingRow, el mes
+     más nuevo primero), .Total y .Multiple (el múltiplo de hoy; 0 = sin
+     redondeo). */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "report.rounding_title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "report.rounding_hint"}}</p>
+  {{if .Multiple.IsPositive}}
+  <p id="rounding-multiple" class="mt-2 text-lg">{{printf (t "report.rounding_now") (money .Multiple)}}</p>
+  {{else}}
+  <p id="rounding-multiple" class="mt-2 text-lg font-bold">{{t "report.rounding_off"}}</p>
+  {{end}}
+</header>
+
+<section aria-label="{{t "report.summary"}}" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 max-w-3xl">
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.rounding_amount_year"}}</p>
+    <p id="rounding-total" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{money .Total.Amount}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "report.rounding_count_year"}}</p>
+    <p id="rounding-count" class="font-display font-bold text-3xl xl:text-4xl tabular whitespace-nowrap">{{.Total.Rounded}}</p>
+  </div>
+</section>
+
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md max-w-3xl">
+  <table id="rounding-rows" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap">{{t "report.col_month"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.rounding_cash_sales"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.rounding_rounded"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold whitespace-nowrap text-right">{{t "report.rounding_amount"}}</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .Rows}}
+      <tr class="{{if eq .CashSales 0}}text-muted{{end}}" data-month>
+        <th scope="row" class="px-3 py-2 font-bold whitespace-nowrap">{{.Label}}</th>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{.CashSales}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap">{{.Rounded}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{money .Amount}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+    <tfoot class="border-t-2 border-line">
+      <tr>
+        <th scope="row" class="px-3 py-3 font-bold">{{t "report.total"}}</th>
+        <td class="px-3 py-3 text-right tabular font-bold">{{.Total.CashSales}}</td>
+        <td class="px-3 py-3 text-right tabular font-bold">{{.Total.Rounded}}</td>
+        <td class="px-3 py-3 text-right tabular font-bold">{{money .Total.Amount}}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{{end}}

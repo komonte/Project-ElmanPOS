@@ -892,5 +892,26 @@
   "error.component_pack_not_combo": "Only a combo has components. Change the sale type to «Combo» first.",
   "error.component_is_combo": "A combo cannot go inside another combo.",
   "error.component_open_price": "An unregistered item cannot be a component: it has no stock.",
-  "error.component_inactive": "That product is inactive: reactivate it to use it in the combo."
+  "error.component_inactive": "That product is inactive: reactivate it to use it in the combo.",
+
+  "settings.rounding_title": "Cash rounding",
+  "settings.rounding_hint": "What is paid in cash is rounded down to the chosen multiple: with $100, $12,345 is charged $12,300. Card, transfer and QR are charged exactly. If the cash part does not reach the multiple (an $80 candy), it is charged exactly.",
+  "settings.rounding_multiple": "Round to",
+  "settings.rounding_off": "Do not round",
+  "settings.rounding_to": "Multiples of %s",
+  "error.cash_rounding_invalid": "Choose one of the multiples in the list.",
+  "pos.rounding": "Rounding",
+  "pos.cash_total": "In cash: %s",
+  "ticket.subtotal": "Subtotal",
+  "ticket.rounding": "Cash rounding",
+  "nav.report_rounding": "Rounding",
+  "report.rounding_title": "Cash rounding",
+  "report.rounding_hint": "How much was not charged each month by rounding down what is paid in cash. It is already taken off the sales and the register's expected cash.",
+  "report.rounding_now": "Today cash is rounded to multiples of %s (change it in Settings).",
+  "report.rounding_off": "Today cash is not rounded (change it in Settings).",
+  "report.rounding_amount_year": "Rounded in the last 12 months",
+  "report.rounding_count_year": "Sales rounded in the last 12 months",
+  "report.rounding_cash_sales": "Sales with cash",
+  "report.rounding_rounded": "Rounded",
+  "report.rounding_amount": "Rounded off"
 }

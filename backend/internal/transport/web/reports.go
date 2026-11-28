@@ -164,3 +164,33 @@ func (h *WebHandler) ReportsCash(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, "report_cash.gohtml", data)
 }
+
+// roundingRow es una fila del reporte de redondeo: el mes ("marzo 2031") y
+// sus números.
+type roundingRow struct {
+	Label string
+	reports.RoundingMonth
+}
+
+// ReportsRounding handles GET /reports/rounding: cuánto se redondeó en
+// efectivo cada mes (los últimos 12) y el múltiplo de hoy.
+func (h *WebHandler) ReportsRounding(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"Section": "reports_rounding", "TitleKey": "report.rounding_title"}
+	rep, err := h.reports.Rounding(r.Context(), time.Now(), storeLocation())
+	if err != nil {
+		http.Error(w, h.errMsg(r, err), http.StatusInternalServerError)
+		return
+	}
+	lang := transport.GetLocale(r.Context())
+	rows := make([]roundingRow, len(rep.Months))
+	for i, m := range rep.Months {
+		rows[i] = roundingRow{Label: bucketLabel(lang, model.ByMonth, m.Start), RoundingMonth: m}
+	}
+	data["Rows"], data["Total"], data["Multiple"] = rows, rep.Total, decimal.Zero
+	if h.settings != nil {
+		if s, err := h.settings.Get(r.Context()); err == nil {
+			data["Multiple"] = decimal.NewFromInt(s.CashRounding)
+		}
+	}
+	h.render(w, r, "report_rounding.gohtml", data)
+}

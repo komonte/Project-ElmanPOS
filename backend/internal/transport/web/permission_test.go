@@ -64,7 +64,7 @@ func TestNavByRole(t *testing.T) {
 				in = in || s == l
 			}
 			// El inicio también tiene links al catálogo: se cuenta el menú.
-			nav := html[:strings.Index(html, `id="nav-user"`)]
+			nav := html[:strings.Index(html, `</nav>`)]
 			if strings.Contains(nav, l) != in {
 				t.Errorf("%s: link %s shown = %v, want %v", u.Role, l, !in, in)
 			}
@@ -110,5 +110,38 @@ func TestForbiddenPage(t *testing.T) {
 	}
 	if w.Code != http.StatusForbidden {
 		t.Errorf("got %d", w.Code)
+	}
+}
+
+// El rol se ve abajo de los links, fijo (fuera de su barra), en una
+// etiqueta de color propia; y los títulos de grupo no parecen links.
+func TestNavShowsRoleOnTop(t *testing.T) {
+	e := NewTemplateEngine()
+	for u, class := range map[*model.User]string{adminUser: "bg-danger", cashierUser: "bg-stock", stockUser: "bg-sky-700"} {
+		var buf bytes.Buffer
+		data := map[string]any{"Lang": "es", "Section": "", "TitleKey": "", "CurrentUser": u, "Can": canMap(u)}
+		if err := e.Render(&buf, "es", "index.gohtml", data); err != nil {
+			t.Fatal(err)
+		}
+		html := buf.String()
+		role := strings.Index(html, `id="nav-role" data-role="`+u.Role+`"`)
+		lastLink := strings.LastIndex(html[:strings.Index(html, `id="nav-user"`)+1], `class="shrink-0 flex items-center`)
+		end := strings.Index(html, "</nav>")
+		if role < 0 || lastLink < 0 || role < lastLink || role > end {
+			t.Errorf("%s: role badge missing or not below the links (%d, %d, %d)", u.Role, role, lastLink, end)
+		}
+		if !strings.Contains(html[role:], class) {
+			t.Errorf("%s: badge without %s", u.Role, class)
+		}
+		if !strings.Contains(html, "Entraste como") {
+			t.Errorf("%s: missing the signed-in label", u.Role)
+		}
+		if strings.Contains(html, "text-sm text-white/55") {
+			t.Errorf("%s: group titles still look like links", u.Role)
+		}
+		// El menú recuerda dónde estaba al cambiar de página.
+		if !strings.Contains(html, `id="nav-links"`) || !strings.Contains(html, "elmanpos-nav-scroll") {
+			t.Errorf("%s: menu without its scroll memory", u.Role)
+		}
 	}
 }

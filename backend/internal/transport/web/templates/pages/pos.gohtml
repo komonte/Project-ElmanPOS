@@ -79,6 +79,25 @@
         {{end}}
       </div>
       <div id="pos-payments" class="space-y-2"></div>
+      {{/* Fiado: con un pago a cuenta corriente hay que elegir el cliente
+           (o darlo de alta con el nombre). Sin cliente no se cobra. */}}
+      <div id="pos-customer-box" class="p-2 border-2 border-tag rounded-md space-y-2" hidden>
+        <input type="hidden" name="customer_id" id="pos-customer-id" form="pos-form">
+        <div id="pos-customer-chosen" class="flex flex-wrap items-center justify-between gap-2" hidden>
+          <p><span class="text-sm text-muted">{{t "pos.customer"}}:</span> <span class="font-bold" data-name></span>
+            <span class="block text-sm text-danger font-bold" data-debt></span></p>
+          <button type="button" onclick="posClearCustomer()" class="btn-secondary px-2 py-1">{{t "pos.customer_change"}}</button>
+        </div>
+        <div id="pos-customer-search">
+          <label for="pos-customer-q" class="field-label">{{t "pos.customer_search"}}</label>
+          <input type="search" id="pos-customer-q" name="q" autocomplete="off" class="field"
+                 hx-get="/pos/customers" hx-target="#pos-customer-options" hx-swap="innerHTML"
+                 hx-trigger="input changed delay:300ms, search, keydown[key=='Enter']"
+                 onkeydown="if (event.key === 'Enter') event.preventDefault()">
+          <ul id="pos-customer-options" class="mt-1 border-2 border-line rounded-md divide-y-2 divide-line bg-surface empty:hidden"></ul>
+          <p class="field-hint">{{t "pos.customer_hint"}}</p>
+        </div>
+      </div>
       <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-lg">
         <dt id="pos-rounding-label" hidden>{{t "pos.rounding"}}</dt><dd id="pos-rounding" class="text-right tabular" hidden></dd>
         <dt>{{t "pos.paid"}}</dt><dd id="pos-paid" class="text-right tabular">$ 0,00</dd>
@@ -150,7 +169,7 @@
      data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
      data-open-price="{{t "pos.open_price_missing"}}" data-code-label="{{t "pos.scanned_code"}}"
      data-startup-warn="{{t "pos.startup_warn"}}" data-startup="{{if $.StartupMode}}1{{end}}"
-     data-ticket="{{t "ticket.title"}}" data-cash-total="{{t "pos.cash_total"}}"
+     data-ticket="{{t "ticket.title"}}" data-cash-total="{{t "pos.cash_total"}}" data-customer-debt="{{t "pos.customer_debt"}}"
      data-rounding-step="{{with $.CashRounding}}{{.}}{{else}}0{{end}}"></div>
 
 <script>
@@ -334,11 +353,11 @@
   // cursor va ahí.
   function posAddPayment(method) {
     const box = document.getElementById('pos-payments');
-    if (method === 'CASH') {
-      const cash = box.querySelector('[data-payment][data-method=CASH] [data-amount]');
-      if (cash) {
-        cash.focus();
-        cash.select();
+    if (method === 'CASH' || method === 'ACCOUNT') {
+      const same = box.querySelector('[data-payment][data-method=' + method + '] [data-amount]');
+      if (same) {
+        same.focus();
+        same.select();
         return;
       }
     }
@@ -348,7 +367,7 @@
     el.querySelector('[data-method-label]').textContent =
       document.querySelector('button[data-method="' + method + '"]').textContent;
     el.querySelector('[data-amount-label]').textContent = method === 'CASH' ? posText.tendered : posText.amount;
-    if (method === 'CASH') el.querySelector('[data-ref-box]').hidden = true;
+    if (method === 'CASH' || method === 'ACCOUNT') el.querySelector('[data-ref-box]').hidden = true;
     let due = posTotals().due;
     // El efectivo se precarga ya redondeado.
     if (method === 'CASH') due = posRoundCash(due);
@@ -356,12 +375,48 @@
     if (due > 0) amount.value = (due / 100).toFixed(2).replace('.', posLang === 'es' ? ',' : '.');
     box.appendChild(el);
     posRecalc();
+    // Fiado: primero el cliente.
+    if (method === 'ACCOUNT' && !document.getElementById('pos-customer-id').value) {
+      document.getElementById('pos-customer-q').focus();
+      return;
+    }
     amount.focus();
     amount.select();
   }
 
+  // Fiado: elegir el cliente (un botón de pos_customers), cambiarlo o darlo
+  // de alta con lo escrito.
+  function posPickCustomer(button) {
+    document.getElementById('pos-customer-id').value = button.dataset.customer;
+    const chosen = document.getElementById('pos-customer-chosen');
+    chosen.querySelector('[data-name]').textContent = button.dataset.name;
+    // data-debt solo viene si debe algo.
+    chosen.querySelector('[data-debt]').textContent =
+      button.dataset.debt ? posText.customerDebt.replace('%s', button.dataset.debt) : '';
+    chosen.hidden = false;
+    document.getElementById('pos-customer-search').hidden = true;
+    document.getElementById('pos-customer-options').replaceChildren();
+    posRecalc();
+    const amount = document.querySelector('#pos-payments [data-method=ACCOUNT] [data-amount]');
+    if (amount) { amount.focus(); amount.select(); }
+  }
+  function posClearCustomer() {
+    document.getElementById('pos-customer-id').value = '';
+    document.getElementById('pos-customer-chosen').hidden = true;
+    document.getElementById('pos-customer-search').hidden = false;
+    const q = document.getElementById('pos-customer-q');
+    q.value = '';
+    posRecalc();
+    q.focus();
+  }
+  function posNewCustomer(button) {
+    htmx.ajax('POST', '/pos/customers', { target: '#pos-customer-options', swap: 'innerHTML',
+      values: { name: button.dataset.q } });
+  }
+
   function posRemovePayment(button) {
     button.closest('[data-payment]').remove();
+    if (!document.querySelector('#pos-payments [data-method=ACCOUNT]')) posClearCustomer();
     posRecalc();
   }
 
@@ -417,9 +472,10 @@
       row.querySelector('[data-total]').textContent = lineTotal ? posMoney(lineTotal) : '';
       total += lineTotal;
     });
-    let paid = 0, cash = 0, hasCash = false, paysOk = true;
+    let paid = 0, cash = 0, hasCash = false, paysOk = true, account = false;
     document.querySelectorAll('#pos-payments [data-payment]').forEach(function (p) {
       if (p.dataset.method === 'CASH') hasCash = true;
+      if (p.dataset.method === 'ACCOUNT') account = true;
       const cents = posParseMoney(p.querySelector('[data-amount]').value);
       if (cents === null || cents <= 0) {
         paysOk = false;
@@ -439,7 +495,9 @@
     return {
       total: total, charged: charged, rounding: rounding, cashCharged: cashCharged, cashDue: cashDue,
       paid: paid, due: Math.max(charged - paid, 0), change: Math.max(excess, 0),
-      ok: posLines.children.length > 0 && linesOk && paysOk && total > 0 && paid >= charged && changeOk,
+      account: account,
+      ok: posLines.children.length > 0 && linesOk && paysOk && total > 0 && paid >= charged && changeOk &&
+        (!account || document.getElementById('pos-customer-id').value !== ''),
     };
   }
 
@@ -464,6 +522,7 @@
     const due = document.getElementById('pos-due');
     due.textContent = posMoney(changing ? t.change : t.due);
     due.classList.toggle('text-2xl', changing);
+    document.getElementById('pos-customer-box').hidden = !t.account;
     document.getElementById('pos-charge').disabled = !t.ok;
   }
 
@@ -482,10 +541,17 @@
   // Cobrada: el carrito y los pagos se vacían y se sigue escaneando. Con
   // error, todo queda como estaba.
   document.addEventListener('htmx:afterSwap', function (e) {
+    // Fiado: el cliente recién creado se elige solo.
+    if (e.detail.target.id === 'pos-customer-options') {
+      const created = e.detail.target.querySelector('[data-created]');
+      if (created) posPickCustomer(created);
+      return;
+    }
     if (e.detail.target.id !== 'pos-result') return;
     if (e.detail.target.querySelector('[data-sale-done]')) {
       posLines.replaceChildren();
       document.getElementById('pos-payments').replaceChildren();
+      posClearCustomer();
     }
     posRecalc();
     posScan.focus();

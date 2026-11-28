@@ -130,3 +130,43 @@ func (h *WebHandler) CustomersDeactivate(w http.ResponseWriter, r *http.Request)
 func (h *WebHandler) CustomersReactivate(w http.ResponseWriter, r *http.Request) {
 	h.customerSetActive(w, r, true)
 }
+
+// Fiado en la caja (permiso sell): buscar el cliente, con lo que debe, o
+// darlo de alta con solo el nombre.
+
+// PosCustomers handles GET /pos/customers?q=...: los clientes activos que
+// coinciden, para elegir uno al cobrar con cuenta corriente.
+func (h *WebHandler) PosCustomers(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.FormValue("q"))
+	data := map[string]any{"Query": q}
+	if q != "" {
+		found, err := h.customers.SearchWithDebt(r.Context(), q)
+		if err != nil {
+			h.actionError(w, r, err)
+			return
+		}
+		data["Customers"] = found
+		exact := false
+		for _, c := range found {
+			if strings.EqualFold(strings.Join(strings.Fields(c.Name), " "), strings.Join(strings.Fields(q), " ")) {
+				exact = true
+			}
+		}
+		data["OfferNew"] = !exact
+	}
+	h.renderPartial(w, r, "pos_customers.gohtml", data)
+}
+
+// PosCustomersCreate handles POST /pos/customers (name): da de alta un
+// cliente con solo el nombre y lo devuelve ya elegido (data-created). Un
+// error (nombre repetido, muy corto) va como un renglón de la lista.
+func (h *WebHandler) PosCustomersCreate(w http.ResponseWriter, r *http.Request) {
+	c, err := h.customers.Create(r.Context(), transport.UserID(r.Context()), &model.Customer{Name: r.FormValue("name")})
+	if err != nil {
+		h.renderPartial(w, r, "pos_customers.gohtml", map[string]any{"Error": h.errMsg(r, err)})
+		return
+	}
+	h.renderPartial(w, r, "pos_customers.gohtml", map[string]any{
+		"Customers": []customers.WithDebt{{Customer: c}}, "Created": true,
+	})
+}

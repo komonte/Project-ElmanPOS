@@ -8,6 +8,7 @@
   <p class="font-display font-bold text-2xl">{{printf (t "pos.done") .SaleNumber}}</p>
   <p>{{t "pos.total"}}: <span class="font-bold tabular">{{money .Total}}</span>
     {{if .Change.IsPositive}} · {{t "pos.change"}}: <span class="font-bold tabular text-xl">{{money .Change}}</span>{{end}}</p>
+  {{with .CustomerName}}<p data-on-account>{{printf (t "pos.done_on_account") .}}</p>{{end}}
   <p><a href="{{$.TicketURL}}" target="_blank" class="btn-secondary" id="pos-print"
         onclick="posPrintTicket(event, this.href)">{{t "pos.print_ticket"}}</a></p>
 </div>

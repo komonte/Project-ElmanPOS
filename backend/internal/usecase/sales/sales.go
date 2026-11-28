@@ -38,6 +38,11 @@
 //     y los combos se suma por producto: 1 atado de 20 y 3 sueltos piden 23
 //     sueltos. En modo arranque, lo que falta de un componente queda en su
 //     Uncovered. Anular no cambia: devuelve cada movimiento de la venta.
+//   - Fiado (2026-11-28, migración 0026): un pago ACCOUNT (cuenta
+//     corriente) deja esa parte debida por el cliente de la venta, que
+//     tiene que existir y estar activo. Es un medio más: se puede combinar
+//     con efectivo (el redondeo es solo del efectivo). No es plata en la
+//     caja: el cierre no lo cuenta.
 //   - by es el usuario que cobra (F-13): queda en sales.created_by y en el
 //     performed_by de los movimientos.
 //
@@ -86,6 +91,9 @@ var (
 	ErrComboComponent = fmt.Errorf("a component of the combo cannot be sold: %w", service.ErrConflict)
 	ErrNoPrice        = fmt.Errorf("product has no price: %w", service.ErrConflict)
 	ErrNotEnoughStock = fmt.Errorf("not enough stock: %w", service.ErrConflict)
+	// ErrCustomerUnavailable: el cliente de una venta fiada no existe o
+	// está desactivado.
+	ErrCustomerUnavailable = fmt.Errorf("the customer does not exist or is inactive: %w", service.ErrConflict)
 	// ErrOpenPriceMissing: un artículo sin registrar sin precio escrito.
 	ErrOpenPriceMissing = fmt.Errorf("write the price of the unregistered item: %w", service.ErrValidation)
 )
@@ -163,6 +171,17 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 			return err
 		}
 		sale.CashierSessionID, sale.RegisterName = sess.ID, sess.RegisterName
+		// Fiado: el cliente tiene que existir y estar activo.
+		if sale.CustomerID != nil {
+			c, err := postgres.NewCustomerStore(tx).GetByID(ctx, *sale.CustomerID)
+			if errors.Is(err, store.ErrNotFound) || (err == nil && !c.IsActive) {
+				return ErrCustomerUnavailable
+			}
+			if err != nil {
+				return err
+			}
+			sale.CustomerName = c.Name
+		}
 
 		maxWeight, err := postgres.NewSettingStore(tx).Decimal(ctx, MaxWeightKey)
 		if errors.Is(err, store.ErrNotFound) {
@@ -291,7 +310,7 @@ func (s *Service) Checkout(ctx context.Context, by int64, in *model.Sale) (*mode
 // copyInput copia de in solo lo que manda la caja: así nada que venga de
 // afuera (un precio, un costo, otra sesión) llega a la DB.
 func copyInput(in *model.Sale) *model.Sale {
-	out := &model.Sale{}
+	out := &model.Sale{CustomerID: in.CustomerID}
 	for _, it := range in.Items {
 		if it == nil {
 			out.Items = append(out.Items, nil)

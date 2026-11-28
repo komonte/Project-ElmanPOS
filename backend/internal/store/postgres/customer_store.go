@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/lib/pq"
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 )
@@ -124,4 +127,36 @@ func (s *CustomerStore) SetActive(ctx context.Context, id int64, active bool) er
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+// debtSelect es la deuda de cada cliente: lo que se le fió (pagos ACCOUNT
+// de ventas COMPLETED). Una venta anulada deja de contar sola.
+const debtSelect = `
+	SELECT s.customer_id, SUM(p.amount) AS debt
+	FROM payments p JOIN sales s ON s.id = p.sale_id
+	WHERE p.method = 'ACCOUNT' AND s.status = 'COMPLETED' AND s.customer_id IS NOT NULL
+	GROUP BY s.customer_id`
+
+// Debts devuelve cuánto debe cada uno de los clientes ids. Los que no deben
+// nada no están en el mapa.
+func (s *CustomerStore) Debts(ctx context.Context, ids []int64) (map[int64]decimal.Decimal, error) {
+	out := map[int64]decimal.Decimal{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT customer_id, debt FROM (`+debtSelect+`) d
+		WHERE customer_id = ANY($1) AND debt <> 0;`, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var debt decimal.Decimal
+		if err := rows.Scan(&id, &debt); err != nil {
+			return nil, err
+		}
+		out[id] = debt
+	}
+	return out, rows.Err()
 }

@@ -29,11 +29,18 @@ const (
 	PaymentCredit   = "CREDIT_CARD"
 	PaymentTransfer = "TRANSFER"
 	PaymentQR       = "QR"
+	// PaymentAccount es la cuenta corriente (fiado, migración 0026): la
+	// venta queda debida por el cliente. No es plata en la caja.
+	PaymentAccount = "ACCOUNT"
 )
 
-// PaymentMethods son los medios que se ofrecen al cobrar, en el orden en que
-// se muestran.
+// PaymentMethods son los medios de la caja: los que se cuentan en el cierre
+// ciego (F-12), en el orden en que se muestran.
 var PaymentMethods = []string{PaymentCash, PaymentDebit, PaymentCredit, PaymentTransfer, PaymentQR}
+
+// SaleMethods son los medios con que se puede cobrar una venta: los de la
+// caja y la cuenta corriente, que no se cuenta al cerrar.
+var SaleMethods = []string{PaymentCash, PaymentDebit, PaymentCredit, PaymentTransfer, PaymentQR, PaymentAccount}
 
 var (
 	ErrNilSale                 = errors.New("sale cannot be nil")
@@ -48,7 +55,7 @@ var (
 	ErrSaleTotalTooLarge       = errors.New("sale total cannot exceed 9999999999.99")
 	ErrSaleNoPayments          = errors.New("sale needs at least one payment")
 	ErrNilPayment              = errors.New("payment cannot be nil")
-	ErrInvalidPaymentMethod    = errors.New("payment method must be CASH, DEBIT_CARD, CREDIT_CARD, TRANSFER or QR")
+	ErrInvalidPaymentMethod    = errors.New("payment method must be CASH, DEBIT_CARD, CREDIT_CARD, TRANSFER, QR or ACCOUNT")
 	ErrInvalidPaymentAmount    = errors.New("payment amount must be greater than 0, up to 9999999999.99, with up to 2 decimals")
 	ErrPaymentReferenceTooLong = errors.New("payment reference cannot exceed 120 characters")
 	ErrSaleTwoCashPayments     = errors.New("sale can have only one cash payment")
@@ -57,6 +64,8 @@ var (
 	ErrVoidReasonRequired      = errors.New("void reason is required")
 	ErrVoidReasonTooLong       = errors.New("void reason cannot exceed 300 characters")
 	ErrSaleAlreadyVoided       = errors.New("sale is already voided")
+	ErrSaleTwoAccountPayments  = errors.New("sale can have only one account payment")
+	ErrSaleNeedsCustomer       = errors.New("a sale on account needs its customer")
 )
 
 // Sale es una venta (02 4.16, F-07): renglones, pagos y totales. Se guarda
@@ -77,6 +86,9 @@ type Sale struct {
 	CreatedAt        string          `json:"created_at" db:"created_at"`
 	// CreatedBy es quién cobró (F-13). nil en las ventas de antes del login.
 	CreatedBy *int64 `json:"created_by" db:"created_by"`
+	// CustomerID es el cliente de una venta fiada (migración 0026): solo si
+	// tiene un pago a cuenta corriente. nil en las demás.
+	CustomerID *int64 `json:"customer_id" db:"customer_id"`
 	// Anulación (F-08): cuándo y por qué. Nil y vacío si no está anulada
 	// (chk_sales_void de la 0018).
 	VoidedAt   *string `json:"voided_at" db:"voided_at"`
@@ -92,6 +104,8 @@ type Sale struct {
 	StoreAddress string `json:"store_address" db:"-"`
 	// CreatedByName es el nombre de quién cobró (nil si no se sabe).
 	CreatedByName *string `json:"created_by_name" db:"-"`
+	// CustomerName es el nombre del cliente de una venta fiada ("" si no).
+	CustomerName string `json:"customer_name,omitempty" db:"-"`
 
 	// Change es el vuelto: lo que el efectivo entregado pasa del total. No
 	// se guarda (SettlePayments lo calcula).
@@ -180,17 +194,31 @@ func (s *Sale) Validate() error {
 	if len(s.Payments) == 0 {
 		return ErrSaleNoPayments
 	}
-	cash := 0
+	cash, account := 0, 0
 	for i, p := range s.Payments {
 		if err := p.Validate(); err != nil {
 			return fmt.Errorf("payment %d: %w", i+1, err)
 		}
-		if p.Method == PaymentCash {
+		switch p.Method {
+		case PaymentCash:
 			cash++
+		case PaymentAccount:
+			account++
 		}
 	}
 	if cash > 1 {
 		return ErrSaleTwoCashPayments
+	}
+	if account > 1 {
+		return ErrSaleTwoAccountPayments
+	}
+	// Fiado: la venta dice de quién es la deuda. Sin pago a cuenta, no
+	// lleva cliente.
+	if account == 1 && (s.CustomerID == nil || *s.CustomerID <= 0) {
+		return ErrSaleNeedsCustomer
+	}
+	if account == 0 {
+		s.CustomerID = nil
 	}
 	return nil
 }
@@ -230,7 +258,7 @@ func (p *Payment) Validate() error {
 	if p == nil {
 		return ErrNilPayment
 	}
-	if !slices.Contains(PaymentMethods, p.Method) {
+	if !slices.Contains(SaleMethods, p.Method) {
 		return ErrInvalidPaymentMethod
 	}
 	if !p.Amount.IsPositive() || !validMoney(p.Amount) {

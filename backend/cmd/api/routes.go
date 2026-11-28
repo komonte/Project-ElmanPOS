@@ -145,6 +145,8 @@ func webRoutes(h *web.WebHandler) []route {
 		{"GET /pos", sell, h.PosPage},
 		{"GET /pos/search", sell, h.PosSearch},
 		{"POST /pos/checkout", sell, h.PosCheckout},
+		{"GET /pos/customers", sell, h.PosCustomers},
+		{"POST /pos/customers", sell, h.PosCustomersCreate},
 		{"GET /pos/sales/{id}/ticket", sell, h.PosTicket},
 		{"GET /cash", cash, h.CashPage},
 		{"POST /cash/register", cashSetup, h.CashCreateRegister},

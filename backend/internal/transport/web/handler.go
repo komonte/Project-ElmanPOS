@@ -321,6 +321,10 @@ var errorKeys = []struct {
 	// Conteos, salidas y compras: los productos por unidad, enteros.
 	{model.ErrQuantityNotWhole, "error.quantity_not_whole"},
 	{sales.ErrOpenPriceMissing, "error.open_price_missing"},
+	// Fiado.
+	{model.ErrSaleNeedsCustomer, "error.sale_needs_customer"},
+	{model.ErrSaleTwoAccountPayments, "error.sale_two_account"},
+	{sales.ErrCustomerUnavailable, "error.sale_customer_unavailable"},
 	{prices.ErrOpenPriceKind, "error.open_price_kind"},
 	{model.ErrSaleWeightTooLarge, "error.sale_weight_too_large"},
 	{model.ErrSaleLineTotalZero, "error.sale_line_zero"},

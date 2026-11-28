@@ -24,7 +24,7 @@ import (
 
 // PosPage handles GET /pos.
 func (h *WebHandler) PosPage(w http.ResponseWriter, r *http.Request) {
-	data := map[string]any{"Section": "pos", "TitleKey": "pos.title", "Methods": model.PaymentMethods}
+	data := map[string]any{"Section": "pos", "TitleKey": "pos.title", "Methods": model.SaleMethods}
 	st, err := h.sessions.Current(r.Context())
 	if err != nil {
 		data["Error"] = h.errMsg(r, err)
@@ -98,6 +98,14 @@ func saleFromForm(r *http.Request) (*model.Sale, error) {
 		return nil, model.ErrInvalidSaleQuantity
 	}
 	sale := &model.Sale{}
+	// Fiado: el cliente elegido (vacío si no hay pago a cuenta corriente).
+	if v := strings.TrimSpace(r.PostForm.Get("customer_id")); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, model.ErrSaleNeedsCustomer
+		}
+		sale.CustomerID = &id
+	}
 	for i := range ids {
 		id, err := strconv.ParseInt(ids[i], 10, 64)
 		if err != nil || id <= 0 {

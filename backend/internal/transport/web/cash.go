@@ -128,7 +128,7 @@ func refundNotice(lang string, sale *model.Sale) string {
 		paid[p.Method] = paid[p.Method].Add(p.Amount)
 	}
 	var parts []string
-	for _, m := range model.PaymentMethods {
+	for _, m := range model.SaleMethods {
 		if amount, ok := paid[m]; ok {
 			parts = append(parts, fmt.Sprintf(i18n.T(lang, "cash.refund_"+m), formatMoney(lang, amount)))
 		}

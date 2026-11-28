@@ -69,7 +69,7 @@
         <th scope="row" class="p-3 text-left tabular{{if $voided}} line-through{{end}}">{{.SaleNumber}}</th>
         <td class="p-3 tabular{{if $voided}} line-through{{end}}">{{formatClock .CreatedAt}}</td>
         <td class="p-3 text-right tabular font-bold whitespace-nowrap{{if $voided}} line-through{{end}}">{{money .Total}}</td>
-        <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}</td>
+        <td class="p-3{{if $voided}} line-through{{end}}">{{range $i, $p := .Payments}}{{if $i}} · {{end}}<span class="whitespace-nowrap">{{t (printf "pos.method_%s" $p.Method)}} <span class="tabular">{{money $p.Amount}}</span></span>{{end}}{{with .CustomerName}} <span class="text-sm text-muted whitespace-nowrap" data-customer>({{.}})</span>{{end}}</td>
         <td class="p-3" data-charged-by>{{who .CreatedByName}}</td>
         <td class="p-3">{{if $voided}}<span class="font-bold text-danger">{{t "cash.sale_voided"}}</span>
           <span class="block text-sm" data-void-reason>{{printf (t "cash.sale_void_reason") .VoidReason}}</span>{{else}}{{t "cash.sale_completed"}}{{end}}</td>

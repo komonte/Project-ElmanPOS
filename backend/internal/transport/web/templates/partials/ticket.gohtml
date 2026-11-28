@@ -62,6 +62,7 @@
   <hr class="rule">
   <div class="row"><span>{{.RegisterName}}</span><span>{{printf (t "ticket.sale_number") .SaleNumber}}</span></div>
   <div class="muted num">{{formatTime .CreatedAt}}</div>
+  {{with .CustomerName}}<div class="row" data-customer><span>{{t "ticket.customer"}}</span><span>{{.}}</span></div>{{end}}
   {{if eq .Status "VOIDED"}}<div class="voided" data-voided>{{t "ticket.voided"}}</div>{{end}}
   <hr class="rule">
   {{range .Items}}

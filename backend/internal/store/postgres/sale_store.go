@@ -62,11 +62,11 @@ func (s *SaleStore) create(ctx context.Context, sale *model.Sale) error {
 	sale.Status = model.SaleCompleted
 	if err := s.db.QueryRowContext(ctx, `
 		INSERT INTO sales (cashier_session_id, sale_number, status, subtotal, tax_amount, discount_amount, total,
-		                   created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		                   created_by, customer_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at;`,
 		sale.CashierSessionID, sale.SaleNumber, sale.Status, sale.Subtotal, sale.TaxAmount,
-		sale.DiscountAmount, sale.Total, sale.CreatedBy).Scan(&sale.ID, &sale.CreatedAt); err != nil {
+		sale.DiscountAmount, sale.Total, sale.CreatedBy, sale.CustomerID).Scan(&sale.ID, &sale.CreatedAt); err != nil {
 		return err
 	}
 	for _, it := range sale.Items {
@@ -122,16 +122,17 @@ func (s *SaleStore) Get(ctx context.Context, id int64) (*model.Sale, error) {
 	err := s.db.QueryRowContext(ctx, `
 		SELECT s.id, s.cashier_session_id, s.sale_number, s.status, s.subtotal, s.tax_amount,
 		       s.discount_amount, s.total, s.created_at, s.voided_at, COALESCE(s.void_reason, ''),
-		       r.name, st.name, COALESCE(st.address, ''), s.created_by, u.name
+		       r.name, st.name, COALESCE(st.address, ''), s.created_by, u.name, s.customer_id, COALESCE(c.name, '')
 		FROM sales s
 		JOIN cashier_sessions cs ON cs.id = s.cashier_session_id
 		JOIN cash_registers r ON r.id = cs.cash_register_id
 		JOIN stores st ON st.id = r.store_id
 		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN customers c ON c.id = s.customer_id
 		WHERE s.id = $1;`, id).Scan(&sale.ID, &sale.CashierSessionID, &sale.SaleNumber, &sale.Status,
 		&sale.Subtotal, &sale.TaxAmount, &sale.DiscountAmount, &sale.Total, &sale.CreatedAt, &sale.VoidedAt,
 		&sale.VoidReason, &sale.RegisterName, &sale.StoreName, &sale.StoreAddress, &sale.CreatedBy,
-		&sale.CreatedByName)
+		&sale.CreatedByName, &sale.CustomerID, &sale.CustomerName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
@@ -212,9 +213,11 @@ func (s *SaleStore) PaidByMethod(ctx context.Context, sessionID int64) (map[stri
 func (s *SaleStore) ListBySession(ctx context.Context, sessionID int64) ([]*model.Sale, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.id, s.cashier_session_id, s.sale_number, s.status, s.subtotal, s.tax_amount, s.discount_amount,
-		       s.total, s.created_at, s.voided_at, COALESCE(s.void_reason, ''), s.created_by, u.name
+		       s.total, s.created_at, s.voided_at, COALESCE(s.void_reason, ''), s.created_by, u.name,
+		       s.customer_id, COALESCE(c.name, '')
 		FROM sales s
 		LEFT JOIN users u ON u.id = s.created_by
+		LEFT JOIN customers c ON c.id = s.customer_id
 		WHERE s.cashier_session_id = $1
 		ORDER BY s.sale_number DESC;`, sessionID)
 	if err != nil {
@@ -226,7 +229,7 @@ func (s *SaleStore) ListBySession(ctx context.Context, sessionID int64) ([]*mode
 		sale := new(model.Sale)
 		if err := rows.Scan(&sale.ID, &sale.CashierSessionID, &sale.SaleNumber, &sale.Status, &sale.Subtotal,
 			&sale.TaxAmount, &sale.DiscountAmount, &sale.Total, &sale.CreatedAt, &sale.VoidedAt,
-			&sale.VoidReason, &sale.CreatedBy, &sale.CreatedByName); err != nil {
+			&sale.VoidReason, &sale.CreatedBy, &sale.CreatedByName, &sale.CustomerID, &sale.CustomerName); err != nil {
 			rows.Close()
 			return nil, err
 		}

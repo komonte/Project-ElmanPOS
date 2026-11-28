@@ -33,9 +33,11 @@ func (h *WebHandler) PosPage(w http.ResponseWriter, r *http.Request) {
 	}
 	// Modo arranque: el carrito no frena por falta de stock (el servidor
 	// decide igual al cobrar).
+	// Redondeo en efectivo: la pantalla muestra lo que se cobra en efectivo
+	// (el servidor lo calcula igual al cobrar).
 	if h.settings != nil {
 		if s, err := h.settings.Get(r.Context()); err == nil {
-			data["StartupMode"] = s.StartupMode
+			data["StartupMode"], data["CashRounding"] = s.StartupMode, s.CashRounding
 		}
 	}
 	h.render(w, r, "pos.gohtml", data)

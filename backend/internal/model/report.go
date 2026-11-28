@@ -295,3 +295,14 @@ type UnregisteredCode struct {
 	LastSold  string          `json:"last_sold"`
 	SoldAs    string          `json:"sold_as"` // el artículo sin registrar de la última venta
 }
+
+// RoundingTally es el redondeo en efectivo de un tramo (migración 0024):
+// cuántas ventas se redondearon y cuánto, y cuántas tuvieron efectivo.
+type RoundingTally struct {
+	// Bucket es el número de tramo: el índice en los comienzos que se
+	// pasaron.
+	Bucket    int             `json:"bucket"`
+	Rounded   int             `json:"rounded"`
+	Amount    decimal.Decimal `json:"amount"`
+	CashSales int             `json:"cash_sales"`
+}

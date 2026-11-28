@@ -65,6 +65,9 @@
       <p class="text-sm uppercase tracking-wide text-white/75">{{t "pos.total"}}</p>
       <p id="pos-total" class="font-display font-bold text-6xl leading-none tabular text-tag" aria-live="polite">$ 0,00</p>
       <p id="pos-count" class="mt-1 text-sm text-white/75"></p>
+      {{/* Redondeo en efectivo (0024): lo que se cobra si el resto va en
+           efectivo. Solo aparece si cambia algo. */}}
+      <p id="pos-cash-total" class="mt-2 text-xl font-bold text-white" hidden></p>
     </div>
 
     <section class="p-4 border-2 border-line rounded-md bg-surface space-y-3" aria-labelledby="pos-pay-title">
@@ -77,6 +80,7 @@
       </div>
       <div id="pos-payments" class="space-y-2"></div>
       <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-lg">
+        <dt id="pos-rounding-label" hidden>{{t "pos.rounding"}}</dt><dd id="pos-rounding" class="text-right tabular" hidden></dd>
         <dt>{{t "pos.paid"}}</dt><dd id="pos-paid" class="text-right tabular">$ 0,00</dd>
         <dt id="pos-due-label">{{t "pos.due"}}</dt><dd id="pos-due" class="text-right tabular font-bold">$ 0,00</dd>
       </dl>
@@ -146,7 +150,8 @@
      data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
      data-open-price="{{t "pos.open_price_missing"}}" data-code-label="{{t "pos.scanned_code"}}"
      data-startup-warn="{{t "pos.startup_warn"}}" data-startup="{{if $.StartupMode}}1{{end}}"
-     data-ticket="{{t "ticket.title"}}"></div>
+     data-ticket="{{t "ticket.title"}}" data-cash-total="{{t "pos.cash_total"}}"
+     data-rounding-step="{{with $.CashRounding}}{{.}}{{else}}0{{end}}"></div>
 
 <script>
   const posLang = document.documentElement.lang || 'es';
@@ -344,7 +349,9 @@
       document.querySelector('button[data-method="' + method + '"]').textContent;
     el.querySelector('[data-amount-label]').textContent = method === 'CASH' ? posText.tendered : posText.amount;
     if (method === 'CASH') el.querySelector('[data-ref-box]').hidden = true;
-    const due = posTotals().due;
+    let due = posTotals().due;
+    // El efectivo se precarga ya redondeado.
+    if (method === 'CASH') due = posRoundCash(due);
     const amount = el.querySelector('[data-amount]');
     if (due > 0) amount.value = (due / 100).toFixed(2).replace('.', posLang === 'es' ? ',' : '.');
     box.appendChild(el);
@@ -366,8 +373,19 @@
     if (!charge.disabled) document.getElementById('pos-form').requestSubmit(charge);
   }
 
+  // Redondeo en efectivo (0024), en centavos y como el servidor
+  // (model.Sale.SettlePayments): baja al múltiplo; si no llega al múltiplo,
+  // queda igual (un caramelo de $80 se cobra $80).
+  const posRoundingStep = Number(posText.roundingStep) * 100;
+  function posRoundCash(cents) {
+    if (posRoundingStep <= 0 || cents <= 0) return cents;
+    const r = Math.floor(cents / posRoundingStep) * posRoundingStep;
+    return r > 0 ? r : cents;
+  }
+
   // Totales en centavos: total de los renglones (cada uno redondeado, como
-  // el servidor), pagado, lo que falta y el vuelto. ok: se puede cobrar.
+  // el servidor), redondeo del efectivo, lo que se cobra, pagado, lo que
+  // falta y el vuelto. ok: se puede cobrar.
   function posTotals() {
     let total = 0, linesOk = true;
     posLines.querySelectorAll('tr').forEach(function (row) {
@@ -399,8 +417,9 @@
       row.querySelector('[data-total]').textContent = lineTotal ? posMoney(lineTotal) : '';
       total += lineTotal;
     });
-    let paid = 0, cash = 0, paysOk = true;
+    let paid = 0, cash = 0, hasCash = false, paysOk = true;
     document.querySelectorAll('#pos-payments [data-payment]').forEach(function (p) {
+      if (p.dataset.method === 'CASH') hasCash = true;
       const cents = posParseMoney(p.querySelector('[data-amount]').value);
       if (cents === null || cents <= 0) {
         paysOk = false;
@@ -409,12 +428,18 @@
       paid += cents;
       if (p.dataset.method === 'CASH') cash = cents;
     });
-    const excess = paid - total;
+    // Lo que queda para el efectivo, después de los otros medios.
+    const cashDue = total - (paid - cash);
+    const cashCharged = posRoundCash(cashDue);
+    const rounding = hasCash && cashDue > 0 ? cashDue - cashCharged : 0;
+    const charged = total - rounding;
+    const excess = paid - charged;
     // Solo el efectivo puede pasarse del total.
     const changeOk = excess <= 0 || (cash > excess);
     return {
-      total: total, paid: paid, due: Math.max(total - paid, 0), change: Math.max(excess, 0),
-      ok: posLines.children.length > 0 && linesOk && paysOk && total > 0 && paid >= total && changeOk,
+      total: total, charged: charged, rounding: rounding, cashCharged: cashCharged, cashDue: cashDue,
+      paid: paid, due: Math.max(charged - paid, 0), change: Math.max(excess, 0),
+      ok: posLines.children.length > 0 && linesOk && paysOk && total > 0 && paid >= charged && changeOk,
     };
   }
 
@@ -426,6 +451,14 @@
     document.getElementById('pos-total').textContent = posMoney(t.total);
     document.getElementById('pos-count').textContent = n > 0 ? posText.items.replace('%d', n) : '';
     document.getElementById('pos-paid').textContent = posMoney(t.paid);
+    // Si el resto va en efectivo, cuánto se cobra (redondeado).
+    const cashTotal = document.getElementById('pos-cash-total');
+    cashTotal.hidden = !(t.cashDue > 0 && t.cashCharged !== t.cashDue);
+    cashTotal.textContent = posText.cashTotal.replace('%s', posMoney(t.cashCharged));
+    document.getElementById('pos-rounding-label').hidden = t.rounding <= 0;
+    const rounding = document.getElementById('pos-rounding');
+    rounding.hidden = t.rounding <= 0;
+    rounding.textContent = posMoney(-t.rounding);
     const changing = t.change > 0;
     document.getElementById('pos-due-label').textContent = changing ? posText.change : posText.due;
     const due = document.getElementById('pos-due');

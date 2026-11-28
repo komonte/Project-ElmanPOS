@@ -74,6 +74,10 @@
   </div>
   {{end}}
   <hr class="rule">
+  {{if .DiscountAmount.IsPositive}}
+  <div class="row" data-rounding><span>{{t "ticket.subtotal"}}</span><span class="num">{{money .Subtotal}}</span></div>
+  <div class="row"><span>{{t "ticket.rounding"}}</span><span class="num">-{{money .DiscountAmount}}</span></div>
+  {{end}}
   <div class="row total"><span>{{t "ticket.total"}}</span><span class="num">{{money .Total}}</span></div>
   <div class="row muted"><span>{{t "ticket.tax_included"}}</span><span class="num">{{money .TaxAmount}}</span></div>
   <hr class="rule">

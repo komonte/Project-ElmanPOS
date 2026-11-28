@@ -166,6 +166,7 @@ func webRoutes(h *web.WebHandler) []route {
 		// Reportes de ventas, caja y margen: solo el admin.
 		{"GET /reports/sales", reports, h.ReportsSales},
 		{"GET /reports/cash", reports, h.ReportsCash},
+		{"GET /reports/rounding", reports, h.ReportsRounding},
 		// Reposición y vencimientos: el admin y el repositor.
 		{"GET /reports/restock", stock, h.ReportsRestock},
 		{"GET /reports/expiring", stock, h.ReportsExpiring},
@@ -176,6 +177,7 @@ func webRoutes(h *web.WebHandler) []route {
 		// Configuración del negocio (modo arranque): solo el admin.
 		{"GET /settings", settings, h.SettingsPage},
 		{"POST /settings/startup-mode", settings, h.SettingsStartupMode},
+		{"POST /settings/cash-rounding", settings, h.SettingsCashRounding},
 	}
 }
 

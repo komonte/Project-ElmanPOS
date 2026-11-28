@@ -892,5 +892,26 @@
   "error.component_pack_not_combo": "Solo un combo tiene componentes. Cambiá el tipo de venta a «Combo» primero.",
   "error.component_is_combo": "Un combo no puede ir dentro de otro combo.",
   "error.component_open_price": "Un artículo sin registrar no puede ser componente: no tiene stock.",
-  "error.component_inactive": "Ese producto está desactivado: reactivalo para usarlo en el combo."
+  "error.component_inactive": "Ese producto está desactivado: reactivalo para usarlo en el combo.",
+
+  "settings.rounding_title": "Redondeo en efectivo",
+  "settings.rounding_hint": "Lo que se paga en efectivo se redondea para abajo al múltiplo elegido: con $ 100, $ 12.345 se cobran $ 12.300. Tarjeta, transferencia y QR se cobran exactos. Si el efectivo no llega al múltiplo (un caramelo de $ 80), se cobra exacto.",
+  "settings.rounding_multiple": "Redondear a",
+  "settings.rounding_off": "No redondear",
+  "settings.rounding_to": "Múltiplos de %s",
+  "error.cash_rounding_invalid": "Elegí uno de los múltiplos de la lista.",
+  "pos.rounding": "Redondeo",
+  "pos.cash_total": "En efectivo: %s",
+  "ticket.subtotal": "Subtotal",
+  "ticket.rounding": "Redondeo efectivo",
+  "nav.report_rounding": "Redondeo",
+  "report.rounding_title": "Redondeo en efectivo",
+  "report.rounding_hint": "Cuánto se dejó de cobrar cada mes por redondear para abajo lo que se paga en efectivo. Ya está descontado de las ventas y del efectivo esperado de la caja.",
+  "report.rounding_now": "Hoy se redondea a múltiplos de %s (se cambia en Configuración).",
+  "report.rounding_off": "Hoy no se redondea (se cambia en Configuración).",
+  "report.rounding_amount_year": "Redondeado en los últimos 12 meses",
+  "report.rounding_count_year": "Ventas redondeadas en los últimos 12 meses",
+  "report.rounding_cash_sales": "Ventas con efectivo",
+  "report.rounding_rounded": "Redondeadas",
+  "report.rounding_amount": "Redondeado"
 }

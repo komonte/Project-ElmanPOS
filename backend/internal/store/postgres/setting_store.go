@@ -75,3 +75,21 @@ func (s *SettingStore) SetBool(ctx context.Context, key string, value bool) erro
 	}
 	return nil
 }
+
+// SetDecimal guarda un ajuste que es un número. ErrNotFound si la clave no
+// existe: los ajustes los crea una migración, con su descripción.
+func (s *SettingStore) SetDecimal(ctx context.Context, key string, value decimal.Decimal) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE app_settings SET value = to_jsonb($2::numeric), updated_at = now() WHERE key = $1;`, key, value)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}

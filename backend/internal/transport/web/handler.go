@@ -280,6 +280,7 @@ var errorKeys = []struct {
 	// Cierre (F-12).
 	{store.ErrSessionNotOpen, "error.cash_session_not_open"},
 	{model.ErrInvalidDeclaredAmount, "error.cash_declared_invalid"},
+	{model.ErrInvalidCashRounding, "error.cash_rounding_invalid"},
 	// Componentes de un combo (F-05). En la caja, un componente que ya no
 	// sirve dice eso, no el error de la pantalla de componentes: va primero.
 	{sales.ErrComboComponent, "error.sale_combo_component"},

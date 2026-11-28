@@ -61,6 +61,8 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_sales"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_sales"}}</a>
       <a href="/reports/cash" {{if eq .Section "reports_cash"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_cash"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_cash"}}</a>
+      <a href="/reports/rounding" {{if eq .Section "reports_rounding"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_rounding"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_rounding"}}</a>
       {{end}}
       {{if can .Can "stock"}}
       <a href="/reports/restock" {{if eq .Section "reports_restock"}}aria-current="page"{{end}}

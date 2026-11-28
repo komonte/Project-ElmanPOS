@@ -983,5 +983,8 @@
   "error.collect_no_debt": "Este cliente no debe nada.",
   "error.collect_over_debt": "Es más de lo que debe. Con tarjeta, transferencia o QR se cobra como mucho la deuda.",
   "error.collect_method": "Elegí con qué paga.",
-  "error.collect_amount": "Escribí el monto, mayor que 0."
+  "error.collect_amount": "Escribí el monto, mayor que 0.",
+
+  "pos.by_amount_hint": "Vender por importe: escribí cuánta plata (también con la tecla $)",
+  "pos.kg_note": "= %s kg"
 }

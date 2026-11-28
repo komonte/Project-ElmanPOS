@@ -418,6 +418,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
   4. Continue with F-07 (atomic processing).
 - **DB transaction:** identical to F-07; `quantity` is `NUMERIC(12,3)`.
 - **Invariants:** `quantity > 0`; unit_price used is the per-kg price (never the per-unit one).
+- **By amount** (2026-11-28, register only): a weight line has a "$" button (or the `$` key in the kg field) to type money instead of kg ("$ 1,000 of cheese"). The page converts it to kg rounded to the nearest gram (`round(amount × 1000 / price per kg)` grams) and sends kg as always; the line shows "= 0.098 kg" and the real total (0.098 × $10,200 = $999.60), which can differ from the typed amount by a few pesos either way (decided with the store). The server does not change.
 - **Errors / rollback:** `0` / negative weight or more than 3 decimals → 400. A weight above `app_settings.max_sale_weight_kg` (default `50`, migration `0017`; missing key → 50) is rejected as a typing mistake (3000 instead of 3.000) → 400; the ceiling changes without a new build.
 - **Edge cases:** Phase 2 — scale-printed GS1 variable-measure barcode (prefix `2`) decoded into weight/price on scan; v1 is manual entry only.
 

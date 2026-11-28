@@ -127,8 +127,17 @@
       <div class="flex items-center gap-1">
         <input type="text" name="quantity" autocomplete="off" class="field py-1 tabular text-right"
                oninput="posRecalc()" onkeydown="posQtyKey(event)">
+        {{/* A granel, por importe ("$ 500 de queso"): la caja calcula los
+             kilos al gramo más cercano y manda los kilos (el campo de
+             kilos queda oculto, pero se manda). Sin name: no viaja. */}}
+        <input type="text" data-by-amount inputmode="decimal" autocomplete="off" placeholder="$"
+               class="field py-1 tabular text-right" hidden
+               oninput="posAmountToKg(this)" onkeydown="posQtyKey(event)">
         <span data-unit class="text-sm text-muted"></span>
+        <button type="button" data-mode-toggle hidden onclick="posToggleAmount(this.closest('tr'))"
+                class="btn-secondary px-2 py-1 text-sm" title="{{t "pos.by_amount_hint"}}">$</button>
       </div>
+      <p data-kg-note class="text-sm text-muted tabular" hidden></p>
     </td>
     <td class="px-3 py-2 text-right tabular whitespace-nowrap">
       <span data-price-text></span>
@@ -170,7 +179,7 @@
      data-stock-warn="{{t "pos.stock_warn"}}" data-leave="{{t "pos.leave"}}"
      data-open-price="{{t "pos.open_price_missing"}}" data-code-label="{{t "pos.scanned_code"}}"
      data-startup-warn="{{t "pos.startup_warn"}}" data-startup="{{if $.StartupMode}}1{{end}}"
-     data-ticket="{{t "ticket.title"}}" data-cash-total="{{t "pos.cash_total"}}" data-customer-debt="{{t "pos.customer_debt"}}"
+     data-ticket="{{t "ticket.title"}}" data-cash-total="{{t "pos.cash_total"}}" data-customer-debt="{{t "pos.customer_debt"}}" data-kg-note="{{t "pos.kg_note"}}"
      data-rounding-step="{{with $.CashRounding}}{{.}}{{else}}0{{end}}"></div>
 
 <script>
@@ -284,8 +293,10 @@
     if (row) {
       const qty = row.querySelector('[name=quantity]');
       if (p.type === 'WEIGHT') {
-        qty.focus();
-        qty.select();
+        // El campo que se ve: kilos, o el importe si está por importe.
+        const field = qty.hidden ? row.querySelector('[data-by-amount]') : qty;
+        field.focus();
+        field.select();
       } else {
         const milli = posParseQty(qty.value) || 0;
         qty.value = posFormatQty(milli + 1000);
@@ -304,6 +315,7 @@
     const qty = row.querySelector('[name=quantity]');
     if (p.type === 'WEIGHT') {
       row.querySelector('[data-unit]').textContent = 'kg';
+      row.querySelector('[data-mode-toggle]').hidden = false;
       row.querySelector('[data-price-text]').textContent = posMoney(Number(row.dataset.price)) + ' /kg';
       qty.inputMode = 'decimal';
       qty.placeholder = '0,000';
@@ -339,9 +351,52 @@
 
   // Enter en una cantidad vuelve al buscador (no cobra).
   function posQtyKey(e) {
+    // A granel, "$" en los kilos pasa a escribir el importe.
+    if (e.key === '$' && e.target.name === 'quantity' && e.target.closest('tr').dataset.type === 'WEIGHT') {
+      e.preventDefault();
+      posToggleAmount(e.target.closest('tr'));
+      return;
+    }
     if (e.key !== 'Enter') return;
     e.preventDefault();
     posScan.focus();
+  }
+
+  // A granel, por importe (PR11): el importe pasa a kilos al gramo más
+  // cercano; el total real (kilos × precio) puede diferir unos pesos.
+  function posToggleAmount(row) {
+    const qty = row.querySelector('[name=quantity]');
+    const amount = row.querySelector('[data-by-amount]');
+    const byAmount = amount.hidden;
+    amount.hidden = !byAmount;
+    qty.hidden = byAmount;
+    row.querySelector('[data-unit]').textContent = byAmount ? '' : 'kg';
+    row.querySelector('[data-mode-toggle]').textContent = byAmount ? 'kg' : '$';
+    row.querySelector('[data-kg-note]').hidden = true;
+    if (byAmount) {
+      amount.value = '';
+      amount.focus();
+    } else {
+      qty.focus();
+      qty.select();
+    }
+  }
+  function posAmountToKg(input) {
+    const row = input.closest('tr');
+    const cents = posParseMoney(input.value);
+    const price = Number(row.dataset.price);
+    const note = row.querySelector('[data-kg-note]');
+    const qty = row.querySelector('[name=quantity]');
+    if (cents === null || cents <= 0 || price <= 0) {
+      qty.value = '';
+      note.hidden = true;
+    } else {
+      const milli = Math.round(cents * 1000 / price);
+      qty.value = posFormatQty(milli);
+      note.textContent = posText.kgNote.replace('%s', posFormatQty(milli));
+      note.hidden = false;
+    }
+    posRecalc();
   }
 
   function posRemove(button) {

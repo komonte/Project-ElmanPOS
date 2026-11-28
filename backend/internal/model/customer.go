@@ -2,8 +2,11 @@ package model
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/shopspring/decimal"
 )
 
 // Clientes para vender fiado (2026-11-28, migración 0025). Decisiones:
@@ -68,4 +71,68 @@ func (c *Customer) Validate() error {
 		return ErrCustomerNotesTooLong
 	}
 	return nil
+}
+
+// CustomerPayment es un cobro de deuda en la caja (migración 0027): plata
+// que entra en la sesión abierta con un medio de la caja.
+type CustomerPayment struct {
+	ID               int64           `json:"id"`
+	CustomerID       int64           `json:"customer_id"`
+	CashierSessionID int64           `json:"cashier_session_id"`
+	Method           string          `json:"method"`
+	Amount           decimal.Decimal `json:"amount"`
+	Reference        string          `json:"reference"` // vacío es NULL
+	CreatedBy        int64           `json:"created_by"`
+	CreatedAt        string          `json:"created_at"`
+}
+
+var (
+	ErrNilCustomerPayment     = errors.New("customer payment cannot be nil")
+	ErrCustomerPaymentMethod  = errors.New("a debt is paid with CASH, DEBIT_CARD, CREDIT_CARD, TRANSFER or QR")
+	ErrCustomerPaymentAmount  = errors.New("payment amount must be greater than 0, up to 9999999999.99, with up to 2 decimals")
+	ErrCustomerPaymentRefLong = errors.New("payment reference cannot exceed 120 characters")
+)
+
+// Validate revisa medio (de la caja, nunca ACCOUNT), monto y referencia
+// (recortada; vacía en efectivo).
+func (p *CustomerPayment) Validate() error {
+	if p == nil {
+		return ErrNilCustomerPayment
+	}
+	if !slices.Contains(PaymentMethods, p.Method) {
+		return ErrCustomerPaymentMethod
+	}
+	if !p.Amount.IsPositive() || !validMoney(p.Amount) {
+		return ErrCustomerPaymentAmount
+	}
+	p.Reference = strings.TrimSpace(p.Reference)
+	if p.Method == PaymentCash {
+		p.Reference = ""
+	}
+	if utf8.RuneCountInString(p.Reference) > PaymentReferenceMaxLen {
+		return ErrCustomerPaymentRefLong
+	}
+	return nil
+}
+
+// Debtor es un cliente que debe (reporte de deudores).
+type Debtor struct {
+	CustomerID  int64           `json:"customer_id"`
+	Name        string          `json:"name"`
+	Phone       string          `json:"phone"`
+	IsActive    bool            `json:"is_active"`
+	Debt        decimal.Decimal `json:"debt"`
+	LastSale    *string         `json:"last_sale"`    // nil si nunca se le fió
+	LastPayment *string         `json:"last_payment"` // nil si nunca pagó
+}
+
+// AccountEntry es un movimiento de la cuenta de un cliente: lo fiado en
+// una venta (Method ACCOUNT, con SaleNumber; monto positivo) o un pago
+// (monto negativo). Balance es lo que debía después.
+type AccountEntry struct {
+	At         string          `json:"at"`
+	SaleNumber int             `json:"sale_number"` // 0 en un pago
+	Method     string          `json:"method"`
+	Amount     decimal.Decimal `json:"amount"`
+	Balance    decimal.Decimal `json:"balance"`
 }

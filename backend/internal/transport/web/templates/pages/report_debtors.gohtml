@@ -1,0 +1,50 @@
+{{define "content"}}
+{{/* Deudores del fiado (0027), solo el admin. Datos: .Debtors
+     (model.Debtor, el que más debe primero) y .Total. */}}
+<header class="mb-6">
+  <h1 class="shelf-title">{{t "debtors.title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "debtors.hint"}}</p>
+</header>
+
+<section class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 max-w-3xl">
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "debtors.total"}}</p>
+    <p id="debtors-total" class="font-display font-bold text-4xl tabular whitespace-nowrap">{{money .Total}}</p>
+  </div>
+  <div class="p-4 bg-surface border-2 border-line rounded-md">
+    <p class="text-muted">{{t "debtors.count"}}</p>
+    <p id="debtors-count" class="font-display font-bold text-4xl tabular">{{len .Debtors}}</p>
+  </div>
+</section>
+
+{{if .Debtors}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  <table id="debtors-table" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "pos.customer"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "customer.phone"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold text-right">{{t "debtors.debt"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "debtors.last_sale"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "debtors.last_payment"}}</th>
+        <th scope="col" class="px-3 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .Debtors}}
+      <tr data-debtor="{{.CustomerID}}" class="{{if not .IsActive}}text-muted{{end}}">
+        <th scope="row" class="px-3 py-2 font-bold">{{.Name}}{{if not .IsActive}} <span class="font-normal">({{t "common.status_inactive"}})</span>{{end}}</th>
+        <td class="px-3 py-2 whitespace-nowrap">{{.Phone}}</td>
+        <td class="px-3 py-2 text-right tabular font-bold whitespace-nowrap">{{money .Debt}}</td>
+        <td class="px-3 py-2 whitespace-nowrap">{{with .LastSale}}{{formatTime .}}{{else}}—{{end}}</td>
+        <td class="px-3 py-2 whitespace-nowrap">{{with .LastPayment}}{{formatTime .}}{{else}}{{t "debtors.never_paid"}}{{end}}</td>
+        <td class="px-3 py-2 text-right"><a href="/customers/{{.CustomerID}}/account" class="font-bold underline underline-offset-4">{{t "debtors.see_account"}}</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p id="debtors-empty" class="p-6 bg-surface border-2 border-line rounded-md text-lg text-muted max-w-3xl">{{t "debtors.empty"}}</p>
+{{end}}
+{{end}}

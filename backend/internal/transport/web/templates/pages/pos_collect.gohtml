@@ -1,0 +1,68 @@
+{{define "content"}}
+{{/* Cobrar una deuda de fiado en la caja (0027). Datos: .Error, .Customer
+     (elegido), .Debt, .Methods, .Done (customers.Collected), y lo escrito
+     (.Method, .Amount, .Reference) si hubo error. */}}
+<header class="mb-6 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="shelf-title">{{t "collect.title"}}</h1>
+    <p class="mt-4 text-lg text-muted max-w-2xl">{{t "collect.hint"}}</p>
+  </div>
+  <a href="/pos" class="btn-secondary">{{t "collect.back"}}</a>
+</header>
+
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold max-w-3xl">{{.Error}}</div>
+{{end}}
+
+{{with .Done}}
+<div id="collect-done" role="status" class="mb-6 p-4 bg-surface border-2 border-line border-l-8 border-l-stock rounded-md max-w-3xl space-y-1">
+  <p class="font-display font-bold text-2xl">{{printf (t "collect.done") (money .Payment.Amount) .Customer.Name}}</p>
+  {{if .Change.IsPositive}}<p class="text-xl">{{t "pos.change"}}: <span class="font-bold tabular">{{money .Change}}</span></p>{{end}}
+  <p>{{if .Debt.IsPositive}}{{printf (t "collect.still_owes") (money .Debt)}}{{else}}{{t "collect.paid_off"}}{{end}}</p>
+</div>
+{{end}}
+
+{{if .Customer}}
+<section id="collect-form" class="max-w-3xl p-5 bg-surface border-2 border-line rounded-md space-y-4">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-display font-bold text-3xl">{{.Customer.Name}}</h2>
+    <a href="/pos/collect" class="font-bold underline underline-offset-4">{{t "pos.customer_change"}}</a>
+  </div>
+  <p id="collect-debt" class="text-2xl">{{printf (t "collect.owes") (money .Debt)}}</p>
+  {{if .Debt.IsPositive}}
+  <form method="post" action="/pos/collect" class="space-y-4">
+    <input type="hidden" name="customer_id" value="{{.Customer.ID}}">
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label for="collect-method" class="field-label">{{t "collect.method"}}</label>
+        <select id="collect-method" name="method" class="field">
+          {{$m := .Method}}
+          {{range .Methods}}<option value="{{.}}" {{if eq . $m}}selected{{end}}>{{t (printf "pos.method_%s" .)}}</option>{{end}}
+        </select>
+      </div>
+      <div>
+        <label for="collect-amount" class="field-label">{{t "collect.amount"}}</label>
+        <input type="text" id="collect-amount" name="amount" inputmode="decimal" autocomplete="off" required autofocus
+               value="{{.Amount}}" class="field max-w-48 tabular text-right text-xl">
+      </div>
+      <div>
+        <label for="collect-ref" class="field-label">{{t "pos.reference"}}</label>
+        <input type="text" id="collect-ref" name="reference" maxlength="120" autocomplete="off" value="{{.Reference}}" class="field max-w-60">
+      </div>
+    </div>
+    <p class="field-hint">{{t "collect.amount_hint"}}</p>
+    <button type="submit" id="collect-submit" class="btn-primary text-xl">{{t "collect.submit"}}</button>
+  </form>
+  {{end}}
+</section>
+{{else}}
+<section class="max-w-3xl">
+  <label for="collect-q" class="field-label">{{t "collect.search"}}</label>
+  <input type="search" id="collect-q" name="q" autocomplete="off" autofocus class="field"
+         hx-get="/pos/collect/customers" hx-target="#collect-options" hx-swap="innerHTML"
+         hx-trigger="input changed delay:300ms, search, keydown[key=='Enter']"
+         onkeydown="if (event.key === 'Enter') event.preventDefault()">
+  <ul id="collect-options" class="mt-1 border-2 border-line rounded-md divide-y-2 divide-line bg-surface empty:hidden"></ul>
+</section>
+{{end}}
+{{end}}

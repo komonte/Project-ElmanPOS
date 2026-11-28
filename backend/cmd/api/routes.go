@@ -147,6 +147,9 @@ func webRoutes(h *web.WebHandler) []route {
 		{"POST /pos/checkout", sell, h.PosCheckout},
 		{"GET /pos/customers", sell, h.PosCustomers},
 		{"POST /pos/customers", sell, h.PosCustomersCreate},
+		{"GET /pos/collect", sell, h.PosCollectPage},
+		{"GET /pos/collect/customers", sell, h.PosCollectCustomers},
+		{"POST /pos/collect", sell, h.PosCollect},
 		{"GET /pos/sales/{id}/ticket", sell, h.PosTicket},
 		{"GET /cash", cash, h.CashPage},
 		{"POST /cash/register", cashSetup, h.CashCreateRegister},
@@ -164,6 +167,8 @@ func webRoutes(h *web.WebHandler) []route {
 		{"POST /customers/{id}/edit", customers, h.CustomersUpdate},
 		{"PATCH /customers/{id}/deactivate", customers, h.CustomersDeactivate},
 		{"PATCH /customers/{id}/reactivate", customers, h.CustomersReactivate},
+		{"GET /customers/{id}/account", customers, h.CustomerAccount},
+		{"GET /reports/debtors", customers, h.ReportsDebtors},
 
 		{"GET /users", users, h.UsersList},
 		{"GET /users/new", users, h.UsersNewForm},

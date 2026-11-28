@@ -290,6 +290,11 @@ var errorKeys = []struct {
 	{model.ErrCustomerPhoneTooLong, "error.customer_phone_too_long"},
 	{model.ErrCustomerNotesTooLong, "error.customer_notes_too_long"},
 	{customers.ErrNameTaken, "error.customer_name_taken"},
+	{customers.ErrNoDebt, "error.collect_no_debt"},
+	{customers.ErrOverDebt, "error.collect_over_debt"},
+	{model.ErrCustomerPaymentMethod, "error.collect_method"},
+	{model.ErrCustomerPaymentAmount, "error.collect_amount"},
+	{model.ErrCustomerPaymentRefLong, "error.sale_payment_reference"},
 	// Componentes de un combo (F-05). En la caja, un componente que ya no
 	// sirve dice eso, no el error de la pantalla de componentes: va primero.
 	{sales.ErrComboComponent, "error.sale_combo_component"},

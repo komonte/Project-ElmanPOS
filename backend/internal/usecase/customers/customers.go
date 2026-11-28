@@ -7,6 +7,9 @@
 //   - Dar de alta: la caja (permiso sell, al fiar) o el admin. Editar,
 //     desactivar y reactivar: el admin (permiso customers, en la ruta).
 //   - Cada cambio queda en audit_log con quién: un cliente tiene deuda.
+//   - Cobrar (Collect, 0027): en la sesión abierta, con un medio de la
+//     caja, hasta lo que debe (no hay saldo a favor). En efectivo puede
+//     entregar más: es vuelto y no se guarda.
 //
 // Los errores salen como los del service genérico (service.ErrValidation,
 // service.ErrNotFound...), así la API y la web los traducen igual.
@@ -23,6 +26,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/store/postgres"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 )
 
 // ListLimit es cuántos clientes muestra la tabla.
@@ -182,4 +186,98 @@ func audit(ctx context.Context, tx postgres.DBTX, by int64, action string, data 
 		UserID: &by, Table: "customers", Action: action, RecordID: id, NewData: data,
 	})
 	return err
+}
+
+var (
+	// ErrNoDebt: el cliente no debe nada.
+	ErrNoDebt = fmt.Errorf("the customer owes nothing: %w", service.ErrConflict)
+	// ErrOverDebt: se quiere cobrar más de lo que debe.
+	ErrOverDebt = fmt.Errorf("the payment is more than the debt: %w", service.ErrValidation)
+)
+
+// Collected es el resultado de un cobro: lo cobrado, el vuelto (efectivo
+// entregado de más) y lo que sigue debiendo.
+type Collected struct {
+	Payment  *model.CustomerPayment `json:"payment"`
+	Customer *model.Customer        `json:"customer"`
+	Change   decimal.Decimal        `json:"change"`
+	Debt     decimal.Decimal        `json:"debt"`
+}
+
+// Collect cobra parte o toda la deuda del cliente customerID; by es quién.
+// tendered es lo entregado: en efectivo puede pasar la deuda (lo de más es
+// vuelto); con otro medio, lo cobrado es tendered y no puede pasarla.
+//   - service.ErrValidation: medio o monto mal, o más que la deuda
+//     (ErrOverDebt) con un medio que no es efectivo.
+//   - service.ErrNotFound: el cliente no existe.
+//   - service.ErrConflict: la caja está cerrada (sales.ErrRegisterClosed) o
+//     no debe nada (ErrNoDebt).
+func (s *Service) Collect(ctx context.Context, by, customerID int64, method string, tendered decimal.Decimal, ref string) (*Collected, error) {
+	if customerID <= 0 {
+		return nil, service.ErrInvalidID
+	}
+	p := &model.CustomerPayment{CustomerID: customerID, Method: method, Amount: tendered, Reference: ref, CreatedBy: by}
+	if err := p.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %w", service.ErrValidation, err)
+	}
+	out := &Collected{Payment: p}
+	err := s.tx.InTx(ctx, func(tx postgres.DBTX) error {
+		sessionID, err := sales.LockOpenSession(ctx, tx)
+		if err != nil {
+			return err
+		}
+		cs := postgres.NewCustomerStore(tx)
+		if out.Customer, err = cs.Lock(ctx, customerID); err != nil {
+			return err
+		}
+		debts, err := cs.Debts(ctx, []int64{customerID})
+		if err != nil {
+			return err
+		}
+		debt := debts[customerID]
+		if !debt.IsPositive() {
+			return ErrNoDebt
+		}
+		if p.Amount.GreaterThan(debt) {
+			if method != model.PaymentCash {
+				return ErrOverDebt
+			}
+			out.Change = p.Amount.Sub(debt)
+			p.Amount = debt
+		}
+		p.CashierSessionID = sessionID
+		if err := cs.AddPayment(ctx, p); err != nil {
+			return err
+		}
+		out.Debt = debt.Sub(p.Amount)
+		_, err = postgres.NewAuditLogStore(tx).Create(ctx, postgres.AuditEntry{
+			UserID: &by, Table: "customer_payments", Action: "INSERT", RecordID: p.ID,
+			NewData: map[string]any{"customer_id": customerID, "method": p.Method, "amount": p.Amount,
+				"session_id": sessionID, "debt_after": out.Debt},
+		})
+		return err
+	})
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, service.ErrNotFound
+	case err != nil:
+		return nil, err
+	}
+	return out, nil
+}
+
+// Debtors es el reporte de deudores (solo el admin): quién debe y cuánto.
+func (s *Service) Debtors(ctx context.Context) ([]model.Debtor, error) {
+	return postgres.NewCustomerStore(s.db).Debtors(ctx)
+}
+
+// Statement es la cuenta del cliente id: sus movimientos con el saldo.
+// service.ErrNotFound si no existe.
+func (s *Service) Statement(ctx context.Context, id int64) (*model.Customer, []model.AccountEntry, error) {
+	c, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries, err := postgres.NewCustomerStore(s.db).Statement(ctx, id)
+	return c, entries, err
 }

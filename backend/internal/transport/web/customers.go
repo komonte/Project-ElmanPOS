@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/customers"
@@ -169,4 +171,122 @@ func (h *WebHandler) PosCustomersCreate(w http.ResponseWriter, r *http.Request) 
 	h.renderPartial(w, r, "pos_customers.gohtml", map[string]any{
 		"Customers": []customers.WithDebt{{Customer: c}}, "Created": true,
 	})
+}
+
+// Cobrar una deuda en la caja (0027, permiso sell).
+
+// PosCollectPage handles GET /pos/collect[?customer=ID]: sin cliente, el
+// buscador; con cliente, cuánto debe y el formulario.
+func (h *WebHandler) PosCollectPage(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"Section": "pos", "TitleKey": "collect.title", "Methods": model.PaymentMethods,
+		"Method": model.PaymentCash}
+	if v := r.FormValue("customer"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || !h.collectCustomer(r, data, id) {
+			data["Error"] = h.tr(r, "error.not_found")
+		}
+	}
+	h.render(w, r, "pos_collect.gohtml", data)
+}
+
+// collectCustomer pone en data el cliente id, su deuda y el monto
+// precargado (la deuda). false si no existe.
+func (h *WebHandler) collectCustomer(r *http.Request, data map[string]any, id int64) bool {
+	c, err := h.customers.Get(r.Context(), id)
+	if err != nil {
+		return false
+	}
+	debt, err := h.customers.Debt(r.Context(), id)
+	if err != nil {
+		return false
+	}
+	data["Customer"], data["Debt"] = c, debt
+	if _, ok := data["Amount"]; !ok && debt.IsPositive() {
+		data["Amount"] = formatMoneyInput(transport.GetLocale(r.Context()), debt)
+	}
+	return true
+}
+
+// PosCollectCustomers handles GET /pos/collect/customers?q=...: los
+// clientes que coinciden, como links a su cobro.
+func (h *WebHandler) PosCollectCustomers(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.FormValue("q"))
+	data := map[string]any{"Query": q, "Collect": true}
+	if q != "" {
+		found, err := h.customers.SearchWithDebt(r.Context(), q)
+		if err != nil {
+			h.actionError(w, r, err)
+			return
+		}
+		data["Customers"] = found
+	}
+	h.renderPartial(w, r, "pos_customers.gohtml", data)
+}
+
+// PosCollect handles POST /pos/collect: customer_id, method, amount (lo
+// entregado) y reference. Vuelve a la página con el resultado o el error.
+func (h *WebHandler) PosCollect(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{"Section": "pos", "TitleKey": "collect.title", "Methods": model.PaymentMethods,
+		"Method": r.FormValue("method"), "Amount": r.FormValue("amount"), "Reference": r.FormValue("reference")}
+	id, err := strconv.ParseInt(r.FormValue("customer_id"), 10, 64)
+	if err != nil || id <= 0 {
+		data["Error"] = h.tr(r, "error.invalid_id")
+		h.render(w, r, "pos_collect.gohtml", data)
+		return
+	}
+	amount, ok := parseFormMoney(r.FormValue("amount"))
+	if !ok {
+		data["Error"] = h.errMsg(r, model.ErrCustomerPaymentAmount)
+		h.collectCustomer(r, data, id)
+		h.render(w, r, "pos_collect.gohtml", data)
+		return
+	}
+	done, err := h.customers.Collect(r.Context(), transport.UserID(r.Context()), id, r.FormValue("method"), amount,
+		r.FormValue("reference"))
+	if err != nil {
+		data["Error"] = h.errMsg(r, err)
+		h.collectCustomer(r, data, id)
+		h.render(w, r, "pos_collect.gohtml", data)
+		return
+	}
+	// Cobrado: el resultado y el buscador para el próximo.
+	h.render(w, r, "pos_collect.gohtml", map[string]any{"Section": "pos", "TitleKey": "collect.title", "Done": done})
+}
+
+// Deudores y cuenta de un cliente (solo el admin, permiso customers).
+
+// ReportsDebtors handles GET /reports/debtors.
+func (h *WebHandler) ReportsDebtors(w http.ResponseWriter, r *http.Request) {
+	list, err := h.customers.Debtors(r.Context())
+	if err != nil {
+		http.Error(w, h.errMsg(r, err), http.StatusInternalServerError)
+		return
+	}
+	total := decimal.Zero
+	for _, d := range list {
+		total = total.Add(d.Debt)
+	}
+	h.render(w, r, "report_debtors.gohtml", map[string]any{"Section": "reports_debtors",
+		"TitleKey": "debtors.title", "Debtors": list, "Total": total})
+}
+
+// CustomerAccount handles GET /customers/{id}/account: lo fiado y lo pagado,
+// con el saldo.
+func (h *WebHandler) CustomerAccount(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(r)
+	if !ok {
+		http.Error(w, h.tr(r, "error.invalid_id"), http.StatusBadRequest)
+		return
+	}
+	c, entries, err := h.customers.Statement(r.Context(), id)
+	if err != nil {
+		h.actionError(w, r, err)
+		return
+	}
+	debt := decimal.Zero
+	if n := len(entries); n > 0 {
+		debt = entries[n-1].Balance
+	}
+	h.render(w, r, "customer_account.gohtml", map[string]any{"Section": "reports_debtors",
+		"TitleKey": "debtors.account_title", "Customer": c, "Entries": entries, "Debt": debt})
 }

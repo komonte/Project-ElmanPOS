@@ -10,7 +10,8 @@
 <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
   <h1 class="shelf-title text-5xl">{{t "pos.title"}}</h1>
   {{with .State}}{{with .Session}}
-  <p class="text-muted">{{printf (t "pos.register_open") $.State.Register.Name}}</p>
+  <p class="text-muted">{{printf (t "pos.register_open") $.State.Register.Name}}
+    · <a href="/pos/collect" id="pos-collect-link" class="font-bold text-ink underline underline-offset-4">{{t "collect.link"}}</a></p>
   {{end}}{{end}}
 </header>
 

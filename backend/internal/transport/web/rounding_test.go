@@ -86,3 +86,21 @@ func TestRenderCashRounding(t *testing.T) {
 		}
 	})
 }
+
+// A granel por importe (PR11): la caja lo pasa a kilos; el servidor no
+// cambia.
+func TestRenderPosByAmount(t *testing.T) {
+	e := NewTemplateEngine()
+	var buf bytes.Buffer
+	if err := e.Render(&buf, "es", "pos.gohtml", map[string]any{"Methods": model.SaleMethods, "State": openState(),
+		"Can": adminCan}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	for _, s := range []string{"data-by-amount", "data-mode-toggle", "function posAmountToKg",
+		"Math.round(cents * 1000 / price)", `data-kg-note="= %s kg"`} {
+		if !strings.Contains(html, s) {
+			t.Errorf("missing %q", s)
+		}
+	}
+}

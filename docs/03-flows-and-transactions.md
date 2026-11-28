@@ -546,6 +546,7 @@ Also the **initial inventory**: the stock already on the shelves when the system
 ### R-08: Sold without stock (startup mode)
 - **Semantics** (`/reports/unstocked`, `ReportStore.Unstocked`, permission `stock`): products with pending `sale_items.uncovered_quantity` (see F-07, startup mode): sale `COMPLETED` and no `CONFIRMED` count whose `stock_count_items` row for the product was created after the sale.
 - **Output:** product, total sold without stock, in how many sales, last sale and today's stock; the ones with more sales first (they move the most: count them first). "Go count" opens the stock count; "Print" for counting with the list in hand. The dashboard shows the startup mode and how many products are pending.
+- **Purchases (F-06):** a purchase never covers what was sold without stock: it goes in whole, with its batch, cost and expiry. What is unknown is how much of the old goods is left, so a received purchase with such products shows "Before shelving: count what was already there" with each product and how much was sold without stock, and the line search marks them ("Sold without stock: 3"). Counting the old goods first keeps them apart from the new ones; counting later also works (the count measures the total), but the shelf is harder to tell apart.
 
 ### R-03: Top Products / ABC
 - **Semantics:** aggregate `sale_items` by `product_id` for a period: units, revenue, margin (via `unit_cost` snapshots).

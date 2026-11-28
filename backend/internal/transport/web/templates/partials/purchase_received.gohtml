@@ -15,6 +15,19 @@
   </div>
   {{end}}
 
+  {{/* Vendidos sin stock (modo arranque): lo nuevo está bien, falta saber
+       cuánto queda de lo viejo. Contarlo antes de acomodar. */}}
+  {{with .Unstocked}}
+  <div id="purchase-unstocked" role="alert" class="p-4 bg-danger-soft border-l-8 border-danger rounded-sm">
+    <p class="font-bold">{{t "purchase.unstocked_title"}}</p>
+    <p class="text-muted">{{t "purchase.unstocked_hint"}}</p>
+    <ul class="mt-2 list-disc pl-6">
+      {{range .}}<li data-product="{{.ProductID}}"><span class="font-bold">{{.Name}}</span>: {{printf (t "purchase.unstocked_item") (qty .Uncovered)}}</li>{{end}}
+    </ul>
+    <a href="/counts" class="mt-3 btn-secondary">{{t "report.unstocked_count"}}</a>
+  </div>
+  {{end}}
+
   {{/* Los precios se ponen por factura: el detalle muestra qué productos
        están sin cotizar y, al admin, el formulario para cotizarlos. */}}
   <div class="p-4 bg-paper border-l-8 border-tag rounded-sm">

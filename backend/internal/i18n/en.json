@@ -839,5 +839,9 @@
   "dashboard.startup_text": "The register sells even without stock in the system.",
   "dashboard.startup_pending_one": "1 product sold without stock to count",
   "dashboard.startup_pending": "%d products sold without stock to count",
-  "pos.startup_warn": "The system has %s: the rest is left to count (startup mode)."
+  "pos.startup_warn": "The system has %s: the rest is left to count (startup mode).",
+  "picker.unstocked": "Sold without stock: %s. Count what is there before shelving the new goods.",
+  "purchase.unstocked_title": "Before shelving: count what was already there",
+  "purchase.unstocked_hint": "These products were sold without stock in the system (startup mode). The purchase went in fine; what is missing is how much of the old goods is left. Count it in Stock count before mixing it with the new ones.",
+  "purchase.unstocked_item": "%s sold without stock"
 }

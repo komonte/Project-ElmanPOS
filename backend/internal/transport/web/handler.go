@@ -24,6 +24,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/reports"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sales"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/sessions"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/settings"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/stockcounts"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/users"
 	"github.com/shopspring/decimal"
@@ -56,6 +57,8 @@ type WebHandler struct {
 	users *users.Service
 	// Reportes (R-06, R-07): lo pone WithReports.
 	reports *reports.Service
+	// Configuración (modo arranque): lo pone WithSettings.
+	settings *settings.Service
 }
 
 // WithAuth le da al handler el login (F-13). secureCookie va en true cuando
@@ -440,6 +443,18 @@ func (h *WebHandler) Index(w http.ResponseWriter, r *http.Request) {
 	if can(r, model.PermPrices) {
 		if p, err := h.purchases.Pending(ctx); err == nil {
 			data["Pending"] = p
+		}
+	}
+	// Modo arranque: que se note que está prendido y, para quien cuenta,
+	// cuántos productos vendidos sin stock faltan contar.
+	if h.settings != nil {
+		if st, err := h.settings.Get(ctx); err == nil && st.StartupMode {
+			data["StartupMode"] = true
+		}
+	}
+	if can(r, model.PermStock) && h.reports != nil {
+		if items, err := h.reports.Unstocked(ctx); err == nil {
+			data["UnstockedCount"] = len(items)
 		}
 	}
 	h.render(w, r, "index.gohtml", data)

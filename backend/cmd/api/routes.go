@@ -43,6 +43,7 @@ func webRoutes(h *web.WebHandler) []route {
 		prices    = model.PermPrices
 		users     = model.PermUsers
 		reports   = model.PermReports
+		settings  = model.PermSettings
 	)
 	return []route{
 		{"GET /{$}", loggedIn, h.Index},
@@ -161,6 +162,11 @@ func webRoutes(h *web.WebHandler) []route {
 		// Reposición y vencimientos: el admin y el repositor.
 		{"GET /reports/restock", stock, h.ReportsRestock},
 		{"GET /reports/expiring", stock, h.ReportsExpiring},
+		{"GET /reports/unstocked", stock, h.ReportsUnstocked},
+
+		// Configuración del negocio (modo arranque): solo el admin.
+		{"GET /settings", settings, h.SettingsPage},
+		{"POST /settings/startup-mode", settings, h.SettingsStartupMode},
 	}
 }
 

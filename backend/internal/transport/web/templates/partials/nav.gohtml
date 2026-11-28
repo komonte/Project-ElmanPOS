@@ -64,11 +64,19 @@
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_restock"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_restock"}}</a>
       <a href="/reports/expiring" {{if eq .Section "reports_expiring"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_expiring"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_expiring"}}</a>
+      <a href="/reports/unstocked" {{if eq .Section "reports_unstocked"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_unstocked"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.report_unstocked"}}</a>
+      {{end}}
+      {{if or (can .Can "users") (can .Can "settings")}}
+    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_admin"}}</p>
       {{end}}
       {{if can .Can "users"}}
-    <p class="hidden md:block mt-5 mb-1 px-3 text-sm text-white/55">{{t "nav.group_admin"}}</p>
       <a href="/users" {{if eq .Section "users"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "users"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.users"}}</a>
+      {{end}}
+      {{if can .Can "settings"}}
+      <a href="/settings" {{if eq .Section "settings"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "settings"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.settings"}}</a>
       {{end}}
   </div>
 

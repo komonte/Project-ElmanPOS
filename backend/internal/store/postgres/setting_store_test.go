@@ -30,3 +30,28 @@ func TestSettingStore_Decimal(t *testing.T) {
 		t.Errorf("missing: got %v, want %v", err, store.ErrNotFound)
 	}
 }
+
+func TestSettingStore_Bool(t *testing.T) {
+	f := newProductFixture(t)
+	settings := postgres.NewSettingStore(f.tx)
+
+	// La 0021 carga el modo arranque, apagado.
+	if got, err := settings.Bool(f.ctx, "startup_mode"); err != nil || got {
+		t.Fatalf("startup_mode: got %v, %v; want false", got, err)
+	}
+	if err := settings.SetBool(f.ctx, "startup_mode", true); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := settings.Bool(f.ctx, "startup_mode"); err != nil || !got {
+		t.Errorf("after SetBool(true): got %v, %v", got, err)
+	}
+	if _, err := settings.Bool(f.ctx, "max_sale_weight_kg"); err == nil {
+		t.Error("number setting read as bool: got no error")
+	}
+	if _, err := settings.Bool(f.ctx, "test_missing"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("missing: got %v, want %v", err, store.ErrNotFound)
+	}
+	if err := settings.SetBool(f.ctx, "test_missing", true); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("SetBool missing: got %v, want %v", err, store.ErrNotFound)
+	}
+}

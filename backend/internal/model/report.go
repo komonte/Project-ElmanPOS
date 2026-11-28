@@ -268,3 +268,18 @@ type ExpiringBatch struct {
 func (b ExpiringBatch) Value() decimal.Decimal {
 	return b.Remaining.Mul(b.UnitCost).Round(2)
 }
+
+// UnstockedItem es un producto vendido sin stock en modo arranque que todavía
+// no se contó: la suma de lo que faltó en sus ventas sin anular, desde la
+// última vez que un conteo confirmado lo midió.
+type UnstockedItem struct {
+	ProductID int64           `json:"product_id"`
+	SKU       string          `json:"sku"`
+	Name      string          `json:"name"`
+	SaleType  SaleType        `json:"sale_type"`
+	Uncovered decimal.Decimal `json:"uncovered"` // lo vendido sin stock
+	Sales     int             `json:"sales"`     // en cuántas ventas
+	FirstSold string          `json:"first_sold"`
+	LastSold  string          `json:"last_sold"`
+	OnHand    decimal.Decimal `json:"on_hand"` // el stock de hoy en el sistema
+}

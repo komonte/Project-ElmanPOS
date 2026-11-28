@@ -1,0 +1,38 @@
+{{define "content"}}
+{{/* Configuración del negocio (solo el admin). Datos: .Settings
+     (settings.Settings), .Saved, .Error y .UnstockedCount (vendidos sin
+     stock que faltan contar). */}}
+<header class="mb-8">
+  <h1 class="shelf-title">{{t "settings.title"}}</h1>
+  <p class="mt-4 text-lg text-muted max-w-2xl">{{t "settings.hint"}}</p>
+</header>
+
+{{if .Error}}
+<div role="alert" class="mb-6 p-4 bg-danger-soft border-l-8 border-danger rounded-sm font-bold max-w-3xl">{{.Error}}</div>
+{{end}}
+{{if .Saved}}
+<div id="settings-saved" role="status" class="mb-6 p-4 bg-surface border-l-8 border-stock rounded-sm font-bold max-w-3xl">{{t "settings.saved"}}</div>
+{{end}}
+
+{{with .Settings}}
+<section id="settings-startup" aria-labelledby="startup-heading"
+         class="max-w-3xl p-5 bg-surface border-2 {{if .StartupMode}}border-tag-deep{{else}}border-line{{end}} rounded-md">
+  <h2 id="startup-heading" class="font-display font-bold text-3xl leading-none">{{t "settings.startup_title"}}</h2>
+  <p class="mt-3 text-muted">{{t "settings.startup_hint"}}</p>
+  <p id="startup-state" data-on="{{if .StartupMode}}true{{else}}false{{end}}" class="mt-4 text-lg font-bold">
+    <span aria-hidden="true" class="inline-block w-3 h-3 mr-2 rounded-full {{if .StartupMode}}bg-tag-deep{{else}}bg-muted{{end}}"></span>{{if .StartupMode}}{{t "settings.startup_on"}}{{else}}{{t "settings.startup_off"}}{{end}}
+  </p>
+  {{if and .StartupMode $.UnstockedCount}}
+  <p class="mt-2 text-muted">{{printf (t "settings.startup_off_pending") $.UnstockedCount}}</p>
+  {{end}}
+  <form method="post" action="/settings/startup-mode" class="mt-5">
+    {{if .StartupMode}}
+    <button type="submit" id="startup-toggle" class="btn-secondary">{{t "settings.startup_turn_off"}}</button>
+    {{else}}
+    <input type="hidden" name="startup_mode" value="on">
+    <button type="submit" id="startup-toggle" class="btn-primary">{{t "settings.startup_turn_on"}}</button>
+    {{end}}
+  </form>
+</section>
+{{end}}
+{{end}}

@@ -25,10 +25,11 @@ const (
 	PermAPI       Permission = "api"        // la API JSON (/api/)
 	PermUsers     Permission = "users"      // crear, editar y desactivar usuarios, y resetear contraseñas
 	PermReports   Permission = "reports"    // reportes de ventas, caja y margen (R-06, R-07)
+	PermSettings  Permission = "settings"   // configuración del negocio (modo arranque)
 )
 
 // Permissions son todos los permisos.
-var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports}
+var Permissions = []Permission{PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings}
 
 // rolePermissions es la matriz de F-13.
 var rolePermissions = map[string][]Permission{

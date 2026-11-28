@@ -1,0 +1,11 @@
+# Runs elmanpos-backup.service every night at 23:30. Persistent=true: if the PC
+# was off at 23:30, the copy runs as soon as it is back on.
+[Unit]
+Description=ElmanPOS database backup, every night
+
+[Timer]
+OnCalendar=*-*-* 23:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

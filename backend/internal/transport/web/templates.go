@@ -94,6 +94,7 @@ var partialFiles = []string{
 	"templates/partials/user_form.gohtml",
 	"templates/partials/customer_form.gohtml",
 	"templates/partials/customer_table.gohtml",
+	"templates/partials/pos_customers.gohtml",
 	"templates/partials/user_password.gohtml",
 	"templates/partials/report_period.gohtml",
 	"templates/partials/priced_table.gohtml",

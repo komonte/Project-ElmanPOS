@@ -534,10 +534,11 @@ Also the **initial inventory**: the stock already on the shelves when the system
 
 ### F-14: Customers (selling on account, "fiado")
 
-- **Actor / Role:** the page (`/customers`: list, search, create, edit, deactivate, reactivate) is Admin only (permission `customers`). The register (permission `sell`) can create a customer with just the name while selling on account (PR9).
+- **Actor / Role:** the page (`/customers`: list, search, create, edit, deactivate, reactivate) is Admin only (permission `customers`). The register (permission `sell`) can create a customer with just the name while selling on account.
 - **Data:** name required (2–120, inner spaces collapsed), unique ignoring case; phone (≤ 40) and note (≤ 300) optional. No credit limit. Never deleted: deactivated (not offered at the register; the debt stays).
 - **DB:** single statements in a transaction with their `audit_log` row (`usecase/customers`). A repeated name → 409 "There is already a customer with that name" (`uq_customers_name_lower`).
-- **Next:** selling on account (PR9) and collecting the debt plus the debtors report (PR10).
+- **Selling on account** (F-07, migration `0026`): "On account" is one more payment button (`ACCOUNT`, at most one per sale). Adding it opens "Who is it charged to?": search active customers by name or phone (`GET /pos/customers?q=`, permission `sell`), each with what they already owe; "+ New customer «typed»" creates one with just the name (`POST /pos/customers`) and picks it. Without a customer the sale cannot be charged (`ErrSaleNeedsCustomer`, 400); an inactive or missing one → `ErrCustomerUnavailable` (409). It combines with other methods (cash + on account); the cash rounding applies only to the cash part. The result says "Charged to X's account", the ticket shows the customer, and the register's list shows it next to the payments. Voiding says how much less debt there is. The close (F-12) does not ask for it and the expected cash never counts it; the sales report (R-06) shows it as one more method.
+- **Next:** collecting the debt plus the debtors report (PR10).
 
 ---
 

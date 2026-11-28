@@ -642,6 +642,8 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 
 > No credit limit (decided 2026-11-28). Creating, editing and (de)activating are audited (`audit_log`, table `customers`).
 
+**Selling on account** (migration `0026`): `payment_method` gets `ACCOUNT` ("Cuenta corriente") and `sales.customer_id` (FK → customers, NULL; partial index). A sale with an `ACCOUNT` payment names its customer (checked by the app, `model.Sale.Validate`; at most one `ACCOUNT` payment); without one it has no customer. The **debt is not stored**: it is the sum of the `ACCOUNT` payments of the customer's `COMPLETED` sales (`CustomerStore.Debts`), so a void takes it off by itself. `ACCOUNT` is not in `model.PaymentMethods` (the drawer methods of the blind close): `cash_audits` never has it and it is never expected cash; `model.SaleMethods` adds it for charging and the sales report. The down migration drops the column; the enum value stays (Postgres cannot drop one).
+
 ## 5. Index Summary
 
 | Table | Index | Purpose |

@@ -930,5 +930,19 @@
   "customer.deactivate_confirm": "Deactivate this customer? They will not show at the register. The debt stays.",
   "error.customer_name_taken": "There is already a customer with that name. If it is another person, add something to tell them apart.",
   "error.customer_phone_too_long": "The phone can have up to 40 characters.",
-  "error.customer_notes_too_long": "The note can have up to 300 characters."
+  "error.customer_notes_too_long": "The note can have up to 300 characters.",
+
+  "pos.method_ACCOUNT": "On account",
+  "cash.refund_ACCOUNT": "%s less debt on the customer's account",
+  "pos.customer": "Customer",
+  "pos.customer_search": "Who is it charged to?",
+  "pos.customer_hint": "Type the name or the phone. If they are not there, add them with the name.",
+  "pos.customer_change": "Change",
+  "pos.customer_debt": "Already owes %s",
+  "pos.customer_new": "+ New customer «%s»",
+  "pos.done_on_account": "Charged to %s's account.",
+  "ticket.customer": "Customer",
+  "error.sale_needs_customer": "Choose who it is charged to.",
+  "error.sale_two_account": "On account goes only once.",
+  "error.sale_customer_unavailable": "That customer does not exist or is inactive. Choose another."
 }

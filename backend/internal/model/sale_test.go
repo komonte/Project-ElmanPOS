@@ -303,3 +303,31 @@ func TestValidateCashRounding(t *testing.T) {
 		}
 	}
 }
+
+// Fiado (0026): la cuenta corriente necesita el cliente, va una sola vez y
+// sin ella la venta no lleva cliente.
+func TestSaleValidateAccount(t *testing.T) {
+	cust := int64(7)
+	line := func() []*model.SaleItem { return []*model.SaleItem{{ProductID: 1, Quantity: dec("1")}} }
+	ok := &model.Sale{Items: line(), CustomerID: &cust, Payments: []*model.Payment{pay(model.PaymentCash, "100"), pay(model.PaymentAccount, "900")}}
+	if err := ok.Validate(); err != nil || ok.CustomerID == nil {
+		t.Errorf("cash + account: err %v, customer %v", err, ok.CustomerID)
+	}
+	noCustomer := &model.Sale{Items: line(), Payments: []*model.Payment{pay(model.PaymentAccount, "900")}}
+	if err := noCustomer.Validate(); !errors.Is(err, model.ErrSaleNeedsCustomer) {
+		t.Errorf("no customer: err %v", err)
+	}
+	two := &model.Sale{Items: line(), CustomerID: &cust,
+		Payments: []*model.Payment{pay(model.PaymentAccount, "100"), pay(model.PaymentAccount, "900")}}
+	if err := two.Validate(); !errors.Is(err, model.ErrSaleTwoAccountPayments) {
+		t.Errorf("two account payments: err %v", err)
+	}
+	cashOnly := &model.Sale{Items: line(), CustomerID: &cust, Payments: []*model.Payment{pay(model.PaymentCash, "100")}}
+	if err := cashOnly.Validate(); err != nil || cashOnly.CustomerID != nil {
+		t.Errorf("no account payment drops the customer: err %v, customer %v", err, cashOnly.CustomerID)
+	}
+	// La cuenta corriente no se declara al cerrar la caja.
+	if err := (&model.CashAudit{CashierSessionID: 1, Method: model.PaymentAccount}).Validate(); err == nil {
+		t.Error("ACCOUNT accepted as a cash audit method")
+	}
+}

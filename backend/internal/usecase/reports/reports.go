@@ -8,7 +8,7 @@
 //     ventas (las del medio, aunque estén vacías). Por día o por mes, todos
 //     los tramos del período: un día sin ventas también dice algo.
 //   - Los medios de pago son los que tuvieron pagos en el período, en el
-//     orden de model.PaymentMethods.
+//     orden de model.SaleMethods (con la cuenta corriente: lo fiado).
 //   - Caja: solo las sesiones cerradas, por el día en que se abrieron. Una
 //     abierta se cuenta aparte: mostrar lo esperado antes de contar
 //     arruinaría el cierre ciego (F-12). Su arqueo sale de
@@ -124,7 +124,7 @@ func (s *Service) Sales(ctx context.Context, p model.Period) (*Sales, error) {
 		m.Count += t.Count
 		m.Amount = m.Amount.Add(t.Amount)
 	}
-	for _, name := range model.PaymentMethods {
+	for _, name := range model.SaleMethods {
 		if m := methods[name]; m != nil {
 			if !out.Total.Total.IsZero() {
 				m.Share = m.Amount.Mul(decimal.NewFromInt(100)).Div(out.Total.Total).Round(1)

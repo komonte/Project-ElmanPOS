@@ -2,6 +2,8 @@
 // migración 0025). Reglas del dato en model.Customer.
 //
 // Decisiones:
+//   - La deuda no se guarda: es lo fiado (pagos ACCOUNT de ventas sin
+//     anular). No hay límite de crédito.
 //   - Dar de alta: la caja (permiso sell, al fiar) o el admin. Editar,
 //     desactivar y reactivar: el admin (permiso customers, en la ruta).
 //   - Cada cambio queda en audit_log con quién: un cliente tiene deuda.
@@ -14,6 +16,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/shopspring/decimal"
 
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
@@ -45,6 +49,44 @@ func (s *Service) List(ctx context.Context, query string) ([]*model.Customer, er
 // Search busca activos por nombre o teléfono (la caja).
 func (s *Service) Search(ctx context.Context, query string) ([]*model.Customer, error) {
 	return postgres.NewCustomerStore(s.db).Search(ctx, query)
+}
+
+// WithDebt es un cliente con lo que debe.
+type WithDebt struct {
+	*model.Customer
+	Debt decimal.Decimal `json:"debt"`
+}
+
+// SearchWithDebt busca activos como Search, cada uno con lo que debe: el
+// buscador de la caja al fiar.
+func (s *Service) SearchWithDebt(ctx context.Context, query string) ([]WithDebt, error) {
+	cs := postgres.NewCustomerStore(s.db)
+	found, err := cs.Search(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, len(found))
+	for i, c := range found {
+		ids[i] = c.ID
+	}
+	debts, err := cs.Debts(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]WithDebt, len(found))
+	for i, c := range found {
+		out[i] = WithDebt{Customer: c, Debt: debts[c.ID]}
+	}
+	return out, nil
+}
+
+// Debt es lo que debe el cliente id (0 si nada).
+func (s *Service) Debt(ctx context.Context, id int64) (decimal.Decimal, error) {
+	debts, err := postgres.NewCustomerStore(s.db).Debts(ctx, []int64{id})
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return debts[id], nil
 }
 
 // Get devuelve un cliente. service.ErrNotFound si no existe.

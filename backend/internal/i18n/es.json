@@ -930,5 +930,19 @@
   "customer.deactivate_confirm": "¿Desactivar este cliente? No va a aparecer en la caja. Su deuda sigue.",
   "error.customer_name_taken": "Ya hay un cliente con ese nombre. Si es otra persona, agregá algo que la distinga.",
   "error.customer_phone_too_long": "El teléfono puede tener hasta 40 caracteres.",
-  "error.customer_notes_too_long": "La nota puede tener hasta 300 caracteres."
+  "error.customer_notes_too_long": "La nota puede tener hasta 300 caracteres.",
+
+  "pos.method_ACCOUNT": "Cuenta corriente",
+  "cash.refund_ACCOUNT": "%s menos de deuda en la cuenta corriente",
+  "pos.customer": "Cliente",
+  "pos.customer_search": "¿A quién se le fía?",
+  "pos.customer_hint": "Escribí el nombre o el teléfono. Si no está, se da de alta con el nombre.",
+  "pos.customer_change": "Cambiar",
+  "pos.customer_debt": "Ya debe %s",
+  "pos.customer_new": "+ Nuevo cliente «%s»",
+  "pos.done_on_account": "Quedó a cuenta de %s.",
+  "ticket.customer": "Cliente",
+  "error.sale_needs_customer": "Elegí a quién se le fía.",
+  "error.sale_two_account": "La cuenta corriente va una sola vez.",
+  "error.sale_customer_unavailable": "Ese cliente no existe o está desactivado. Elegí otro."
 }

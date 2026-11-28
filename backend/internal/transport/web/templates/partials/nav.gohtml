@@ -27,7 +27,7 @@
   </div>
   {{end}}
 
-  <div class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
+  <div id="nav-links" class="flex md:flex-col gap-1 overflow-x-auto px-2 pb-2 md:px-3 md:pb-0 md:flex-1">
       {{/* Vender es lo que más se usa: va primero y se ve distinto, como
            un cartel de góndola. */}}
       {{if can .Can "sell"}}
@@ -104,6 +104,39 @@
   </div>
 
   <div class="hidden md:block px-5 py-5 border-t border-white/15">{{template "lang-select" .}}</div>
+  {{/* Los links tienen su propia barra de desplazamiento (en celular, de
+       costado). Cada link carga una página nueva, y sin esto el menú vuelve
+       al principio: el link que se tocó queda fuera de la vista. Se guarda
+       dónde estaba al salir y se recupera al entrar; y si aun así el link
+       de la página actual no se ve, se lo trae a la vista. Va al final del
+       menú (con todo el menú ya armado, si no la altura no es la final) y
+       antes del contenido de la página: corre antes de dibujarse, sin salto. */}}
+  <script>
+    (function () {
+      var box = document.getElementById('nav-links');
+      var key = 'elmanpos-nav-scroll';
+      try {
+        var saved = JSON.parse(sessionStorage.getItem(key) || 'null');
+        if (saved) {
+          box.scrollTop = saved.top;
+          box.scrollLeft = saved.left;
+        }
+      } catch (e) { /* sin sessionStorage: arranca arriba */ }
+      var active = box.querySelector('[aria-current="page"]');
+      if (active) {
+        var a = active.getBoundingClientRect(), b = box.getBoundingClientRect();
+        if (a.top < b.top || a.bottom > b.bottom || a.left < b.left || a.right > b.right) {
+          box.scrollTop += a.top < b.top ? a.top - b.top : Math.max(a.bottom - b.bottom, 0);
+          box.scrollLeft += a.left < b.left ? a.left - b.left : Math.max(a.right - b.right, 0);
+        }
+      }
+      window.addEventListener('pagehide', function () {
+        try {
+          sessionStorage.setItem(key, JSON.stringify({ top: box.scrollTop, left: box.scrollLeft }));
+        } catch (e) { /* nada que guardar */ }
+      });
+    })();
+  </script>
 </nav>
 
 {{define "lang-select"}}

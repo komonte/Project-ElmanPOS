@@ -138,5 +138,9 @@ func TestNavShowsRoleOnTop(t *testing.T) {
 		if strings.Contains(html, "text-sm text-white/55") {
 			t.Errorf("%s: group titles still look like links", u.Role)
 		}
+		// El menú recuerda dónde estaba al cambiar de página.
+		if !strings.Contains(html, `id="nav-links"`) || !strings.Contains(html, "elmanpos-nav-scroll") {
+			t.Errorf("%s: menu without its scroll memory", u.Role)
+		}
 	}
 }

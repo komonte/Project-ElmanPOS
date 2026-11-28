@@ -612,7 +612,7 @@ func TestRenderProductFormNewCategory(t *testing.T) {
 	taxes[0].Selected = true
 	html = render(map[string]any{"Product": &model.Product{}, "CategoryParents": parents, "Taxes": taxes,
 		"NewCategory": &model.Category{Name: "Galletitas", ParentID: &parent, TaxID: 10}})
-	for _, s := range []string{`name="category_new" value="1" >`, `value="Galletitas"`, `<option value="10" selected>IVA 21%`,
+	for _, s := range []string{`name="category_new" value="1" >`, `value="Galletitas"`, `<option value="10" data-vat="" selected>IVA 21%`,
 		`class="field" disabled>`} {
 		if !strings.Contains(html, s) {
 			t.Errorf("open: missing %q", s)

@@ -56,6 +56,7 @@
       document.getElementById('product-category-new-open').hidden = open;
       var current = form.elements.category_id;
       current.disabled = open;
+      productPriceVat(form);
       if (!open) {
         current.focus();
         return;
@@ -66,6 +67,18 @@
         parent.dispatchEvent(new Event('change'));
       }
       form.elements.new_category_name.focus();
+    }
+    // Alta de producto: la etiqueta del precio dice qué IVA incluye, según
+    // la categoría elegida o, con la categoría nueva abierta, su impuesto.
+    // Cada opción trae su nota en data-vat; sin nada elegido, el texto
+    // general (data-default).
+    function productPriceVat(form) {
+      var note = document.getElementById('product-price-vat');
+      if (!note) return;
+      var box = document.getElementById('product-category-new');
+      var select = box && !box.hidden ? form.elements.new_category_tax_id : form.elements.category_id;
+      var opt = select && select.selectedOptions[0];
+      note.textContent = (opt && opt.dataset.vat) || note.dataset.default;
     }
     document.addEventListener('keydown', function (e) {
       var modal = document.getElementById('form-modal');

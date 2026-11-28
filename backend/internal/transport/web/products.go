@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/komonte/Project-ElmanPOS/backend/internal/i18n"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/model"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/service"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/transport"
@@ -29,6 +30,9 @@ type productOption struct {
 	Selected bool
 	Inactive bool
 	TaxID    int64 // solo en las categorías padre de una categoría nueva
+	// VatNote dice qué incluye el precio de venta con el IVA de esta
+	// categoría (o de este impuesto): la etiqueta del precio en el alta.
+	VatNote string
 }
 
 // activeOptions arma las opciones de un <select> de una tabla maestra: las
@@ -65,6 +69,87 @@ func productCategoryOptions(all []*model.Category, current int64) []productOptio
 		return strings.ToLower(opts[i].Label) < strings.ToLower(opts[j].Label)
 	})
 	return opts
+}
+
+// priceVatNote dice qué incluye el precio de venta con una tasa de IVA: "IVA
+// 21 % incluido", o "sin IVA" con tasa 0. Los precios siempre son lo que paga
+// el cliente; el IVA de la venta sale de adentro (ver model.SaleItem).
+func priceVatNote(lang string, rate decimal.Decimal) string {
+	if !rate.IsPositive() {
+		return i18n.T(lang, "product.price_vat_none")
+	}
+	return fmt.Sprintf(i18n.T(lang, "product.price_vat_included"), formatPercent(lang, rate))
+}
+
+// taxRates arma id → tasa, para poner la nota del precio en cada opción.
+func taxRates(taxes []*model.Tax) map[int64]decimal.Decimal {
+	rates := make(map[int64]decimal.Decimal, len(taxes))
+	for _, t := range taxes {
+		rates[t.ID] = t.Rate
+	}
+	return rates
+}
+
+// withCategoryVatNotes pone en cada opción de categoría la nota del precio
+// según su IVA. opts sale de productCategoryOptions (mismos ID que all).
+func withCategoryVatNotes(lang string, opts []productOption, all []*model.Category, rates map[int64]decimal.Decimal) []productOption {
+	taxOf := make(map[int64]int64, len(all))
+	for _, c := range all {
+		taxOf[c.ID] = c.TaxID
+	}
+	for i := range opts {
+		if rate, ok := rates[taxOf[opts[i].ID]]; ok {
+			opts[i].VatNote = priceVatNote(lang, rate)
+		}
+	}
+	return opts
+}
+
+// categoryVatNote es la nota del precio para una categoría guardada (la
+// sección de precio al editar). Vacía si no se pudo leer: la etiqueta queda
+// sin nota, no es un error de la pantalla.
+func (h *WebHandler) categoryVatNote(ctx context.Context, categoryID int64) string {
+	c, err := h.categorySvc.GetByID(ctx, categoryID)
+	if err != nil {
+		return ""
+	}
+	t, err := h.taxSvc.GetByID(ctx, c.TaxID)
+	if err != nil {
+		return ""
+	}
+	return priceVatNote(transport.GetLocale(ctx), t.Rate)
+}
+
+// categoryTaxID es el impuesto de una categoría de la lista (0 si no está).
+func categoryTaxID(all []*model.Category, id int64) int64 {
+	for _, c := range all {
+		if c.ID == id {
+			return c.TaxID
+		}
+	}
+	return 0
+}
+
+// initialVatNote es la nota con la que se dibuja la etiqueta del precio en el
+// alta (al volver con un error ya hay algo elegido): el impuesto de la
+// categoría nueva si está abierta, si no la categoría elegida. Vacía: la
+// etiqueta lleva el texto general. Después la cambia el navegador
+// (productPriceVat en base.gohtml).
+func initialVatNote(data map[string]any) string {
+	if _, open := data["NewCategory"]; open {
+		for _, o := range data["Taxes"].([]productOption) {
+			if o.Selected {
+				return o.VatNote
+			}
+		}
+		return ""
+	}
+	for _, o := range data["Categories"].([]productOption) {
+		if o.Selected {
+			return o.VatNote
+		}
+	}
+	return ""
 }
 
 // newCategoryParentOptions son las categorías que pueden ser padre de una
@@ -258,25 +343,36 @@ func (h *WebHandler) productFormData(r *http.Request, p *model.Product, errMsg s
 		return data
 	}
 
-	data["Categories"] = productCategoryOptions(categories, p.CategoryID)
+	taxes, err := h.taxSvc.GetAllIncludingInactive(ctx)
+	if err != nil {
+		data["Error"] = h.errMsg(r, err)
+		return data
+	}
+	lang := transport.GetLocale(ctx)
+	rates := taxRates(taxes)
+	data["Categories"] = withCategoryVatNotes(lang, productCategoryOptions(categories, p.CategoryID), categories, rates)
+	if p.ID != 0 {
+		// Editar: la sección de precio dice qué IVA incluye el precio nuevo.
+		data["VatNote"] = priceVatNote(lang, rates[categoryTaxID(categories, p.CategoryID)])
+	}
 	if p.ID == 0 {
 		// Alta: la categoría se puede crear ahí mismo (nombre, padre e IVA).
 		// Si vuelve con un error, el subformulario sigue abierto con lo escrito.
 		nc := newCategoryFromForm(r)
-		taxes, err := h.taxSvc.GetAllIncludingInactive(ctx)
-		if err != nil {
-			data["Error"] = h.errMsg(r, err)
-			return data
-		}
 		var parentID, taxID *int64
 		if nc != nil {
 			parentID, taxID = nc.ParentID, &nc.TaxID
 			data["NewCategory"] = nc
 		}
 		data["CategoryParents"] = newCategoryParentOptions(categories, parentID)
-		data["Taxes"] = activeOptions(taxes, taxID, func(t *model.Tax) (int64, string, bool) {
+		taxOpts := activeOptions(taxes, taxID, func(t *model.Tax) (int64, string, bool) {
 			return t.ID, t.Name, t.IsActive
 		})
+		for i := range taxOpts {
+			taxOpts[i].VatNote = priceVatNote(lang, rates[taxOpts[i].ID])
+		}
+		data["Taxes"] = taxOpts
+		data["VatNote"] = initialVatNote(data)
 	}
 	data["Suppliers"] = supplierOptions(suppliers, p.PreferredSupplierID)
 	data["SaleTypes"] = saleTypeOptions(p.SaleType)
@@ -620,6 +716,7 @@ func (h *WebHandler) renderProductPrices(w http.ResponseWriter, r *http.Request,
 		"PriceError": errMsg, "PriceValue": value}
 	if p, err := h.productSvc.GetByID(r.Context(), productID); err == nil {
 		data["OpenPrice"], data["OpenPriceAllowed"] = p.OpenPrice, prices.OpenPriceAllowed(p)
+		data["VatNote"] = h.categoryVatNote(r.Context(), p.CategoryID)
 	}
 	h.renderPartial(w, r, "product_prices.gohtml", data)
 }

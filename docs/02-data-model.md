@@ -644,6 +644,22 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 
 **Selling on account** (migration `0026`): `payment_method` gets `ACCOUNT` ("Cuenta corriente") and `sales.customer_id` (FK → customers, NULL; partial index). A sale with an `ACCOUNT` payment names its customer (checked by the app, `model.Sale.Validate`; at most one `ACCOUNT` payment); without one it has no customer. The **debt is not stored**: it is the sum of the `ACCOUNT` payments of the customer's `COMPLETED` sales (`CustomerStore.Debts`), so a void takes it off by itself. `ACCOUNT` is not in `model.PaymentMethods` (the drawer methods of the blind close): `cash_audits` never has it and it is never expected cash; `model.SaleMethods` adds it for charging and the sales report. The down migration drops the column; the enum value stays (Postgres cannot drop one).
 
+### 4.29 `customer_payments` — collecting a debt (migration `0027`)
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | BIGSERIAL | PK | |
+| customer_id | BIGINT | FK → customers.id, NOT NULL | Who paid. |
+| cashier_session_id | BIGINT | FK → cashier_sessions.id, NOT NULL | The open session it went into. |
+| method | payment_method | NOT NULL, CHECK (<> 'ACCOUNT') | A drawer method. |
+| amount | NUMERIC(12,2) | NOT NULL, CHECK (> 0) | What was applied to the debt (cash change is not stored). |
+| reference | VARCHAR(120) | NULL | |
+| created_by | BIGINT | FK → users.id, NOT NULL | Who collected. |
+| created_at | TIMESTAMPTZ | NOT NULL DEFAULT now() | |
+
+Indexes: `(customer_id, created_at)`, `(cashier_session_id)`. Rows are only appended (no void yet).
+> The **debt** of a customer = `ACCOUNT` payments of their `COMPLETED` sales − these payments (`CustomerStore.Debts`). A payment never exceeds the debt (checked with the customer row locked). `SaleStore.PaidByMethod` adds the session's payments to the expected amount of their method at the close (F-12).
+
 ## 5. Index Summary
 
 | Table | Index | Purpose |

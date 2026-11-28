@@ -338,6 +338,17 @@ func copyInput(in *model.Sale) *model.Sale {
 	return out
 }
 
+// LockOpenSession traba la sesión abierta de la única caja del local activo
+// y devuelve su id, para otros casos de uso que meten plata en la caja (el
+// cobro de una deuda de fiado). ErrRegisterClosed si no hay.
+func LockOpenSession(ctx context.Context, tx postgres.DBTX) (int64, error) {
+	_, sess, err := lockSession(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	return sess.ID, nil
+}
+
 // lockSession busca la sesión abierta de la única caja del local activo y la
 // traba hasta el final de la transacción.
 func lockSession(ctx context.Context, tx postgres.DBTX) (int64, *model.CashierSession, error) {

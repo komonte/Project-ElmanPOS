@@ -56,6 +56,8 @@
       {{if can .Can "customers"}}
       <a href="/customers" {{if eq .Section "customers"}}aria-current="page"{{end}}
          class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "customers"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.customers"}}</a>
+      <a href="/reports/debtors" {{if eq .Section "reports_debtors"}}aria-current="page"{{end}}
+         class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-sm whitespace-nowrap border-l-4 {{if eq .Section "reports_debtors"}}border-tag bg-white/10 text-white font-bold{{else}}border-transparent text-white/75 hover:text-white hover:bg-white/5{{end}}">{{t "nav.debtors"}}</a>
       {{end}}
       {{if or (can .Can "reports") (can .Can "stock") (can .Can "catalog")}}
     <p class="nav-group hidden md:block">{{t "nav.group_reports"}}</p>

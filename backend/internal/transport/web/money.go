@@ -83,3 +83,13 @@ func parseFormMoney(s string) (decimal.Decimal, bool) {
 	}
 	return d, true
 }
+
+// formatMoneyInput es un importe para precargar un campo, sin símbolo ni
+// miles: "2500,00" (es) o "2500.00" (en). parseFormMoney lo vuelve a leer.
+func formatMoneyInput(lang string, d decimal.Decimal) string {
+	s := d.StringFixed(2)
+	if lang == "es" {
+		s = strings.Replace(s, ".", ",", 1)
+	}
+	return s
+}

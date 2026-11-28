@@ -1,0 +1,37 @@
+{{define "content"}}
+{{/* La cuenta de un cliente (0027): lo fiado y lo pagado, del más viejo al
+     más nuevo, con el saldo. Datos: .Customer, .Entries, .Debt. */}}
+<header class="mb-6 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="shelf-title">{{.Customer.Name}}</h1>
+    <p id="account-debt" class="mt-4 text-2xl">{{printf (t "collect.owes") (money .Debt)}}</p>
+  </div>
+  <a href="/reports/debtors" class="btn-secondary">{{t "debtors.back"}}</a>
+</header>
+{{if .Entries}}
+<div class="overflow-x-auto bg-surface border-2 border-line rounded-md max-w-3xl">
+  <table id="account-table" class="min-w-full text-left">
+    <thead class="border-b-2 border-line text-muted">
+      <tr>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "debtors.date"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold">{{t "debtors.movement"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold text-right">{{t "debtors.amount"}}</th>
+        <th scope="col" class="px-3 py-3 font-bold text-right">{{t "debtors.balance"}}</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {{range .Entries}}
+      <tr>
+        <td class="px-3 py-2 whitespace-nowrap">{{formatTime .At}}</td>
+        <td class="px-3 py-2">{{if .SaleNumber}}{{printf (t "debtors.sold") .SaleNumber}}{{else}}{{printf (t "debtors.paid") (t (printf "pos.method_%s" .Method))}}{{end}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap {{if .Amount.IsNegative}}text-stock{{end}}">{{money .Amount}}</td>
+        <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{money .Balance}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<p class="text-muted">{{t "debtors.no_movements"}}</p>
+{{end}}
+{{end}}

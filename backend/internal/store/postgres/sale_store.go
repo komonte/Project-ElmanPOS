@@ -181,16 +181,21 @@ func (s *SaleStore) Get(ctx context.Context, id int64) (*model.Sale, error) {
 	return sale, prows.Err()
 }
 
-// PaidByMethod suma los pagos de las ventas COMPLETED de una sesión, por
+// PaidByMethod suma los pagos de las ventas COMPLETED de una sesión y los
+// cobros de deudas de fiado hechos en ella (0027), por
 // medio: lo esperado del arqueo (F-12). Las anuladas no cuentan (su plata
 // se devolvió). Un medio sin pagos no está en el map.
 func (s *SaleStore) PaidByMethod(ctx context.Context, sessionID int64) (map[string]decimal.Decimal, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT p.method, SUM(p.amount)
-		FROM payments p
-		JOIN sales s ON s.id = p.sale_id
-		WHERE s.cashier_session_id = $1 AND s.status = 'COMPLETED'
-		GROUP BY p.method;`, sessionID)
+		SELECT method, SUM(amount) FROM (
+		    SELECT p.method, p.amount
+		    FROM payments p
+		    JOIN sales s ON s.id = p.sale_id
+		    WHERE s.cashier_session_id = $1 AND s.status = 'COMPLETED'
+		    UNION ALL
+		    SELECT method, amount FROM customer_payments WHERE cashier_session_id = $1
+		) m
+		GROUP BY method;`, sessionID)
 	if err != nil {
 		return nil, err
 	}

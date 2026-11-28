@@ -512,7 +512,8 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Catalog: products, codes, categories, brands, suppliers (F-01, F-02) | ✓ | ✗ | ✓ |
   | Price/cost changes, taxes (F-03, F-04) | ✓ | ✗ | ✗ |
   | Combo components (F-05) | ✓ | ✗ | ✗ (sees them) |
-  | Customers page (F-14) | ✓ | ✗ | ✗ |
+  | Customers page, debtors report (F-14) | ✓ | ✗ | ✗ |
+  | Sell on account, collect a debt (F-07, F-14) | ✓ | ✓ | ✗ |
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
   | Sales, cash & margin and cash rounding reports (R-06, R-07, R-09) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
@@ -538,7 +539,9 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Data:** name required (2–120, inner spaces collapsed), unique ignoring case; phone (≤ 40) and note (≤ 300) optional. No credit limit. Never deleted: deactivated (not offered at the register; the debt stays).
 - **DB:** single statements in a transaction with their `audit_log` row (`usecase/customers`). A repeated name → 409 "There is already a customer with that name" (`uq_customers_name_lower`).
 - **Selling on account** (F-07, migration `0026`): "On account" is one more payment button (`ACCOUNT`, at most one per sale). Adding it opens "Who is it charged to?": search active customers by name or phone (`GET /pos/customers?q=`, permission `sell`), each with what they already owe; "+ New customer «typed»" creates one with just the name (`POST /pos/customers`) and picks it. Without a customer the sale cannot be charged (`ErrSaleNeedsCustomer`, 400); an inactive or missing one → `ErrCustomerUnavailable` (409). It combines with other methods (cash + on account); the cash rounding applies only to the cash part. The result says "Charged to X's account", the ticket shows the customer, and the register's list shows it next to the payments. Voiding says how much less debt there is. The close (F-12) does not ask for it and the expected cash never counts it; the sales report (R-06) shows it as one more method.
-- **Next:** collecting the debt plus the debtors report (PR10).
+- **Collecting a debt** (migration `0027`, `/pos/collect`, permission `sell`; "Collect a debt" link on the sell page): search the customer (links with what they owe), see the debt, choose a drawer method (never on account), the amount comes prefilled with the whole debt. `usecase/customers.Collect`, one transaction: lock the open session (`sales.LockOpenSession`; closed → 409), lock the customer (`FOR UPDATE`), read the debt (none → 409 `ErrNoDebt`), more than the debt → by card/transfer/QR 400 `ErrOverDebt`, in cash the extra is change (not stored); insert `customer_payments` and `audit_log`. The result says what was collected, the change and what is still owed. At the close, the payment adds to the expected amount of its method in that session.
+- **Debtors** (`/reports/debtors`, permission `customers`, admin only; menu "Debtors" under Cash): customers who owe (active or not), largest debt first, with phone, last sale on account and last payment ("never paid"), and the total owed. "See account" (`/customers/{id}/account`) lists what was sold on account (sale number) and each payment, oldest first, with the running balance.
+- **Not yet:** voiding a debt payment (a mistake is not undone in v1).
 
 ---
 

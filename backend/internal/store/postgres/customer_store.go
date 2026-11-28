@@ -130,12 +130,17 @@ func (s *CustomerStore) SetActive(ctx context.Context, id int64, active bool) er
 }
 
 // debtSelect es la deuda de cada cliente: lo que se le fió (pagos ACCOUNT
-// de ventas COMPLETED). Una venta anulada deja de contar sola.
+// de ventas COMPLETED) menos lo que pagó (customer_payments, 0027). Una
+// venta anulada deja de contar sola.
 const debtSelect = `
-	SELECT s.customer_id, SUM(p.amount) AS debt
-	FROM payments p JOIN sales s ON s.id = p.sale_id
-	WHERE p.method = 'ACCOUNT' AND s.status = 'COMPLETED' AND s.customer_id IS NOT NULL
-	GROUP BY s.customer_id`
+	SELECT customer_id, SUM(amount) AS debt FROM (
+	    SELECT s.customer_id, p.amount
+	    FROM payments p JOIN sales s ON s.id = p.sale_id
+	    WHERE p.method = 'ACCOUNT' AND s.status = 'COMPLETED' AND s.customer_id IS NOT NULL
+	    UNION ALL
+	    SELECT customer_id, -amount FROM customer_payments
+	) m
+	GROUP BY customer_id`
 
 // Debts devuelve cuánto debe cada uno de los clientes ids. Los que no deben
 // nada no están en el mapa.
@@ -157,6 +162,79 @@ func (s *CustomerStore) Debts(ctx context.Context, ids []int64) (map[int64]decim
 			return nil, err
 		}
 		out[id] = debt
+	}
+	return out, rows.Err()
+}
+
+// Lock traba al cliente hasta el final de la transacción: dos cobros del
+// mismo cliente no leen la misma deuda. store.ErrNotFound si no existe.
+func (s *CustomerStore) Lock(ctx context.Context, id int64) (*model.Customer, error) {
+	c, err := scanCustomer(s.db.QueryRowContext(ctx, customerSelect+` WHERE id = $1 FOR UPDATE;`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	return c, err
+}
+
+// AddPayment guarda un cobro de deuda y llena id y fecha.
+func (s *CustomerStore) AddPayment(ctx context.Context, p *model.CustomerPayment) error {
+	return s.db.QueryRowContext(ctx, `
+		INSERT INTO customer_payments (customer_id, cashier_session_id, method, amount, reference, created_by)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6)
+		RETURNING id, created_at;`, p.CustomerID, p.CashierSessionID, p.Method, p.Amount, p.Reference, p.CreatedBy,
+	).Scan(&p.ID, &p.CreatedAt)
+}
+
+// Debtors son los clientes que deben algo (activos o no), el que más debe
+// primero, con su última venta fiada y su último pago.
+func (s *CustomerStore) Debtors(ctx context.Context) ([]model.Debtor, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT c.id, c.name, COALESCE(c.phone, ''), c.is_active, d.debt,
+		       (SELECT MAX(s.created_at) FROM sales s JOIN payments p ON p.sale_id = s.id
+		        WHERE s.customer_id = c.id AND s.status = 'COMPLETED' AND p.method = 'ACCOUNT'),
+		       (SELECT MAX(created_at) FROM customer_payments WHERE customer_id = c.id)
+		FROM (`+debtSelect+`) d JOIN customers c ON c.id = d.customer_id
+		WHERE d.debt > 0
+		ORDER BY d.debt DESC, lower(c.name);`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.Debtor
+	for rows.Next() {
+		var d model.Debtor
+		if err := rows.Scan(&d.CustomerID, &d.Name, &d.Phone, &d.IsActive, &d.Debt, &d.LastSale, &d.LastPayment); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// Statement es la cuenta de un cliente: lo fiado (ventas COMPLETED con
+// pago ACCOUNT) y lo pagado, del más viejo al más nuevo, con el saldo
+// después de cada movimiento.
+func (s *CustomerStore) Statement(ctx context.Context, customerID int64) ([]model.AccountEntry, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT at, COALESCE(sale_number, 0), method, amount, SUM(amount) OVER (ORDER BY at, k, id) FROM (
+		    SELECT s.created_at AS at, 0 AS k, s.id, s.sale_number, 'ACCOUNT'::text AS method, p.amount
+		    FROM payments p JOIN sales s ON s.id = p.sale_id
+		    WHERE s.customer_id = $1 AND s.status = 'COMPLETED' AND p.method = 'ACCOUNT'
+		    UNION ALL
+		    SELECT created_at, 1, id, NULL, method::text, -amount FROM customer_payments WHERE customer_id = $1
+		) m
+		ORDER BY at, k, id;`, customerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.AccountEntry
+	for rows.Next() {
+		var e model.AccountEntry
+		if err := rows.Scan(&e.At, &e.SaleNumber, &e.Method, &e.Amount, &e.Balance); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
 	}
 	return out, rows.Err()
 }

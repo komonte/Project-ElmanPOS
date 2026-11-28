@@ -1,16 +1,25 @@
 {{- /* Clientes para fiar en la caja (PosCustomers): cada uno es un botón
      que lo elige (posPickCustomer), con lo que debe. Si lo escrito no es
      exactamente uno de ellos, ofrece darlo de alta (posNewCustomer). Con
-     .Created, el recién creado: la página lo elige sola. Sin espacios
+     .Created, el recién creado: la página lo elige sola. Con .Collect
+     (cobrar una deuda), cada uno es un link a su cobro. Sin espacios
      sueltos: vacía, :empty la oculta. */ -}}
 {{- range .Customers}}
 <li>
+  {{- if $.Collect}}
+  <a href="/pos/collect?customer={{.ID}}" data-collect="{{.ID}}"
+     class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
+    <span class="font-bold">{{.Name}}</span>{{with .Phone}} <span class="text-sm text-muted">· {{.}}</span>{{end}}
+    {{if .Debt.IsPositive}}<span class="block text-sm text-danger font-bold">{{printf (t "pos.customer_debt") (money .Debt)}}</span>{{else}}<span class="block text-sm text-muted">{{t "collect.owes_nothing"}}</span>{{end}}
+  </a>
+  {{- else}}
   <button type="button" data-customer="{{.ID}}" data-name="{{.Name}}" {{if .Debt.IsPositive}}data-debt="{{money .Debt}}"{{end}}
           {{if $.Created}}data-created{{end}} onclick="posPickCustomer(this)"
           class="block w-full text-left px-3 py-2 hover:bg-paper focus:bg-paper">
     <span class="font-bold">{{.Name}}</span>{{with .Phone}} <span class="text-sm text-muted">· {{.}}</span>{{end}}
     {{if .Debt.IsPositive}}<span class="block text-sm text-danger font-bold">{{printf (t "pos.customer_debt") (money .Debt)}}</span>{{end}}
   </button>
+  {{- end}}
 </li>
 {{- end}}
 {{- if .OfferNew}}

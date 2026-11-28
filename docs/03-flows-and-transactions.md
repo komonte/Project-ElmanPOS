@@ -512,13 +512,14 @@ Also the **initial inventory**: the stock already on the shelves when the system
   | Catalog: products, codes, categories, brands, suppliers (F-01, F-02) | ✓ | ✗ | ✓ |
   | Price/cost changes, taxes (F-03, F-04) | ✓ | ✗ | ✗ |
   | Combo components (F-05) | ✓ | ✗ | ✗ (sees them) |
+  | Customers page (F-14) | ✓ | ✗ | ✗ |
   | Void (F-08) | ✓ | ✗ | ✗ |
   | JSON API (`/api/`) | ✓ | ✗ | ✗ |
   | Sales, cash & margin and cash rounding reports (R-06, R-07, R-09) | ✓ | ✗ (sees each close summary, F-12) | ✗ |
   | Restock and expiring reports (R-01, R-02) | ✓ | ✗ | ✓ |
   | Other stock reports (R-03, R-04, R-05; pending) | ✓ | ✗ | ? |
   | User management | ✓ | ✗ | ✗ |
-- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports`, `settings`, `combos` (admin only). An unknown role or an inactive user has none.
+- **Permissions, not roles** (`model/permission.go`): routes, menu and buttons ask for a permission ("can void?"), never for a role. One table maps each role to its permissions: `sell`, `cash` (cashier and admin); `stock`, `catalog` (stock clerk and admin); `cash_setup`, `void`, `prices`, `api`, `users`, `reports`, `settings`, `combos`, `customers` (admin only). An unknown role or an inactive user has none.
 - **Every route declares its permission** (`cmd/api/routes.go`): one table with the pattern, the permission and the handler; `public` (`/login`, the language) and `loggedIn` (start page, logout) are explicit too. The server does not start (`panic`) if a route has no known permission, and a test fails if a `WebHandler` handler is missing from the table, so a new route cannot be left open by mistake. The whole API sits behind `api`. Tests try every route with every role, plus the matrix written by hand.
 - **Without the permission** (`transport.Guard.Require`, after `AuthMiddleware`): a page → 403 "No permission" with the role's menu, "Your user is Cashier and cannot open this page." and "Back" to the role's start; htmx → 403 with the message as text (the toast shows it); API → 403 `{"error": "forbidden"}`. The server log records who, which permission and which path; `audit_log` does not (noise).
 - **Menu and buttons by role:** the menu, the start page and the buttons show only what the role can use: a cashier sees Sell, Start and Cash, without "Void"; a stock clerk sees the catalog (without taxes) and inventory, and the product's price and cost without their forms. Hiding is comfort: the server rejects anyway.
@@ -528,6 +529,15 @@ Also the **initial inventory**: the stock already on the shelves when the system
 - **Invariants:** passwords stored only as bcrypt hashes, never logged or audited; tokens stored only as SHA-256; deactivated users cannot authenticate and their sessions stop working; every check is server-side (**NFR-02**).
 - **Errors:** wrong credentials → 401 and the generic message; locked → 401 and "wait"; database down → 500.
 - **Edge cases:** session expired (12 h) → back to the login, then to the page; two browsers → two independent sessions; logging out in one does not close the other (a password change closes all).
+
+---
+
+### F-14: Customers (selling on account, "fiado")
+
+- **Actor / Role:** the page (`/customers`: list, search, create, edit, deactivate, reactivate) is Admin only (permission `customers`). The register (permission `sell`) can create a customer with just the name while selling on account (PR9).
+- **Data:** name required (2–120, inner spaces collapsed), unique ignoring case; phone (≤ 40) and note (≤ 300) optional. No credit limit. Never deleted: deactivated (not offered at the register; the debt stays).
+- **DB:** single statements in a transaction with their `audit_log` row (`usecase/customers`). A repeated name → 409 "There is already a customer with that name" (`uq_customers_name_lower`).
+- **Next:** selling on account (PR9) and collecting the debt plus the debtors report (PR10).
 
 ---
 

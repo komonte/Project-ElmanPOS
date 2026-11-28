@@ -913,5 +913,22 @@
   "report.rounding_count_year": "Ventas redondeadas en los últimos 12 meses",
   "report.rounding_cash_sales": "Ventas con efectivo",
   "report.rounding_rounded": "Redondeadas",
-  "report.rounding_amount": "Redondeado"
+  "report.rounding_amount": "Redondeado",
+
+  "nav.customers": "Clientes (fiado)",
+  "customer.title": "Clientes",
+  "customer.hint": "Las personas a las que se les fía. Solo el nombre es obligatorio y no se repite. La caja también puede dar de alta uno al fiar. Un cliente desactivado no aparece en la caja, pero su deuda sigue.",
+  "customer.create": "Nuevo cliente",
+  "customer.edit": "Editar cliente",
+  "customer.search": "Buscar por nombre o teléfono",
+  "customer.phone": "Teléfono",
+  "customer.notes": "Nota",
+  "customer.name_hint": "Si hay dos con el mismo nombre, agregá algo que los distinga: «María (kiosco)».",
+  "customer.empty": "No hay clientes.",
+  "customer.deactivate": "Desactivar",
+  "customer.reactivate": "Reactivar",
+  "customer.deactivate_confirm": "¿Desactivar este cliente? No va a aparecer en la caja. Su deuda sigue.",
+  "error.customer_name_taken": "Ya hay un cliente con ese nombre. Si es otra persona, agregá algo que la distinga.",
+  "error.customer_phone_too_long": "El teléfono puede tener hasta 40 caracteres.",
+  "error.customer_notes_too_long": "La nota puede tener hasta 300 caracteres."
 }

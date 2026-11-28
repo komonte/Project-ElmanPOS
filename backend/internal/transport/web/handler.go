@@ -19,6 +19,7 @@ import (
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/combos"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/costs"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/createproduct"
+	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/customers"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/prices"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/productcodes"
 	"github.com/komonte/Project-ElmanPOS/backend/internal/usecase/purchases"
@@ -42,7 +43,8 @@ type WebHandler struct {
 	// Casos de uso (D-02).
 	createProduct *createproduct.Service
 	productCodes  *productcodes.Service
-	combos        *combos.Service // WithCombos
+	combos        *combos.Service    // WithCombos
+	customers     *customers.Service // WithCustomers
 	prices        *prices.Service
 	costs         *costs.Service
 	purchases     *purchases.Service
@@ -281,6 +283,13 @@ var errorKeys = []struct {
 	{store.ErrSessionNotOpen, "error.cash_session_not_open"},
 	{model.ErrInvalidDeclaredAmount, "error.cash_declared_invalid"},
 	{model.ErrInvalidCashRounding, "error.cash_rounding_invalid"},
+	// Clientes (fiado).
+	{model.ErrCustomerNameRequired, "error.name_required"},
+	{model.ErrCustomerNameTooShort, "error.name_too_short"},
+	{model.ErrCustomerNameTooLong, "error.name_too_long"},
+	{model.ErrCustomerPhoneTooLong, "error.customer_phone_too_long"},
+	{model.ErrCustomerNotesTooLong, "error.customer_notes_too_long"},
+	{customers.ErrNameTaken, "error.customer_name_taken"},
 	// Componentes de un combo (F-05). En la caja, un componente que ya no
 	// sirve dice eso, no el error de la pantalla de componentes: va primero.
 	{sales.ErrComboComponent, "error.sale_combo_component"},

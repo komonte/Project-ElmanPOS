@@ -5,7 +5,7 @@ import "testing"
 // TestCan es la matriz de F-13: si cambia, este test cambia con ella.
 func TestCan(t *testing.T) {
 	want := map[string][]Permission{
-		RoleAdmin:      {PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings, PermCombos},
+		RoleAdmin:      {PermSell, PermCash, PermCashSetup, PermVoid, PermStock, PermCatalog, PermPrices, PermAPI, PermUsers, PermReports, PermSettings, PermCombos, PermCustomers},
 		RoleCashier:    {PermSell, PermCash},
 		RoleStockClerk: {PermStock, PermCatalog},
 		"":             {},

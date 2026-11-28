@@ -1,0 +1,25 @@
+{{define "content"}}
+{{/* Clientes para fiar (0025), solo el admin. Datos: .Customers, .Search. */}}
+<header class="flex flex-wrap items-end justify-between gap-4 mb-8">
+  <div>
+    <h1 class="shelf-title">{{t "customer.title"}}</h1>
+    <p class="mt-4 text-lg text-muted max-w-2xl">{{t "customer.hint"}}</p>
+  </div>
+  <button id="customer-new" hx-get="/customers/new" hx-target="#form-modal" hx-swap="innerHTML" class="btn-primary">
+    <span aria-hidden="true" class="text-2xl leading-none">+</span>{{t "customer.create"}}
+  </button>
+</header>
+
+<div id="form-modal"></div>
+
+<div class="mb-4">
+  <label for="search" class="sr-only">{{t "customer.search"}}</label>
+  <input id="search" type="search" name="search" autofocus placeholder="{{t "customer.search"}}" value="{{.Search}}"
+         hx-get="/customers" hx-trigger="input changed delay:300ms, search" hx-target="#customers-table" hx-swap="innerHTML"
+         class="field max-w-sm">
+</div>
+
+<div id="customers-table" class="overflow-x-auto bg-surface border-2 border-line rounded-md">
+  {{template "customer_table.gohtml" .}}
+</div>
+{{end}}

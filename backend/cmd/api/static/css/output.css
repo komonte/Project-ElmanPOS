@@ -394,6 +394,9 @@
   .max-w-6xl {
     max-width: var(--container-6xl);
   }
+  .max-w-28 {
+    max-width: calc(var(--spacing) * 28);
+  }
   .max-w-36 {
     max-width: calc(var(--spacing) * 36);
   }
@@ -405,6 +408,9 @@
   }
   .max-w-48 {
     max-width: calc(var(--spacing) * 48);
+  }
+  .max-w-56 {
+    max-width: calc(var(--spacing) * 56);
   }
   .max-w-60 {
     max-width: calc(var(--spacing) * 60);

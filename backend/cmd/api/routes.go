@@ -46,6 +46,7 @@ func webRoutes(h *web.WebHandler) []route {
 		settings  = model.PermSettings
 		combos    = model.PermCombos
 		customers = model.PermCustomers
+		returns   = model.PermReturns
 	)
 	return []route{
 		{"GET /{$}", loggedIn, h.Index},
@@ -147,6 +148,8 @@ func webRoutes(h *web.WebHandler) []route {
 		{"POST /pos/checkout", sell, h.PosCheckout},
 		{"GET /pos/customers", sell, h.PosCustomers},
 		{"POST /pos/customers", sell, h.PosCustomersCreate},
+		{"GET /returns", returns, h.ReturnsPage},
+		{"POST /returns", returns, h.ReturnsCreate},
 		{"GET /pos/collect", sell, h.PosCollectPage},
 		{"GET /pos/collect/customers", sell, h.PosCollectCustomers},
 		{"POST /pos/collect", sell, h.PosCollect},

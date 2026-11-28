@@ -130,7 +130,8 @@ func (s *CustomerStore) SetActive(ctx context.Context, id int64, active bool) er
 }
 
 // debtSelect es la deuda de cada cliente: lo que se le fió (pagos ACCOUNT
-// de ventas COMPLETED) menos lo que pagó (customer_payments, 0027). Una
+// de ventas COMPLETED) menos lo que pagó (customer_payments, 0027) y lo
+// que se le devolvió a cuenta corriente (devoluciones, 0028). Una
 // venta anulada deja de contar sola.
 const debtSelect = `
 	SELECT customer_id, SUM(amount) AS debt FROM (
@@ -139,6 +140,10 @@ const debtSelect = `
 	    WHERE p.method = 'ACCOUNT' AND s.status = 'COMPLETED' AND s.customer_id IS NOT NULL
 	    UNION ALL
 	    SELECT customer_id, -amount FROM customer_payments
+	    UNION ALL
+	    SELECT s.customer_id, -rp.amount
+	    FROM sale_return_payments rp JOIN sale_returns r ON r.id = rp.return_id JOIN sales s ON s.id = r.sale_id
+	    WHERE rp.method = 'ACCOUNT' AND s.customer_id IS NOT NULL
 	) m
 	GROUP BY customer_id`
 
@@ -222,6 +227,10 @@ func (s *CustomerStore) Statement(ctx context.Context, customerID int64) ([]mode
 		    WHERE s.customer_id = $1 AND s.status = 'COMPLETED' AND p.method = 'ACCOUNT'
 		    UNION ALL
 		    SELECT created_at, 1, id, NULL, method::text, -amount FROM customer_payments WHERE customer_id = $1
+		    UNION ALL
+		    SELECT r.created_at, 2, rp.id, s.sale_number, 'RETURN', -rp.amount
+		    FROM sale_return_payments rp JOIN sale_returns r ON r.id = rp.return_id JOIN sales s ON s.id = r.sale_id
+		    WHERE s.customer_id = $1 AND rp.method = 'ACCOUNT'
 		) m
 		ORDER BY at, k, id;`, customerID)
 	if err != nil {

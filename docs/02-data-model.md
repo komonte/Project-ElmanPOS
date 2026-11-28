@@ -660,6 +660,13 @@ One row per login (F-13, migration `0019`). The browser keeps a random token (32
 Indexes: `(customer_id, created_at)`, `(cashier_session_id)`. Rows are only appended (no void yet).
 > The **debt** of a customer = `ACCOUNT` payments of their `COMPLETED` sales − these payments (`CustomerStore.Debts`). A payment never exceeds the debt (checked with the customer row locked). `SaleStore.PaidByMethod` adds the session's payments to the expected amount of their method at the close (F-12).
 
+### 4.30 `sale_returns`, `sale_return_items`, `sale_return_payments` — returns (migration `0028`)
+
+- `sale_returns`: `sale_id` (FK), `cashier_session_id` (FK, the open session the money came out of), `reason` (VARCHAR(300), not blank), `total` (> 0), `created_by`, `created_at`.
+- `sale_return_items`: `return_id`, `sale_item_id` (FK), `quantity` (> 0), `amount` (≥ 0), `restock` (back to the shelf, or shrinkage); UNIQUE `(return_id, sale_item_id)`.
+- `sale_return_payments`: `return_id`, `method` (any `payment_method`), `amount` (> 0), `reference`.
+> Goods back to the shelf are `RETURN` stock movements with the original `sale_id`. Rows are only appended. Detail in `03-flows-and-transactions.md` F-08b.
+
 ## 5. Index Summary
 
 | Table | Index | Purpose |

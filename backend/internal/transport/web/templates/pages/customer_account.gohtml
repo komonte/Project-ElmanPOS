@@ -23,7 +23,7 @@
       {{range .Entries}}
       <tr>
         <td class="px-3 py-2 whitespace-nowrap">{{formatTime .At}}</td>
-        <td class="px-3 py-2">{{if .SaleNumber}}{{printf (t "debtors.sold") .SaleNumber}}{{else}}{{printf (t "debtors.paid") (t (printf "pos.method_%s" .Method))}}{{end}}</td>
+        <td class="px-3 py-2">{{if eq .Method "RETURN"}}{{printf (t "debtors.returned") .SaleNumber}}{{else if .SaleNumber}}{{printf (t "debtors.sold") .SaleNumber}}{{else}}{{printf (t "debtors.paid") (t (printf "pos.method_%s" .Method))}}{{end}}</td>
         <td class="px-3 py-2 text-right tabular whitespace-nowrap {{if .Amount.IsNegative}}text-stock{{end}}">{{money .Amount}}</td>
         <td class="px-3 py-2 text-right tabular whitespace-nowrap font-bold">{{money .Balance}}</td>
       </tr>
